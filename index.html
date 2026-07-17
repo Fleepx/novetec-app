@@ -128,7 +128,7 @@ a{color:var(--ink)}
 const LSKEY='novetec_cfg';
 let cfg=null;
 let DB={}; // path -> {data, sha}
-const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json'};
+const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json'};
 
 const b64dec=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,'')),c=>c.charCodeAt(0)));
 function b64enc(s){const b=new TextEncoder().encode(s);let r='';for(let i=0;i<b.length;i+=8192)r+=String.fromCharCode(...b.subarray(i,i+8192));return btoa(r)}
@@ -159,6 +159,11 @@ async function subirDocumento(carpeta,file){
   const ruta=`documentos/${carpeta}/${Date.now()}_${file.name.replace(/[^\w.\-]/g,'_')}`;
   await gh(`contents/${ruta}`,{method:'PUT',body:JSON.stringify({message:`Documento: ${file.name}`,content:b64})});
   return ruta;
+}
+async function borrarArchivoRepo(p,msg){
+  try{const j=await gh(`contents/${encodeURI(p)}?t=${Date.now()}`);
+    await gh(`contents/${encodeURI(p)}`,{method:'DELETE',body:JSON.stringify({message:msg,sha:j.sha})});
+  }catch(e){/* si el archivo ya no existe, continuar */}
 }
 async function cargarTodo(){await Promise.all(Object.values(ARCH).map(cargarArchivo))}
 
@@ -203,6 +208,52 @@ function semaforo(oc){
 }
 const ESTADO_LBL={pendiente:'Pendiente',parcial:'Despacho parcial',despachada:'Despachada'};
 
+/* Cola de documentos por procesar con Claude */
+const TIPO_LBL={cotizaciones:'Cotización',ordenes_compra:'OC'};
+async function subirPendiente(tipo){
+  const f=document.getElementById('pd-file-'+tipo).files[0];
+  if(!f){toast('Selecciona un archivo primero.');return}
+  velo(true,'Subiendo documento…');
+  try{
+    const ruta=await subirDocumento('pendientes/'+tipo,f);
+    DB[ARCH.pend].data.pendientes.push({id:'P-'+Date.now(),tipo,archivo:ruta,nombre:f.name,subido:hoyISO(),nota:v('pd-nota-'+tipo).trim()});
+    await guardarArchivo(ARCH.pend,`Documento en cola: ${f.name} (${tipo})`);
+    toast('Documento en cola ✓ Claude lo procesará y cargará los datos.');render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+function formPendiente(tipo,accept){
+  return `<details class="form"><summary>Subir documento de ${TIPO_LBL[tipo].toLowerCase()} (lo procesa Claude)</summary><div class="inner">
+    <p class="small muted" style="margin-top:10px">Sube el archivo tal como llegó. Quedará en una cola y Claude extraerá y cargará los datos — no escribas nada a mano por esta vía.</p>
+    <label>Archivo</label><input id="pd-file-${tipo}" type="file" accept="${accept}">
+    <label>Nota para Claude (opcional)</label><input id="pd-nota-${tipo}" placeholder="ej: corresponde a la cotización 456">
+    <div class="acciones"><button class="btn" onclick="subirPendiente('${tipo}')">Dejar en cola</button></div>
+  </div></details>`;
+}
+function listaPend(tipo){
+  const ps=DB[ARCH.pend].data.pendientes.filter(p=>p.tipo===tipo);
+  if(!ps.length)return '';
+  return `<div class="card" style="border-color:var(--ambar)"><b class="small" style="text-transform:uppercase;letter-spacing:.08em;color:var(--ambar)">En cola para procesar (${ps.length})</b>
+  ${ps.map(p=>`<div class="small" style="margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <span class="mono">${fFecha(p.subido)}</span>
+    <a href="https://github.com/${cfg.owner}/${cfg.repo}/blob/main/${p.archivo}" target="_blank">${esc(p.nombre)}</a>
+    ${p.nota?`<span class="muted">· ${esc(p.nota)}</span>`:''}
+    <button class="btn mini peligro" onclick="borrarPendiente('${esc(p.id)}')">Quitar</button>
+  </div>`).join('')}</div>`;
+}
+async function borrarPendiente(id){
+  const arr=DB[ARCH.pend].data.pendientes;const p=arr.find(x=>x.id===id);if(!p)return;
+  if(!confirm(`¿Quitar "${p.nombre}" de la cola y borrar el archivo del repositorio?`))return;
+  velo(true,'Quitando…');
+  try{
+    arr.splice(arr.indexOf(p),1);
+    await guardarArchivo(ARCH.pend,`Quitado de la cola: ${p.nombre}`);
+    await borrarArchivoRepo(p.archivo,`Borrado documento en cola: ${p.nombre}`);
+    render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+
 /* ================= Navegación ================= */
 let tab='panel';
 document.getElementById('tabs').addEventListener('click',e=>{
@@ -232,6 +283,7 @@ function rPanel(){
     <div class="sem-box verde"><div class="n">${g.verde.length}</div><div class="l">Con holgura</div></div>
   </div>
   ${invBajo.length?`<div class="card" style="border-color:var(--rojo)"><b style="color:var(--rojo)">⚠ Inventario en negativo:</b> <span class="mono small">${invBajo.map(p=>esc(p.nombre)).join(', ')}</span></div>`:''}
+  ${DB[ARCH.pend].data.pendientes.length?`<div class="card" style="border-color:var(--ambar)">📄 <b>${DB[ARCH.pend].data.pendientes.length}</b> documento(s) en cola esperando que Claude los procese y cargue.</div>`:''}
   <h2>Órdenes por despachar (${act.length})</h2>
   ${orden.length?orden.map(tagOC).join(''):'<div class="card vacio">No hay órdenes pendientes de despacho.</div>'}
   <h2>Cotizaciones sin responder (${cotP.length})</h2>
@@ -275,7 +327,8 @@ function leerItems(cont,conPrecio=true){
 function rCot(){
   const cs=[...DB[ARCH.cot].data.cotizaciones].reverse();
   return `${dlProd()}
-  <details class="form"><summary>Registrar cotización enviada al cliente</summary><div class="inner">
+  ${formPendiente('cotizaciones','.pdf,.jpg,.jpeg,.png')}
+  <details class="form"><summary>Ingresar cotización manualmente</summary><div class="inner">
     <div class="grid3">
       <div><label>Folio / N°</label><input id="c-folio"></div>
       <div><label>Fecha</label><input id="c-fecha" type="date" value="${hoyISO()}"></div>
@@ -284,10 +337,10 @@ function rCot(){
     <label>Ítems cotizados</label>
     <div id="c-items">${filaItem()}</div>
     <button class="btn mini sec" type="button" onclick="document.getElementById('c-items').insertAdjacentHTML('beforeend',filaItem())">+ ítem</button>
-    <label>Documento (PDF o imagen, opcional)</label><input id="c-file" type="file" accept=".pdf,.jpg,.jpeg,.png">
     <label>Notas</label><textarea id="c-notas" rows="2"></textarea>
     <div class="acciones"><button class="btn" onclick="crearCot()">Guardar cotización</button></div>
   </div></details>
+  ${listaPend('cotizaciones')}
   ${cs.length?cs.map(c=>{
     const est={enviada:'chip ambar',convertida:'chip verde',rechazada:'chip rojo'}[c.estado]||'chip';
     return `<div class="card">
@@ -303,10 +356,12 @@ function rCot(){
       <tr><td colspan="3" style="border:none"></td><td class="num" style="font-weight:600">${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</td></tr></table>
       ${c.notas?`<p class="small muted">${esc(c.notas)}</p>`:''}
       ${c.archivo?`<p class="small"><a href="https://github.com/${cfg.owner}/${cfg.repo}/blob/main/${c.archivo}" target="_blank">Ver documento</a></p>`:''}
-      ${c.estado==='enviada'?`<div class="acciones">
+      <div class="acciones">
+      ${c.estado==='enviada'?`
         <button class="btn mini" onclick="tab='oc';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='oc'));render();prefillOC('${esc(c.id)}')">El cliente envió OC → registrarla</button>
-        <button class="btn mini peligro" onclick="rechazarCot('${esc(c.id)}')">Cliente la rechazó</button>
-      </div>`:''}
+        <button class="btn mini peligro" onclick="rechazarCot('${esc(c.id)}')">Cliente la rechazó</button>`:''}
+      ${c.estado!=='convertida'?`<button class="btn mini peligro" onclick="borrarCot('${esc(c.id)}')">Eliminar</button>`:'<span class="small muted">Para eliminarla, da de baja primero su OC.</span>'}
+      </div>
     </div>`}).join(''):'<div class="card vacio">Aún no hay cotizaciones registradas.</div>'}`;
 }
 async function crearCot(){
@@ -314,11 +369,22 @@ async function crearCot(){
   if(!v('c-folio').trim()||!items.length){toast('Falta el folio o los ítems.');return}
   velo(true,'Guardando cotización…');
   try{
-    let archivo=null;const f=document.getElementById('c-file').files[0];
-    if(f)archivo=await subirDocumento('cotizaciones',f);
-    DB[ARCH.cot].data.cotizaciones.push({id:'COT-'+Date.now(),folio:v('c-folio').trim(),fecha:v('c-fecha'),cliente:v('c-cliente').trim(),estado:'enviada',oc_asociada:null,items,archivo,notas:v('c-notas').trim()});
+    DB[ARCH.cot].data.cotizaciones.push({id:'COT-'+Date.now(),folio:v('c-folio').trim(),fecha:v('c-fecha'),cliente:v('c-cliente').trim(),estado:'enviada',oc_asociada:null,items,archivo:null,notas:v('c-notas').trim()});
     await guardarArchivo(ARCH.cot,`Cotización ${v('c-folio').trim()} registrada`);
     toast('Cotización guardada ✓');render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+async function borrarCot(id){
+  const arr=DB[ARCH.cot].data.cotizaciones;const c=arr.find(x=>x.id===id);if(!c)return;
+  if(c.estado==='convertida'){toast('Tiene una OC asociada: da de baja la OC primero.');return}
+  if(!confirm(`¿Eliminar la cotización ${c.folio}? Esta acción no se puede deshacer.`))return;
+  velo(true,'Eliminando…');
+  try{
+    arr.splice(arr.indexOf(c),1);
+    await guardarArchivo(ARCH.cot,`Cotización ${c.folio} eliminada`);
+    if(c.archivo)await borrarArchivoRepo(c.archivo,`Borrado documento de cotización ${c.folio}`);
+    toast('Cotización eliminada ✓');render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
@@ -338,7 +404,8 @@ function rOC(){
   ocs.sort((a,b)=>orden[semaforo(a).c]-orden[semaforo(b).c]||(a.fecha_entrega||'').localeCompare(b.fecha_entrega||''));
   const lista=ocs.filter(o=>!ocFiltro||o.folio.toLowerCase().includes(ocFiltro)||ocEstado(o).includes(ocFiltro));
   return `${dlProd()}
-  <details class="form" id="f-oc"><summary>Registrar OC recibida del cliente</summary><div class="inner">
+  ${formPendiente('ordenes_compra','.pdf,.xls,.xlsx')}
+  <details class="form" id="f-oc"><summary>Ingresar OC manualmente</summary><div class="inner">
     <div class="grid3">
       <div><label>Folio OC</label><input id="o-folio"></div>
       <div><label>Cotización enviada (origen)</label><select id="o-cot"><option value="">— seleccionar —</option>${cots.map(c=>`<option value="${esc(c.id)}">COT ${esc(c.folio)} · ${fFecha(c.fecha)}</option>`).join('')}</select></div>
@@ -351,9 +418,9 @@ function rOC(){
     <label>Ítems <span class="muted" style="text-transform:none;font-weight:400">(al elegir cotización se copian solos; puedes editarlos)</span></label>
     <div id="o-items">${filaItem()}</div>
     <button class="btn mini sec" type="button" onclick="document.getElementById('o-items').insertAdjacentHTML('beforeend',filaItem())">+ ítem</button>
-    <label>Documento OC (PDF/Excel, opcional)</label><input id="o-file" type="file" accept=".pdf,.xls,.xlsx">
     <div class="acciones"><button class="btn" onclick="crearOC()">Guardar OC</button></div>
   </div></details>
+  ${listaPend('ordenes_compra')}
   <div class="filtro"><input placeholder="Filtrar por folio o estado…" value="${esc(ocFiltro)}" oninput="ocFiltro=this.value.toLowerCase();render();this.focus()"></div>
   ${lista.length?lista.map(o=>{
     const s=semaforo(o),e=ocEstado(o);
@@ -374,6 +441,7 @@ function rOC(){
       <div class="acciones">
         ${ocComp(o)<ocTot(o)?`<button class="btn mini sec" onclick="toggleCompra('${encodeURIComponent(o.folio)}')">Registrar compra</button>`:''}
         ${e!=='despachada'?`<button class="btn mini" onclick="tab='guias';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='guias'));render();document.getElementById('g-oc').value='${esc(o.folio)}';document.getElementById('g-oc').dispatchEvent(new Event('change'))">Despachar</button>`:''}
+        <button class="btn mini peligro" onclick="borrarOC('${encodeURIComponent(o.folio)}')">Dar de baja</button>
       </div>
       <div id="fc-${encodeURIComponent(o.folio)}"></div>
     </div></div>`}).join(''):'<div class="card vacio">No hay órdenes de compra.</div>'}`;
@@ -397,14 +465,70 @@ async function crearOC(){
   if(DB[ARCH.oc].data.ordenes.some(o=>o.folio===folio)){toast('Ya existe una OC con ese folio.');return}
   velo(true,'Guardando OC…');
   try{
-    let archivo=null;const f=document.getElementById('o-file').files[0];
-    if(f)archivo=await subirDocumento('ordenes_compra',f);
-    DB[ARCH.oc].data.ordenes.push({folio,cotizacion_id:cotId,fecha_emision:v('o-femi'),fecha_entrega:v('o-fent'),destino:v('o-dest').trim(),cliente:DB[ARCH.conf].data.cliente_principal,items:items.map(i=>({...i,cantidad_comprada:0,cantidad_despachada:0})),compras:[],guias:[],archivo,notas:''});
+    DB[ARCH.oc].data.ordenes.push({folio,cotizacion_id:cotId,fecha_emision:v('o-femi'),fecha_entrega:v('o-fent'),destino:v('o-dest').trim(),cliente:DB[ARCH.conf].data.cliente_principal,items:items.map(i=>({...i,cantidad_comprada:0,cantidad_despachada:0})),compras:[],guias:[],archivo:null,notas:''});
     const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===cotId);
     if(c){c.estado='convertida';c.oc_asociada=folio}
     await guardarArchivo(ARCH.oc,`OC ${folio} registrada`);
     await guardarArchivo(ARCH.cot,`Cotización ${c?c.folio:''} convertida en OC ${folio}`);
     toast('OC guardada ✓');render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+async function borrarOC(fe){
+  const folio=decodeURIComponent(fe);
+  const arr=DB[ARCH.oc].data.ordenes;const o=arr.find(x=>x.folio===folio);if(!o)return;
+  if(o.guias?.length){toast(`La OC ${folio} tiene guías asociadas (${o.guias.join(', ')}). Elimina primero esas guías.`);return}
+  const comprasBod=(o.compras||[]).filter(c=>c.ingreso_bodega);
+  let msg=`¿Dar de baja la OC ${folio}?`;
+  if(comprasBod.length)msg+=`\n\nSe revertirán del inventario los ingresos de sus ${comprasBod.length} compra(s) registrada(s).`;
+  if(o.cotizacion_id)msg+=`\nSu cotización volverá al estado "enviada".`;
+  if(!confirm(msg))return;
+  velo(true,'Dando de baja…');
+  try{
+    const inv=DB[ARCH.inv].data;
+    comprasBod.forEach(cp=>cp.items.forEach(it=>{
+      const p=inv.productos.find(x=>x.nombre.trim().toLowerCase()===it.producto.trim().toLowerCase());
+      if(p){p.cantidad-=it.cantidad;
+        inv.movimientos.push({fecha:hoyISO(),tipo:'ajuste',producto:p.nombre,cantidad:-it.cantidad,referencia:`Reverso por baja de OC ${folio}`})}
+    }));
+    const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===o.cotizacion_id);
+    if(c){c.estado='enviada';c.oc_asociada=null}
+    arr.splice(arr.indexOf(o),1);
+    await guardarArchivo(ARCH.oc,`OC ${folio} dada de baja`);
+    if(c)await guardarArchivo(ARCH.cot,`Cotización ${c.folio} liberada por baja de OC ${folio}`);
+    if(comprasBod.length)await guardarArchivo(ARCH.inv,`Inventario: reverso por baja de OC ${folio}`);
+    if(o.archivo)await borrarArchivoRepo(o.archivo,`Borrado documento de OC ${folio}`);
+    toast(`OC ${folio} dada de baja ✓`);render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+async function borrarGuia(numero){
+  const arr=DB[ARCH.guias].data.guias;const g=arr.find(x=>x.numero===numero);if(!g)return;
+  let msg=`¿Eliminar la guía N°${numero}?\n\nSe devolverán sus cantidades al inventario y al pendiente de la OC ${g.folio_oc}.`;
+  if(g.hoja_ruta)msg+=`\n⚠ Esta guía ya está en la Hoja de Ruta N°${g.hoja_ruta}.`;
+  if(!confirm(msg))return;
+  velo(true,'Eliminando guía…');
+  try{
+    const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===g.folio_oc);
+    if(o){
+      g.items.forEach(it=>{
+        const oi=o.items.find(x=>x.producto.trim().toLowerCase()===it.producto.trim().toLowerCase());
+        if(oi)oi.cantidad_despachada=Math.max(0,(+oi.cantidad_despachada||0)-it.cantidad);
+      });
+      o.guias=(o.guias||[]).filter(n=>n!==numero);
+    }
+    const inv=DB[ARCH.inv].data;
+    g.items.forEach(it=>{
+      let p=inv.productos.find(x=>x.nombre.trim().toLowerCase()===it.producto.trim().toLowerCase());
+      if(!p){p={nombre:it.producto,cantidad:0,unidad:'un'};inv.productos.push(p)}
+      p.cantidad+=it.cantidad;
+      inv.movimientos.push({fecha:hoyISO(),tipo:'ingreso',producto:p.nombre,cantidad:it.cantidad,referencia:`Reverso por eliminación de guía N°${numero}`});
+    });
+    arr.splice(arr.indexOf(g),1);
+    await guardarArchivo(ARCH.guias,`Guía N°${numero} eliminada`);
+    if(o)await guardarArchivo(ARCH.oc,`OC ${g.folio_oc}: reverso de guía N°${numero}`);
+    await guardarArchivo(ARCH.inv,`Inventario: reverso de guía N°${numero}`);
+    toast(`Guía N°${numero} eliminada y cantidades devueltas ✓`);render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
@@ -481,6 +605,7 @@ function rGuias(){
       <span class="chip ink">OC ${esc(g.folio_oc)}</span>
       <span class="muted small">${esc(g.destino||'')}</span>
       ${g.hoja_ruta?`<span class="chip verde">Hoja de ruta N°${g.hoja_ruta}</span>`:'<span class="chip ambar">Sin hoja de ruta</span>'}
+      <button class="btn mini peligro" style="margin-left:auto" onclick="borrarGuia('${esc(g.numero)}')">Eliminar</button>
     </div>
     <table style="margin-top:8px"><tr><th>Producto</th><th class="num">Cantidad</th></tr>
     ${g.items.map(i=>`<tr><td>${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td></tr>`).join('')}</table>
@@ -551,7 +676,7 @@ function rInv(){
   <h2>Stock actual (${prods.length} productos)</h2>
   <div class="card">${prods.length?`<table><tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
     ${prods.map(p=>`<tr><td>${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
-    <td class="num"><button class="btn mini sec" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')">✎</button></td></tr>`).join('')}</table>`
+    <td class="num"><button class="btn mini sec" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')">✎</button> <button class="btn mini peligro" onclick="borrarProd('${esc(p.nombre).replace(/'/g,"\\'")}')">🗑</button></td></tr>`).join('')}</table>`
     :'<div class="vacio">Bodega sin productos registrados. Usa "Registrar ingreso" para la carga inicial.</div>'}</div>
   <h2>Últimos movimientos</h2>
   <div class="card">${movs.length?`<table><tr><th>Fecha</th><th>Tipo</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
@@ -568,6 +693,19 @@ async function ingresoInv(){
   inv.movimientos.push({fecha:hoyISO(),tipo:'ingreso',producto:p.nombre,cantidad:cant,referencia:v('i-ref').trim()});
   velo(true);
   try{await guardarArchivo(ARCH.inv,`Inventario: ingreso ${nombre} (+${cant})`);toast('Ingreso registrado ✓');render()}
+  catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+async function borrarProd(nombre){
+  const inv=DB[ARCH.inv].data;
+  const p=inv.productos.find(x=>x.nombre===nombre);if(!p)return;
+  let msg=`¿Eliminar el producto "${nombre}" del inventario?`;
+  if(p.cantidad!==0)msg+=`\n⚠ Tiene stock ${num(p.cantidad)} — se descartará ese saldo.`;
+  if(!confirm(msg))return;
+  inv.productos.splice(inv.productos.indexOf(p),1);
+  inv.movimientos.push({fecha:hoyISO(),tipo:'ajuste',producto:nombre,cantidad:-p.cantidad,referencia:'Producto eliminado del inventario'});
+  velo(true,'Eliminando…');
+  try{await guardarArchivo(ARCH.inv,`Inventario: producto "${nombre}" eliminado`);toast('Producto eliminado ✓');render()}
   catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
