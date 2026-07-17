@@ -14,8 +14,8 @@ Front de gestión de despachos de **Novetec SPA**. Página estática, sin backen
 
 ## Qué hace
 - **Panel**: semáforo de OC (vencidas / rojo ≤5 días / ámbar ≤10 / verde) y pendientes.
-- **Cotizaciones**: registro, conversión a OC, rechazo, adjuntos PDF/imagen.
-- **Órdenes de compra**: siempre nacen de una cotización; avance pedido vs. despachado; marca de compra realizada.
+- **Cotizaciones**: las que Novetec envía al cliente; al recibir la OC del cliente se registra vinculada a su cotización.
+- **Órdenes de compra**: documento rector recibido del cliente (qué, cuánto y cuándo despachar); avance pedido vs. despachado y marca de compra realizada.
 - **Guías de despacho**: despachos parciales por OC; al registrar descuenta inventario automáticamente.
 - **Inventario**: stock, ingresos, ajustes y bitácora de movimientos.
 

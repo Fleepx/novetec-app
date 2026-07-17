@@ -217,7 +217,7 @@ function rPanel(){
   const g={vencida:[],rojo:[],ambar:[],verde:[],gris:[]};
   act.forEach(o=>g[semaforo(o).c].push(o));
   const orden=[...g.vencida,...g.rojo,...g.ambar,...g.verde,...g.gris];
-  const cotP=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='pendiente');
+  const cotP=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='enviada');
   const invBajo=DB[ARCH.inv].data.productos.filter(p=>p.cantidad<0);
   return `
   <div class="sem-strip">
@@ -268,7 +268,7 @@ function leerItems(cont,conPrecio=true){
 function rCot(){
   const cs=[...DB[ARCH.cot].data.cotizaciones].reverse();
   return `${dlProd()}
-  <details class="form"><summary>Registrar cotización</summary><div class="inner">
+  <details class="form"><summary>Registrar cotización enviada al cliente</summary><div class="inner">
     <div class="grid3">
       <div><label>Folio / N°</label><input id="c-folio"></div>
       <div><label>Fecha</label><input id="c-fecha" type="date" value="${hoyISO()}"></div>
@@ -282,7 +282,7 @@ function rCot(){
     <div class="acciones"><button class="btn" onclick="crearCot()">Guardar cotización</button></div>
   </div></details>
   ${cs.length?cs.map(c=>{
-    const est={pendiente:'chip ambar',convertida:'chip verde',rechazada:'chip rojo'}[c.estado]||'chip';
+    const est={enviada:'chip ambar',convertida:'chip verde',rechazada:'chip rojo'}[c.estado]||'chip';
     return `<div class="card">
       <div class="top" style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
         <span class="folio mono" style="font-weight:600">COT ${esc(c.folio)}</span>
@@ -296,9 +296,9 @@ function rCot(){
       <tr><td colspan="3" style="border:none"></td><td class="num" style="font-weight:600">${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</td></tr></table>
       ${c.notas?`<p class="small muted">${esc(c.notas)}</p>`:''}
       ${c.archivo?`<p class="small"><a href="https://github.com/${cfg.owner}/${cfg.repo}/blob/main/${c.archivo}" target="_blank">Ver documento</a></p>`:''}
-      ${c.estado==='pendiente'?`<div class="acciones">
-        <button class="btn mini" onclick="tab='oc';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='oc'));render();prefillOC('${esc(c.id)}')">Crear OC desde esta cotización</button>
-        <button class="btn mini peligro" onclick="rechazarCot('${esc(c.id)}')">Marcar rechazada</button>
+      ${c.estado==='enviada'?`<div class="acciones">
+        <button class="btn mini" onclick="tab='oc';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='oc'));render();prefillOC('${esc(c.id)}')">El cliente envió OC → registrarla</button>
+        <button class="btn mini peligro" onclick="rechazarCot('${esc(c.id)}')">Cliente la rechazó</button>
       </div>`:''}
     </div>`}).join(''):'<div class="card vacio">Aún no hay cotizaciones registradas.</div>'}`;
 }
@@ -309,7 +309,7 @@ async function crearCot(){
   try{
     let archivo=null;const f=document.getElementById('c-file').files[0];
     if(f)archivo=await subirDocumento('cotizaciones',f);
-    DB[ARCH.cot].data.cotizaciones.push({id:'COT-'+Date.now(),folio:v('c-folio').trim(),fecha:v('c-fecha'),cliente:v('c-cliente').trim(),estado:'pendiente',oc_asociada:null,items,archivo,notas:v('c-notas').trim()});
+    DB[ARCH.cot].data.cotizaciones.push({id:'COT-'+Date.now(),folio:v('c-folio').trim(),fecha:v('c-fecha'),cliente:v('c-cliente').trim(),estado:'enviada',oc_asociada:null,items,archivo,notas:v('c-notas').trim()});
     await guardarArchivo(ARCH.cot,`Cotización ${v('c-folio').trim()} registrada`);
     toast('Cotización guardada ✓');render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
@@ -326,15 +326,15 @@ async function rechazarCot(id){
 let ocFiltro='';
 function rOC(){
   const ocs=[...DB[ARCH.oc].data.ordenes];
-  const cots=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='pendiente');
+  const cots=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='enviada');
   const orden={vencida:0,rojo:1,ambar:2,verde:3,gris:4};
   ocs.sort((a,b)=>orden[semaforo(a).c]-orden[semaforo(b).c]||(a.fecha_entrega||'').localeCompare(b.fecha_entrega||''));
   const lista=ocs.filter(o=>!ocFiltro||o.folio.toLowerCase().includes(ocFiltro)||ocEstado(o).includes(ocFiltro));
   return `${dlProd()}
-  <details class="form" id="f-oc"><summary>Registrar orden de compra</summary><div class="inner">
+  <details class="form" id="f-oc"><summary>Registrar OC recibida del cliente</summary><div class="inner">
     <div class="grid3">
       <div><label>Folio OC</label><input id="o-folio"></div>
-      <div><label>Cotización de origen</label><select id="o-cot"><option value="">— seleccionar —</option>${cots.map(c=>`<option value="${esc(c.id)}">COT ${esc(c.folio)} · ${fFecha(c.fecha)}</option>`).join('')}</select></div>
+      <div><label>Cotización enviada (origen)</label><select id="o-cot"><option value="">— seleccionar —</option>${cots.map(c=>`<option value="${esc(c.id)}">COT ${esc(c.folio)} · ${fFecha(c.fecha)}</option>`).join('')}</select></div>
       <div><label>Destino</label><input id="o-dest" list="dl-dest" placeholder="ej: Rancagua"><datalist id="dl-dest"><option value="Rancagua"><option value="Lo Miranda"></datalist></div>
     </div>
     <div class="grid2">
