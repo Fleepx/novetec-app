@@ -186,6 +186,11 @@ function velo(on,msg){document.getElementById('velo').style.display=on?'flex':'n
 function ocTot(oc){return oc.items.reduce((s,i)=>s+(+i.cantidad||0),0)}
 function ocDesp(oc){return oc.items.reduce((s,i)=>s+(+i.cantidad_despachada||0),0)}
 function ocEstado(oc){const t=ocTot(oc),d=ocDesp(oc);return d<=0?'pendiente':(d<t?'parcial':'despachada')}
+function ocComp(oc){return oc.items.reduce((s,i)=>s+(+i.cantidad_comprada||0),0)}
+function chipCompra(oc){const t=ocTot(oc),c=ocComp(oc);
+  if(c<=0)return '<span class="chip rojo">Compra pendiente</span>';
+  if(c<t)return `<span class="chip ambar">Compra parcial ${num(c)}/${num(t)}</span>`;
+  return '<span class="chip ink">Comprada ✓</span>'}
 function semaforo(oc){
   if(ocEstado(oc)==='despachada')return {c:'gris',txt:'despachada'};
   const dd=dias(oc.fecha_entrega);
@@ -240,9 +245,11 @@ function tagOC(o){
       <span class="folio">OC ${esc(o.folio)}</span>
       <span class="chip ${s.c}">${s.txt}</span>
       <span class="chip">${ESTADO_LBL[e]}</span>
-      ${o.comprada?'<span class="chip ink">Comprada</span>':'<span class="chip">Compra pendiente</span>'}
+      ${chipCompra(o)}
       <span class="muted small">Entrega: <span class="mono">${fFecha(o.fecha_entrega)}</span> · ${esc(o.destino||'—')}</span>
     </div>
+    ${(()=>{const pc=o.items.filter(i=>(+i.cantidad||0)-(+i.cantidad_comprada||0)>0);
+      return pc.length?`<div class="small" style="margin-top:6px;color:var(--rojo)">Falta comprar: ${pc.map(i=>`${esc(i.producto)} <span class="mono">(${num((+i.cantidad||0)-(+i.cantidad_comprada||0))})</span>`).join(' · ')}</div>`:''})()}
     ${pend.length?`<div class="small muted" style="margin-top:6px">Falta despachar: ${pend.map(i=>`${esc(i.producto)} <span class="mono">(${num((+i.cantidad||0)-(+i.cantidad_despachada||0))})</span>`).join(' · ')}</div>`:''}
   </div></div>`;
 }
@@ -355,17 +362,20 @@ function rOC(){
         <span class="folio">OC ${esc(o.folio)}</span>
         <span class="chip ${s.c}">${s.txt}</span>
         <span class="chip">${ESTADO_LBL[e]}</span>
-        ${o.comprada?'<span class="chip ink">Comprada</span>':''}
+        ${chipCompra(o)}
         <span class="muted small">Emisión ${fFecha(o.fecha_emision)} · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b> · ${esc(o.destino||'—')}</span>
       </div>
-      <table style="margin-top:8px"><tr><th>Producto</th><th class="num">Pedido</th><th class="num">Despachado</th><th class="num">Pendiente</th></tr>
-      ${o.items.map(i=>`<tr><td>${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(i.cantidad-(i.cantidad_despachada||0))}</td></tr>`).join('')}</table>
+      <table style="margin-top:8px"><tr><th>Producto</th><th class="num">Pedido</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th></tr>
+      ${o.items.map(i=>{const comp=+i.cantidad_comprada||0;
+        return `<tr><td>${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num" style="${comp<i.cantidad?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(i.cantidad-(i.cantidad_despachada||0))}</td></tr>`}).join('')}</table>
+      ${o.compras?.length?`<p class="small muted" style="margin-top:6px">Compras: ${o.compras.map(c=>`<span class="mono">${fFecha(c.fecha)}</span> ${esc(c.proveedor||'s/proveedor')} (${c.items.map(i=>`${esc(i.producto)} ×${num(i.cantidad)}`).join(', ')})`).join(' · ')}</p>`:''}
       ${o.guias?.length?`<p class="small muted" style="margin-top:6px">Guías: <span class="mono">${o.guias.map(esc).join(', ')}</span></p>`:''}
       ${o.archivo?`<p class="small"><a href="https://github.com/${cfg.owner}/${cfg.repo}/blob/main/${o.archivo}" target="_blank">Ver documento</a></p>`:''}
       <div class="acciones">
-        ${!o.comprada?`<button class="btn mini sec" onclick="marcarComprada('${esc(o.folio)}')">Marcar compra realizada</button>`:''}
+        ${ocComp(o)<ocTot(o)?`<button class="btn mini sec" onclick="toggleCompra('${encodeURIComponent(o.folio)}')">Registrar compra</button>`:''}
         ${e!=='despachada'?`<button class="btn mini" onclick="tab='guias';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='guias'));render();document.getElementById('g-oc').value='${esc(o.folio)}';document.getElementById('g-oc').dispatchEvent(new Event('change'))">Despachar</button>`:''}
       </div>
+      <div id="fc-${encodeURIComponent(o.folio)}"></div>
     </div></div>`}).join(''):'<div class="card vacio">No hay órdenes de compra.</div>'}`;
 }
 function prefillOC(cotId){
@@ -389,7 +399,7 @@ async function crearOC(){
   try{
     let archivo=null;const f=document.getElementById('o-file').files[0];
     if(f)archivo=await subirDocumento('ordenes_compra',f);
-    DB[ARCH.oc].data.ordenes.push({folio,cotizacion_id:cotId,fecha_emision:v('o-femi'),fecha_entrega:v('o-fent'),destino:v('o-dest').trim(),cliente:DB[ARCH.conf].data.cliente_principal,comprada:false,items:items.map(i=>({...i,cantidad_despachada:0})),guias:[],archivo,notas:''});
+    DB[ARCH.oc].data.ordenes.push({folio,cotizacion_id:cotId,fecha_emision:v('o-femi'),fecha_entrega:v('o-fent'),destino:v('o-dest').trim(),cliente:DB[ARCH.conf].data.cliente_principal,items:items.map(i=>({...i,cantidad_comprada:0,cantidad_despachada:0})),compras:[],guias:[],archivo,notas:''});
     const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===cotId);
     if(c){c.estado='convertida';c.oc_asociada=folio}
     await guardarArchivo(ARCH.oc,`OC ${folio} registrada`);
@@ -398,10 +408,52 @@ async function crearOC(){
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
-async function marcarComprada(folio){
+function toggleCompra(fe){
+  const folio=decodeURIComponent(fe);
   const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===folio);if(!o)return;
-  o.comprada=true;velo(true);
-  try{await guardarArchivo(ARCH.oc,`OC ${folio}: compra realizada`);render()}catch(e){}
+  const box=document.getElementById('fc-'+fe);
+  if(box.innerHTML){box.innerHTML='';return}
+  const pend=o.items.map((i,ix)=>({...i,ix,porComprar:(+i.cantidad||0)-(+i.cantidad_comprada||0)})).filter(i=>i.porComprar>0);
+  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:4px">
+    <div class="grid3">
+      <div><label>Proveedor</label><input id="pc-prov-${fe}" placeholder="ej: Ferretería El Volcán"></div>
+      <div><label>Fecha de compra</label><input id="pc-fecha-${fe}" type="date" value="${hoyISO()}"></div>
+      <div><label>Bodega</label><label style="text-transform:none;font-weight:400;letter-spacing:0;display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink)"><input type="checkbox" id="pc-bod-${fe}" checked style="width:auto"> Ingresar a inventario</label></div>
+    </div>
+    <table style="margin-top:4px"><tr><th>Producto</th><th class="num">Por comprar</th><th style="width:140px">Comprado ahora</th></tr>
+    ${pend.map(i=>`<tr><td>${esc(i.producto)}</td><td class="num">${num(i.porComprar)}</td><td><input type="number" data-ix="${i.ix}" min="0" max="${i.porComprar}" step="any" placeholder="0"></td></tr>`).join('')}</table>
+    <div class="acciones"><button class="btn mini" onclick="guardarCompra('${fe}')">Guardar compra</button><button class="btn mini sec" onclick="toggleCompra('${fe}')">Cancelar</button></div>
+  </div>`;
+}
+async function guardarCompra(fe){
+  const folio=decodeURIComponent(fe);
+  const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===folio);if(!o)return;
+  const box=document.getElementById('fc-'+fe);
+  const prov=document.getElementById('pc-prov-'+fe).value.trim();
+  const fecha=document.getElementById('pc-fecha-'+fe).value||hoyISO();
+  const aBodega=document.getElementById('pc-bod-'+fe).checked;
+  const filas=[...box.querySelectorAll('input[type=number]')].map(inp=>({ix:+inp.dataset.ix,cant:+inp.value||0})).filter(f=>f.cant>0);
+  if(!filas.length){toast('Indica al menos una cantidad comprada.');return}
+  for(const f of filas){const it=o.items[f.ix];const pc=(+it.cantidad||0)-(+it.cantidad_comprada||0);
+    if(f.cant>pc){toast(`"${it.producto}": lo pendiente de compra es ${num(pc)}.`);return}}
+  velo(true,'Registrando compra…');
+  try{
+    const itemsC=filas.map(f=>({producto:o.items[f.ix].producto,cantidad:f.cant}));
+    filas.forEach(f=>{o.items[f.ix].cantidad_comprada=(+o.items[f.ix].cantidad_comprada||0)+f.cant});
+    o.compras=o.compras||[];o.compras.push({fecha,proveedor:prov,ingreso_bodega:aBodega,items:itemsC});
+    if(aBodega){
+      const inv=DB[ARCH.inv].data;
+      itemsC.forEach(it=>{
+        let p=inv.productos.find(x=>x.nombre.trim().toLowerCase()===it.producto.trim().toLowerCase());
+        if(!p){p={nombre:it.producto,cantidad:0,unidad:'un'};inv.productos.push(p)}
+        p.cantidad+=it.cantidad;
+        inv.movimientos.push({fecha,tipo:'ingreso',producto:p.nombre,cantidad:it.cantidad,referencia:`Compra OC ${folio}${prov?' · '+prov:''}`});
+      });
+    }
+    await guardarArchivo(ARCH.oc,`OC ${folio}: compra registrada${prov?' ('+prov+')':''}`);
+    if(aBodega)await guardarArchivo(ARCH.inv,`Inventario: ingreso por compra OC ${folio}`);
+    toast('Compra registrada ✓');render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
 
