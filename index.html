@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Novetec · Gestión de Despacho</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#16232E; --paper:#F1F3F5; --card:#FFFFFF; --line:#D5DBE1; --muted:#5D6B77;
+  --rojo:#C7392F; --rojo-bg:#FBEAE8; --ambar:#B57708; --ambar-bg:#FCF3E1;
+  --verde:#2E7D4F; --verde-bg:#E7F3EC; --gris-bg:#EAEDF0; --vencida:#7A1F17;
+  --radius:10px; --mono:'IBM Plex Mono',monospace; --sans:'Archivo',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--paper);color:var(--ink);font-size:15px;line-height:1.45}
+header{background:var(--ink);color:#fff;padding:14px 20px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+header h1{font-size:17px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
+header .sub{font-family:var(--mono);font-size:12px;color:#9FB0BE}
+header .conn{margin-left:auto;font-family:var(--mono);font-size:11px;color:#9FB0BE;cursor:pointer;text-decoration:underline dotted}
+nav{background:var(--card);border-bottom:1px solid var(--line);display:flex;overflow-x:auto;position:sticky;top:0;z-index:10}
+nav button{font-family:var(--sans);font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:13px 18px;border:none;background:none;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent}
+nav button.on{color:var(--ink);border-bottom-color:var(--ink)}
+main{max-width:1080px;margin:0 auto;padding:22px 16px 80px}
+h2{font-size:15px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin:26px 0 12px}
+h2:first-child{margin-top:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+.mono{font-family:var(--mono)}
+.muted{color:var(--muted)}
+.small{font-size:12.5px}
+button.btn{font-family:var(--sans);font-weight:700;font-size:13px;letter-spacing:.04em;background:var(--ink);color:#fff;border:none;border-radius:8px;padding:10px 16px;cursor:pointer}
+button.btn:hover{background:#0E1820}
+button.btn.sec{background:none;color:var(--ink);border:1.5px solid var(--ink)}
+button.btn.mini{padding:6px 10px;font-size:12px}
+button.btn.peligro{background:none;border:1.5px solid var(--rojo);color:var(--rojo)}
+input,select,textarea{font-family:var(--mono);font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--ink);outline-offset:1px}
+label{display:block;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:12px 0 5px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 14px}
+@media(max-width:640px){.grid2,.grid3{grid-template-columns:1fr}}
+/* Semáforo */
+.sem-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+@media(max-width:640px){.sem-strip{grid-template-columns:repeat(2,1fr)}}
+.sem-box{border-radius:var(--radius);padding:14px;border:1px solid var(--line);background:var(--card)}
+.sem-box .n{font-family:var(--mono);font-size:30px;font-weight:600;line-height:1}
+.sem-box .l{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-top:6px}
+.sem-box.rojo{background:var(--rojo-bg)}.sem-box.rojo .n,.sem-box.rojo .l{color:var(--rojo)}
+.sem-box.ambar{background:var(--ambar-bg)}.sem-box.ambar .n,.sem-box.ambar .l{color:var(--ambar)}
+.sem-box.verde{background:var(--verde-bg)}.sem-box.verde .n,.sem-box.verde .l{color:var(--verde)}
+.sem-box.vencida{background:var(--vencida)}.sem-box.vencida .n,.sem-box.vencida .l{color:#fff}
+/* Etiqueta de carga (fila OC) */
+.tag{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:10px;display:flex;overflow:hidden}
+.tag .bar{width:7px;flex:none}
+.tag .bar.rojo{background:var(--rojo)}.tag .bar.ambar{background:var(--ambar)}.tag .bar.verde{background:var(--verde)}
+.tag .bar.vencida{background:var(--vencida)}.tag .bar.gris{background:#AEB9C2}
+.tag .body{flex:1;padding:12px 14px;min-width:0}
+.tag .top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.tag .folio{font-family:var(--mono);font-weight:600;font-size:15px}
+.chip{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:var(--gris-bg);color:var(--muted)}
+.chip.rojo{background:var(--rojo-bg);color:var(--rojo)}
+.chip.ambar{background:var(--ambar-bg);color:var(--ambar)}
+.chip.verde{background:var(--verde-bg);color:var(--verde)}
+.chip.vencida{background:var(--vencida);color:#fff}
+.chip.ink{background:var(--ink);color:#fff}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1.5px solid var(--line)}
+td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+td.num,th.num{text-align:right;font-family:var(--mono)}
+.item-row{display:grid;grid-template-columns:1fr 110px 130px 34px;gap:8px;margin-bottom:8px}
+@media(max-width:640px){.item-row{grid-template-columns:1fr 80px 100px 30px}}
+.item-row button{border:none;background:none;color:var(--rojo);font-size:18px;cursor:pointer}
+.acciones{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.vacio{text-align:center;color:var(--muted);padding:30px;font-size:14px}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font-family:var(--mono);font-size:13px;padding:12px 18px;border-radius:8px;display:none;z-index:99;max-width:90vw}
+#velo{position:fixed;inset:0;background:rgba(22,35,46,.35);display:none;align-items:center;justify-content:center;z-index:50;font-family:var(--mono);color:#fff;font-size:14px}
+details.form{border:1.5px dashed var(--line);border-radius:var(--radius);margin-bottom:16px;background:#FAFBFC}
+details.form summary{padding:13px 16px;font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;list-style:none}
+details.form summary::before{content:'+ '}
+details.form[open] summary::before{content:'– '}
+details.form .inner{padding:0 16px 16px}
+.filtro{margin-bottom:12px}
+#setup{max-width:460px;margin:60px auto;padding:0 16px}
+#setup .card{padding:26px}
+#setup h1{font-size:18px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
+a{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<div id="setup" style="display:none">
+  <div class="card">
+    <h1>Novetec · Gestión</h1>
+    <p class="muted small">Conecta la app con el repositorio privado de datos. El token queda guardado solo en este navegador.</p>
+    <label>Usuario u organización de GitHub</label>
+    <input id="s-owner" placeholder="ej: novetec-spa">
+    <label>Repositorio de datos</label>
+    <input id="s-repo" placeholder="novetec-datos">
+    <label>Token de acceso (fine-grained)</label>
+    <input id="s-token" type="password" placeholder="github_pat_...">
+    <div class="acciones"><button class="btn" onclick="conectar()">Conectar</button></div>
+    <p id="s-err" class="small" style="color:var(--rojo);margin-top:10px"></p>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+<header>
+  <h1>Novetec · Despacho</h1>
+  <span class="sub" id="hoy-lbl"></span>
+  <span class="conn" onclick="cambiarConexion()">cambiar conexión</span>
+</header>
+<nav id="tabs">
+  <button data-t="panel" class="on">Panel</button>
+  <button data-t="cot">Cotizaciones</button>
+  <button data-t="oc">Órdenes de compra</button>
+  <button data-t="guias">Guías de despacho</button>
+  <button data-t="inv">Inventario</button>
+</nav>
+<main id="vista"></main>
+</div>
+
+<div id="toast"></div>
+<div id="velo"><span id="velo-msg">Guardando…</span></div>
+
+<script>
+/* ================= Conexión GitHub ================= */
+const LSKEY='novetec_cfg';
+let cfg=null;
+let DB={}; // path -> {data, sha}
+const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json'};
+
+const b64dec=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,'')),c=>c.charCodeAt(0)));
+function b64enc(s){const b=new TextEncoder().encode(s);let r='';for(let i=0;i<b.length;i+=8192)r+=String.fromCharCode(...b.subarray(i,i+8192));return btoa(r)}
+
+async function gh(path,opts={}){
+  const r=await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/${path}`,{
+    ...opts,headers:{'Authorization':'Bearer '+cfg.token,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',...(opts.headers||{})}});
+  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(`${r.status}: ${e.message||'error de GitHub'}`)}
+  return r.json();
+}
+async function cargarArchivo(p){
+  const j=await gh(`contents/${p}?t=${Date.now()}`);
+  DB[p]={data:JSON.parse(b64dec(j.content)),sha:j.sha};
+}
+async function guardarArchivo(p,msg){
+  try{
+    const j=await gh(`contents/${p}`,{method:'PUT',body:JSON.stringify({message:msg,content:b64enc(JSON.stringify(DB[p].data,null,2)),sha:DB[p].sha})});
+    DB[p].sha=j.content.sha;
+  }catch(e){
+    if(e.message.startsWith('409')||e.message.startsWith('422')){
+      toast('⚠ Otro usuario guardó cambios. Recargando datos…');await cargarTodo();render();throw new Error('conflicto');
+    }
+    throw e;
+  }
+}
+async function subirDocumento(carpeta,file){
+  const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file)});
+  const ruta=`documentos/${carpeta}/${Date.now()}_${file.name.replace(/[^\w.\-]/g,'_')}`;
+  await gh(`contents/${ruta}`,{method:'PUT',body:JSON.stringify({message:`Documento: ${file.name}`,content:b64})});
+  return ruta;
+}
+async function cargarTodo(){await Promise.all(Object.values(ARCH).map(cargarArchivo))}
+
+async function conectar(){
+  const owner=v('s-owner').trim(),repo=v('s-repo').trim(),token=v('s-token').trim();
+  if(!owner||!repo||!token){document.getElementById('s-err').textContent='Completa los tres campos.';return}
+  cfg={owner,repo,token};
+  try{await gh('contents/data');localStorage.setItem(LSKEY,JSON.stringify(cfg));iniciar()}
+  catch(e){document.getElementById('s-err').textContent='No se pudo conectar: '+e.message;cfg=null}
+}
+function cambiarConexion(){if(confirm('¿Desconectar este navegador del repositorio?')){localStorage.removeItem(LSKEY);location.reload()}}
+
+/* ================= Utilidades ================= */
+const v=id=>document.getElementById(id).value;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clp=n=>new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP'}).format(n||0);
+const num=n=>new Intl.NumberFormat('es-CL').format(n||0);
+const hoyISO=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+function fFecha(iso){if(!iso)return '—';const[a,m,d]=iso.split('-');return `${d}-${m}-${a}`}
+function dias(iso){if(!iso)return null;const[a,m,d]=iso.split('-').map(Number);const f=new Date(a,m-1,d);const h=new Date();h.setHours(0,0,0,0);return Math.round((f-h)/86400000)}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';clearTimeout(t._x);t._x=setTimeout(()=>t.style.display='none',4200)}
+function velo(on,msg){document.getElementById('velo').style.display=on?'flex':'none';if(msg)document.getElementById('velo-msg').textContent=msg}
+
+/* Estado y semáforo de OC */
+function ocTot(oc){return oc.items.reduce((s,i)=>s+(+i.cantidad||0),0)}
+function ocDesp(oc){return oc.items.reduce((s,i)=>s+(+i.cantidad_despachada||0),0)}
+function ocEstado(oc){const t=ocTot(oc),d=ocDesp(oc);return d<=0?'pendiente':(d<t?'parcial':'despachada')}
+function semaforo(oc){
+  if(ocEstado(oc)==='despachada')return {c:'gris',txt:'despachada'};
+  const dd=dias(oc.fecha_entrega);
+  const s=DB[ARCH.conf].data.semaforo||{rojo_dias:5,amarillo_dias:10};
+  if(dd===null)return {c:'gris',txt:'sin fecha'};
+  if(dd<0)return {c:'vencida',txt:`vencida ${Math.abs(dd)} d`};
+  if(dd<=s.rojo_dias)return {c:'rojo',txt:`${dd} días`};
+  if(dd<=s.amarillo_dias)return {c:'ambar',txt:`${dd} días`};
+  return {c:'verde',txt:`${dd} días`};
+}
+const ESTADO_LBL={pendiente:'Pendiente',parcial:'Despacho parcial',despachada:'Despachada'};
+
+/* ================= Navegación ================= */
+let tab='panel';
+document.getElementById('tabs').addEventListener('click',e=>{
+  if(e.target.dataset.t){tab=e.target.dataset.t;
+    document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));render()}
+});
+function render(){
+  const m=document.getElementById('vista');
+  m.innerHTML={panel:rPanel,cot:rCot,oc:rOC,guias:rGuias,inv:rInv}[tab]();
+  if(tab==='guias')prepFormGuia();
+}
+
+/* ================= Panel ================= */
+function rPanel(){
+  const ocs=DB[ARCH.oc].data.ordenes;
+  const act=ocs.filter(o=>ocEstado(o)!=='despachada');
+  const g={vencida:[],rojo:[],ambar:[],verde:[],gris:[]};
+  act.forEach(o=>g[semaforo(o).c].push(o));
+  const orden=[...g.vencida,...g.rojo,...g.ambar,...g.verde,...g.gris];
+  const cotP=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='pendiente');
+  const invBajo=DB[ARCH.inv].data.productos.filter(p=>p.cantidad<0);
+  return `
+  <div class="sem-strip">
+    <div class="sem-box vencida"><div class="n">${g.vencida.length}</div><div class="l">Vencidas</div></div>
+    <div class="sem-box rojo"><div class="n">${g.rojo.length}</div><div class="l">≤ ${DB[ARCH.conf].data.semaforo.rojo_dias} días</div></div>
+    <div class="sem-box ambar"><div class="n">${g.ambar.length}</div><div class="l">≤ ${DB[ARCH.conf].data.semaforo.amarillo_dias} días</div></div>
+    <div class="sem-box verde"><div class="n">${g.verde.length}</div><div class="l">Con holgura</div></div>
+  </div>
+  ${invBajo.length?`<div class="card" style="border-color:var(--rojo)"><b style="color:var(--rojo)">⚠ Inventario en negativo:</b> <span class="mono small">${invBajo.map(p=>esc(p.nombre)).join(', ')}</span></div>`:''}
+  <h2>Órdenes por despachar (${act.length})</h2>
+  ${orden.length?orden.map(tagOC).join(''):'<div class="card vacio">No hay órdenes pendientes de despacho.</div>'}
+  <h2>Cotizaciones sin responder (${cotP.length})</h2>
+  ${cotP.length?cotP.map(c=>`<div class="tag"><div class="bar gris"></div><div class="body"><div class="top"><span class="folio">COT ${esc(c.folio)}</span><span class="chip">${fFecha(c.fecha)}</span><span class="muted small">${esc(c.cliente)}</span></div></div></div>`).join(''):'<div class="card vacio">Sin cotizaciones pendientes.</div>'}`;
+}
+function tagOC(o){
+  const s=semaforo(o),e=ocEstado(o);
+  const pend=o.items.filter(i=>(+i.cantidad||0)-(+i.cantidad_despachada||0)>0);
+  return `<div class="tag"><div class="bar ${s.c}"></div><div class="body">
+    <div class="top">
+      <span class="folio">OC ${esc(o.folio)}</span>
+      <span class="chip ${s.c}">${s.txt}</span>
+      <span class="chip">${ESTADO_LBL[e]}</span>
+      ${o.comprada?'<span class="chip ink">Comprada</span>':'<span class="chip">Compra pendiente</span>'}
+      <span class="muted small">Entrega: <span class="mono">${fFecha(o.fecha_entrega)}</span> · ${esc(o.destino||'—')}</span>
+    </div>
+    ${pend.length?`<div class="small muted" style="margin-top:6px">Falta despachar: ${pend.map(i=>`${esc(i.producto)} <span class="mono">(${num((+i.cantidad||0)-(+i.cantidad_despachada||0))})</span>`).join(' · ')}</div>`:''}
+  </div></div>`;
+}
+
+/* ================= Cotizaciones ================= */
+function filaItem(pre={}){
+  return `<div class="item-row">
+    <input class="it-prod" list="dl-prod" placeholder="Producto" value="${esc(pre.producto||'')}">
+    <input class="it-cant" type="number" min="0" step="any" placeholder="Cant." value="${pre.cantidad??''}">
+    <input class="it-prec" type="number" min="0" step="any" placeholder="Precio unit." value="${pre.precio_unitario??''}">
+    <button type="button" onclick="this.parentElement.remove()" title="Quitar">×</button>
+  </div>`;
+}
+function dlProd(){return `<datalist id="dl-prod">${DB[ARCH.inv].data.productos.map(p=>`<option value="${esc(p.nombre)}">`).join('')}</datalist>`}
+function leerItems(cont,conPrecio=true){
+  return [...document.querySelectorAll(`#${cont} .item-row`)].map(r=>({
+    producto:r.querySelector('.it-prod').value.trim(),
+    cantidad:+r.querySelector('.it-cant').value||0,
+    ...(conPrecio?{precio_unitario:+r.querySelector('.it-prec').value||0}:{})
+  })).filter(i=>i.producto&&i.cantidad>0);
+}
+
+function rCot(){
+  const cs=[...DB[ARCH.cot].data.cotizaciones].reverse();
+  return `${dlProd()}
+  <details class="form"><summary>Registrar cotización</summary><div class="inner">
+    <div class="grid3">
+      <div><label>Folio / N°</label><input id="c-folio"></div>
+      <div><label>Fecha</label><input id="c-fecha" type="date" value="${hoyISO()}"></div>
+      <div><label>Cliente</label><input id="c-cliente" value="${esc(DB[ARCH.conf].data.cliente_principal||'')}"></div>
+    </div>
+    <label>Ítems cotizados</label>
+    <div id="c-items">${filaItem()}</div>
+    <button class="btn mini sec" type="button" onclick="document.getElementById('c-items').insertAdjacentHTML('beforeend',filaItem())">+ ítem</button>
+    <label>Documento (PDF o imagen, opcional)</label><input id="c-file" type="file" accept=".pdf,.jpg,.jpeg,.png">
+    <label>Notas</label><textarea id="c-notas" rows="2"></textarea>
+    <div class="acciones"><button class="btn" onclick="crearCot()">Guardar cotización</button></div>
+  </div></details>
+  ${cs.length?cs.map(c=>{
+    const est={pendiente:'chip ambar',convertida:'chip verde',rechazada:'chip rojo'}[c.estado]||'chip';
+    return `<div class="card">
+      <div class="top" style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
+        <span class="folio mono" style="font-weight:600">COT ${esc(c.folio)}</span>
+        <span class="${est}">${c.estado}</span>
+        <span class="chip">${fFecha(c.fecha)}</span>
+        <span class="muted small">${esc(c.cliente)}</span>
+        ${c.oc_asociada?`<span class="chip ink">→ OC ${esc(c.oc_asociada)}</span>`:''}
+      </div>
+      <table style="margin-top:10px"><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>
+      ${c.items.map(i=>`<tr><td>${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num">${clp(i.cantidad*i.precio_unitario)}</td></tr>`).join('')}
+      <tr><td colspan="3" style="border:none"></td><td class="num" style="font-weight:600">${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</td></tr></table>
+      ${c.notas?`<p class="small muted">${esc(c.notas)}</p>`:''}
+      ${c.archivo?`<p class="small"><a href="https://github.com/${cfg.owner}/${cfg.repo}/blob/main/${c.archivo}" target="_blank">Ver documento</a></p>`:''}
+      ${c.estado==='pendiente'?`<div class="acciones">
+        <button class="btn mini" onclick="tab='oc';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='oc'));render();prefillOC('${esc(c.id)}')">Crear OC desde esta cotización</button>
+        <button class="btn mini peligro" onclick="rechazarCot('${esc(c.id)}')">Marcar rechazada</button>
+      </div>`:''}
+    </div>`}).join(''):'<div class="card vacio">Aún no hay cotizaciones registradas.</div>'}`;
+}
+async function crearCot(){
+  const items=leerItems('c-items');
+  if(!v('c-folio').trim()||!items.length){toast('Falta el folio o los ítems.');return}
+  velo(true,'Guardando cotización…');
+  try{
+    let archivo=null;const f=document.getElementById('c-file').files[0];
+    if(f)archivo=await subirDocumento('cotizaciones',f);
+    DB[ARCH.cot].data.cotizaciones.push({id:'COT-'+Date.now(),folio:v('c-folio').trim(),fecha:v('c-fecha'),cliente:v('c-cliente').trim(),estado:'pendiente',oc_asociada:null,items,archivo,notas:v('c-notas').trim()});
+    await guardarArchivo(ARCH.cot,`Cotización ${v('c-folio').trim()} registrada`);
+    toast('Cotización guardada ✓');render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+async function rechazarCot(id){
+  const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id);if(!c)return;
+  c.estado='rechazada';velo(true);
+  try{await guardarArchivo(ARCH.cot,`Cotización ${c.folio} rechazada`);render()}catch(e){}
+  velo(false);
+}
+
+/* ================= Órdenes de compra ================= */
+let ocFiltro='';
+function rOC(){
+  const ocs=[...DB[ARCH.oc].data.ordenes];
+  const cots=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='pendiente');
+  const orden={vencida:0,rojo:1,ambar:2,verde:3,gris:4};
+  ocs.sort((a,b)=>orden[semaforo(a).c]-orden[semaforo(b).c]||(a.fecha_entrega||'').localeCompare(b.fecha_entrega||''));
+  const lista=ocs.filter(o=>!ocFiltro||o.folio.toLowerCase().includes(ocFiltro)||ocEstado(o).includes(ocFiltro));
+  return `${dlProd()}
+  <details class="form" id="f-oc"><summary>Registrar orden de compra</summary><div class="inner">
+    <div class="grid3">
+      <div><label>Folio OC</label><input id="o-folio"></div>
+      <div><label>Cotización de origen</label><select id="o-cot"><option value="">— seleccionar —</option>${cots.map(c=>`<option value="${esc(c.id)}">COT ${esc(c.folio)} · ${fFecha(c.fecha)}</option>`).join('')}</select></div>
+      <div><label>Destino</label><input id="o-dest" list="dl-dest" placeholder="ej: Rancagua"><datalist id="dl-dest"><option value="Rancagua"><option value="Lo Miranda"></datalist></div>
+    </div>
+    <div class="grid2">
+      <div><label>Fecha emisión</label><input id="o-femi" type="date" value="${hoyISO()}"></div>
+      <div><label>Fecha de entrega</label><input id="o-fent" type="date"></div>
+    </div>
+    <label>Ítems <span class="muted" style="text-transform:none;font-weight:400">(al elegir cotización se copian solos; puedes editarlos)</span></label>
+    <div id="o-items">${filaItem()}</div>
+    <button class="btn mini sec" type="button" onclick="document.getElementById('o-items').insertAdjacentHTML('beforeend',filaItem())">+ ítem</button>
+    <label>Documento OC (PDF/Excel, opcional)</label><input id="o-file" type="file" accept=".pdf,.xls,.xlsx">
+    <div class="acciones"><button class="btn" onclick="crearOC()">Guardar OC</button></div>
+  </div></details>
+  <div class="filtro"><input placeholder="Filtrar por folio o estado…" value="${esc(ocFiltro)}" oninput="ocFiltro=this.value.toLowerCase();render();this.focus()"></div>
+  ${lista.length?lista.map(o=>{
+    const s=semaforo(o),e=ocEstado(o);
+    return `<div class="tag"><div class="bar ${s.c}"></div><div class="body">
+      <div class="top">
+        <span class="folio">OC ${esc(o.folio)}</span>
+        <span class="chip ${s.c}">${s.txt}</span>
+        <span class="chip">${ESTADO_LBL[e]}</span>
+        ${o.comprada?'<span class="chip ink">Comprada</span>':''}
+        <span class="muted small">Emisión ${fFecha(o.fecha_emision)} · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b> · ${esc(o.destino||'—')}</span>
+      </div>
+      <table style="margin-top:8px"><tr><th>Producto</th><th class="num">Pedido</th><th class="num">Despachado</th><th class="num">Pendiente</th></tr>
+      ${o.items.map(i=>`<tr><td>${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(i.cantidad-(i.cantidad_despachada||0))}</td></tr>`).join('')}</table>
+      ${o.guias?.length?`<p class="small muted" style="margin-top:6px">Guías: <span class="mono">${o.guias.map(esc).join(', ')}</span></p>`:''}
+      ${o.archivo?`<p class="small"><a href="https://github.com/${cfg.owner}/${cfg.repo}/blob/main/${o.archivo}" target="_blank">Ver documento</a></p>`:''}
+      <div class="acciones">
+        ${!o.comprada?`<button class="btn mini sec" onclick="marcarComprada('${esc(o.folio)}')">Marcar compra realizada</button>`:''}
+        ${e!=='despachada'?`<button class="btn mini" onclick="tab='guias';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='guias'));render();document.getElementById('g-oc').value='${esc(o.folio)}';document.getElementById('g-oc').dispatchEvent(new Event('change'))">Despachar</button>`:''}
+      </div>
+    </div></div>`}).join(''):'<div class="card vacio">No hay órdenes de compra.</div>'}`;
+}
+function prefillOC(cotId){
+  const d=document.getElementById('f-oc');d.open=true;
+  document.getElementById('o-cot').value=cotId;
+  document.getElementById('o-cot').dispatchEvent(new Event('change'));
+  d.scrollIntoView({behavior:'smooth'});
+}
+document.addEventListener('change',e=>{
+  if(e.target.id==='o-cot'){
+    const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===e.target.value);
+    if(c)document.getElementById('o-items').innerHTML=c.items.map(filaItem).join('');
+  }
+});
+async function crearOC(){
+  const folio=v('o-folio').trim(),cotId=v('o-cot'),items=leerItems('o-items');
+  if(!folio||!items.length||!v('o-fent')){toast('Faltan folio, ítems o fecha de entrega.');return}
+  if(!cotId){toast('Selecciona la cotización de origen.');return}
+  if(DB[ARCH.oc].data.ordenes.some(o=>o.folio===folio)){toast('Ya existe una OC con ese folio.');return}
+  velo(true,'Guardando OC…');
+  try{
+    let archivo=null;const f=document.getElementById('o-file').files[0];
+    if(f)archivo=await subirDocumento('ordenes_compra',f);
+    DB[ARCH.oc].data.ordenes.push({folio,cotizacion_id:cotId,fecha_emision:v('o-femi'),fecha_entrega:v('o-fent'),destino:v('o-dest').trim(),cliente:DB[ARCH.conf].data.cliente_principal,comprada:false,items:items.map(i=>({...i,cantidad_despachada:0})),guias:[],archivo,notas:''});
+    const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===cotId);
+    if(c){c.estado='convertida';c.oc_asociada=folio}
+    await guardarArchivo(ARCH.oc,`OC ${folio} registrada`);
+    await guardarArchivo(ARCH.cot,`Cotización ${c?c.folio:''} convertida en OC ${folio}`);
+    toast('OC guardada ✓');render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+async function marcarComprada(folio){
+  const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===folio);if(!o)return;
+  o.comprada=true;velo(true);
+  try{await guardarArchivo(ARCH.oc,`OC ${folio}: compra realizada`);render()}catch(e){}
+  velo(false);
+}
+
+/* ================= Guías de despacho ================= */
+function rGuias(){
+  const gs=[...DB[ARCH.guias].data.guias].reverse();
+  const ocsAct=DB[ARCH.oc].data.ordenes.filter(o=>ocEstado(o)!=='despachada');
+  return `
+  <details class="form" open><summary>Registrar guía de despacho</summary><div class="inner">
+    <div class="grid3">
+      <div><label>N° de guía</label><input id="g-num"></div>
+      <div><label>Fecha</label><input id="g-fecha" type="date" value="${hoyISO()}"></div>
+      <div><label>OC asociada</label><select id="g-oc"><option value="">— seleccionar —</option>${ocsAct.map(o=>`<option value="${esc(o.folio)}">OC ${esc(o.folio)} · entrega ${fFecha(o.fecha_entrega)}</option>`).join('')}</select></div>
+    </div>
+    <div class="grid2"><div><label>Destino</label><input id="g-dest"></div><div></div></div>
+    <div id="g-items-box"></div>
+    <div class="acciones"><button class="btn" onclick="crearGuia()">Registrar despacho</button></div>
+    <p class="small muted">Al registrar: se descuenta el inventario, se actualiza el avance de la OC y la guía queda lista para la próxima hoja de ruta.</p>
+  </div></details>
+  <h2>Guías registradas</h2>
+  ${gs.length?gs.map(g=>`<div class="card">
+    <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
+      <span class="mono" style="font-weight:600">Guía N° ${esc(g.numero)}</span>
+      <span class="chip">${fFecha(g.fecha)}</span>
+      <span class="chip ink">OC ${esc(g.folio_oc)}</span>
+      <span class="muted small">${esc(g.destino||'')}</span>
+      ${g.hoja_ruta?`<span class="chip verde">Hoja de ruta N°${g.hoja_ruta}</span>`:'<span class="chip ambar">Sin hoja de ruta</span>'}
+    </div>
+    <table style="margin-top:8px"><tr><th>Producto</th><th class="num">Cantidad</th></tr>
+    ${g.items.map(i=>`<tr><td>${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td></tr>`).join('')}</table>
+  </div>`).join(''):'<div class="card vacio">Aún no hay guías registradas.</div>'}`;
+}
+function prepFormGuia(){
+  const sel=document.getElementById('g-oc');
+  sel.addEventListener('change',()=>{
+    const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===sel.value);
+    const box=document.getElementById('g-items-box');
+    if(!o){box.innerHTML='';return}
+    document.getElementById('g-dest').value=o.destino||'';
+    const pend=o.items.map((i,ix)=>({...i,ix,pendiente:(+i.cantidad||0)-(+i.cantidad_despachada||0)})).filter(i=>i.pendiente>0);
+    box.innerHTML=`<label>Cantidades a despachar</label>
+      <table><tr><th>Producto</th><th class="num">Pendiente</th><th style="width:130px">Despachar</th></tr>
+      ${pend.map(i=>`<tr><td>${esc(i.producto)}</td><td class="num">${num(i.pendiente)}</td>
+        <td><input type="number" class="g-cant" data-ix="${i.ix}" min="0" max="${i.pendiente}" step="any" value="${i.pendiente}"></td></tr>`).join('')}</table>`;
+  });
+}
+async function crearGuia(){
+  const numero=v('g-num').trim(),folioOC=v('g-oc'),fecha=v('g-fecha'),destino=v('g-dest').trim();
+  if(!numero||!folioOC){toast('Falta el N° de guía o la OC.');return}
+  if(DB[ARCH.guias].data.guias.some(g=>g.numero===numero)){toast('Ya existe una guía con ese número.');return}
+  const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===folioOC);
+  const filas=[...document.querySelectorAll('.g-cant')].map(inp=>({ix:+inp.dataset.ix,cant:+inp.value||0})).filter(f=>f.cant>0);
+  if(!filas.length){toast('Indica al menos una cantidad a despachar.');return}
+  for(const f of filas){const it=o.items[f.ix];const pend=(+it.cantidad||0)-(+it.cantidad_despachada||0);
+    if(f.cant>pend){toast(`"${it.producto}": no puedes despachar más de ${num(pend)}.`);return}}
+  velo(true,'Registrando despacho…');
+  try{
+    const itemsGuia=filas.map(f=>({producto:o.items[f.ix].producto,cantidad:f.cant}));
+    // 1. Guía
+    DB[ARCH.guias].data.guias.push({numero,fecha,destino,folio_oc:folioOC,items:itemsGuia,hoja_ruta:null});
+    // 2. Avance OC
+    filas.forEach(f=>{o.items[f.ix].cantidad_despachada=(+o.items[f.ix].cantidad_despachada||0)+f.cant});
+    o.guias=o.guias||[];o.guias.push(numero);
+    // 3. Inventario
+    const inv=DB[ARCH.inv].data;let negativos=[];
+    itemsGuia.forEach(it=>{
+      let p=inv.productos.find(x=>x.nombre.trim().toLowerCase()===it.producto.trim().toLowerCase());
+      if(!p){p={nombre:it.producto,cantidad:0,unidad:'un'};inv.productos.push(p)}
+      p.cantidad-=it.cantidad;if(p.cantidad<0)negativos.push(p.nombre);
+      inv.movimientos.push({fecha,tipo:'salida',producto:p.nombre,cantidad:it.cantidad,referencia:`Guía N°${numero} · OC ${folioOC}`});
+    });
+    await guardarArchivo(ARCH.guias,`Guía N°${numero} registrada (OC ${folioOC})`);
+    await guardarArchivo(ARCH.oc,`OC ${folioOC}: despacho guía N°${numero}`);
+    await guardarArchivo(ARCH.inv,`Inventario: salida por guía N°${numero}`);
+    toast('Despacho registrado ✓'+(negativos.length?` ⚠ Stock negativo: ${negativos.join(', ')}`:''));
+    render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+
+/* ================= Inventario ================= */
+function rInv(){
+  const inv=DB[ARCH.inv].data;
+  const prods=[...inv.productos].sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const movs=[...inv.movimientos].reverse().slice(0,40);
+  return `${dlProd()}
+  <details class="form"><summary>Registrar ingreso a bodega</summary><div class="inner">
+    <div class="grid3">
+      <div><label>Producto</label><input id="i-prod" list="dl-prod"></div>
+      <div><label>Cantidad</label><input id="i-cant" type="number" min="0" step="any"></div>
+      <div><label>Referencia</label><input id="i-ref" placeholder="ej: Factura proveedor 1234"></div>
+    </div>
+    <div class="acciones"><button class="btn" onclick="ingresoInv()">Registrar ingreso</button></div>
+  </div></details>
+  <h2>Stock actual (${prods.length} productos)</h2>
+  <div class="card">${prods.length?`<table><tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
+    ${prods.map(p=>`<tr><td>${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
+    <td class="num"><button class="btn mini sec" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')">✎</button></td></tr>`).join('')}</table>`
+    :'<div class="vacio">Bodega sin productos registrados. Usa "Registrar ingreso" para la carga inicial.</div>'}</div>
+  <h2>Últimos movimientos</h2>
+  <div class="card">${movs.length?`<table><tr><th>Fecha</th><th>Tipo</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
+    ${movs.map(m=>`<tr><td class="mono small">${fFecha(m.fecha)}</td><td><span class="chip ${m.tipo==='salida'?'rojo':m.tipo==='ingreso'?'verde':''}">${m.tipo}</span></td><td>${esc(m.producto)}</td><td class="num">${num(m.cantidad)}</td><td class="small muted">${esc(m.referencia||'')}</td></tr>`).join('')}</table>`
+    :'<div class="vacio">Sin movimientos aún.</div>'}</div>`;
+}
+async function ingresoInv(){
+  const nombre=v('i-prod').trim(),cant=+v('i-cant');
+  if(!nombre||!(cant>0)){toast('Falta producto o cantidad.');return}
+  const inv=DB[ARCH.inv].data;
+  let p=inv.productos.find(x=>x.nombre.trim().toLowerCase()===nombre.toLowerCase());
+  if(!p){p={nombre,cantidad:0,unidad:'un'};inv.productos.push(p)}
+  p.cantidad+=cant;
+  inv.movimientos.push({fecha:hoyISO(),tipo:'ingreso',producto:p.nombre,cantidad:cant,referencia:v('i-ref').trim()});
+  velo(true);
+  try{await guardarArchivo(ARCH.inv,`Inventario: ingreso ${nombre} (+${cant})`);toast('Ingreso registrado ✓');render()}
+  catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+async function ajusteInv(nombre){
+  const inv=DB[ARCH.inv].data;
+  const p=inv.productos.find(x=>x.nombre===nombre);if(!p)return;
+  const nv=prompt(`Nueva cantidad para "${nombre}" (actual: ${p.cantidad}):`,p.cantidad);
+  if(nv===null||nv==='')return;
+  const dif=+nv-p.cantidad;p.cantidad=+nv;
+  inv.movimientos.push({fecha:hoyISO(),tipo:'ajuste',producto:nombre,cantidad:dif,referencia:'Ajuste manual'});
+  velo(true);
+  try{await guardarArchivo(ARCH.inv,`Inventario: ajuste ${nombre} → ${nv}`);toast('Ajuste guardado ✓');render()}
+  catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+
+/* ================= Arranque ================= */
+async function iniciar(){
+  document.getElementById('setup').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('hoy-lbl').textContent=new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
+  velo(true,'Cargando datos…');
+  try{await cargarTodo();render()}
+  catch(e){toast('Error al cargar datos: '+e.message)}
+  velo(false);
+}
+(function(){
+  const saved=localStorage.getItem(LSKEY);
+  if(saved){cfg=JSON.parse(saved);iniciar()}
+  else document.getElementById('setup').style.display='block';
+})();
+</script>
+</body>
+</html>
