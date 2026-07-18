@@ -211,22 +211,27 @@ const ESTADO_LBL={pendiente:'Pendiente',parcial:'Despacho parcial',despachada:'D
 /* Cola de documentos por procesar con Claude */
 const TIPO_LBL={cotizaciones:'Cotización',ordenes_compra:'OC'};
 async function subirPendiente(tipo){
-  const f=document.getElementById('pd-file-'+tipo).files[0];
-  if(!f){toast('Selecciona un archivo primero.');return}
-  velo(true,'Subiendo documento…');
+  const files=[...document.getElementById('pd-file-'+tipo).files];
+  if(!files.length){toast('Selecciona al menos un archivo.');return}
+  velo(true,`Subiendo ${files.length} documento(s)…`);
   try{
-    const ruta=await subirDocumento('pendientes/'+tipo,f);
-    DB[ARCH.pend].data.pendientes.push({id:'P-'+Date.now(),tipo,archivo:ruta,nombre:f.name,subido:hoyISO(),nota:v('pd-nota-'+tipo).trim()});
-    await guardarArchivo(ARCH.pend,`Documento en cola: ${f.name} (${tipo})`);
-    toast('Documento en cola ✓ Claude lo procesará y cargará los datos.');render();
+    const nota=v('pd-nota-'+tipo).trim();
+    for(let i=0;i<files.length;i++){
+      const f=files[i];
+      velo(true,`Subiendo ${i+1} de ${files.length}: ${f.name}`);
+      const ruta=await subirDocumento('pendientes/'+tipo,f);
+      DB[ARCH.pend].data.pendientes.push({id:'P-'+Date.now()+'-'+i,tipo,archivo:ruta,nombre:f.name,subido:hoyISO(),nota});
+    }
+    await guardarArchivo(ARCH.pend,`${files.length} documento(s) en cola (${tipo})`);
+    toast(`${files.length} documento(s) en cola ✓ Claude los procesará y cargará los datos.`);render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
 function formPendiente(tipo,accept){
   return `<details class="form"><summary>Subir documento de ${TIPO_LBL[tipo].toLowerCase()} (lo procesa Claude)</summary><div class="inner">
     <p class="small muted" style="margin-top:10px">Sube el archivo tal como llegó. Quedará en una cola y Claude extraerá y cargará los datos — no escribas nada a mano por esta vía.</p>
-    <label>Archivo</label><input id="pd-file-${tipo}" type="file" accept="${accept}">
-    <label>Nota para Claude (opcional)</label><input id="pd-nota-${tipo}" placeholder="ej: corresponde a la cotización 456">
+    <label>Archivos (puedes seleccionar varios)</label><input id="pd-file-${tipo}" type="file" accept="${accept}" multiple>
+    <label>Nota para Claude (opcional, aplica a todos)</label><input id="pd-nota-${tipo}" placeholder="ej: corresponden a junio 2025">
     <div class="acciones"><button class="btn" onclick="subirPendiente('${tipo}')">Dejar en cola</button></div>
   </div></details>`;
 }
