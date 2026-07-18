@@ -238,7 +238,7 @@ function formPendiente(tipo,accept){
   return `<details class="form"><summary>Subir documento de ${TIPO_LBL[tipo].toLowerCase()}</summary><div class="inner">
     <p class="small muted" style="margin-top:10px">Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.</p>
     <label>Archivos (puedes seleccionar varios)</label><input id="pd-file-${tipo}" type="file" accept="${accept}" multiple>
-    <label>Nota para Claude (opcional, aplica a todos)</label><input id="pd-nota-${tipo}" placeholder="ej: corresponden a junio 2025">
+    <label>Nota para el administrador (opcional, aplica a todos)</label><input id="pd-nota-${tipo}" placeholder="ej: corresponden a junio 2025">
     <div class="acciones"><button class="btn" onclick="subirPendiente('${tipo}')">Dejar en cola</button></div>
   </div></details>`;
 }
