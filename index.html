@@ -230,13 +230,13 @@ async function subirPendiente(tipo){
       DB[ARCH.pend].data.pendientes.push({id:'P-'+Date.now()+'-'+i,tipo,archivo:ruta,nombre:f.name,subido:hoyISO(),nota});
     }
     await guardarArchivo(ARCH.pend,`${files.length} documento(s) en cola (${tipo})`);
-    toast(`${files.length} documento(s) en cola ✓ Claude los procesará y cargará los datos.`);render();
+    toast(`${files.length} documento(s) en cola ✓ El administrador los procesará y cargará los datos.`);render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
 function formPendiente(tipo,accept){
-  return `<details class="form"><summary>Subir documento de ${TIPO_LBL[tipo].toLowerCase()} (lo procesa Claude)</summary><div class="inner">
-    <p class="small muted" style="margin-top:10px">Sube el archivo tal como llegó. Quedará en una cola y Claude extraerá y cargará los datos — no escribas nada a mano por esta vía.</p>
+  return `<details class="form"><summary>Subir documento de ${TIPO_LBL[tipo].toLowerCase()}</summary><div class="inner">
+    <p class="small muted" style="margin-top:10px">Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.</p>
     <label>Archivos (puedes seleccionar varios)</label><input id="pd-file-${tipo}" type="file" accept="${accept}" multiple>
     <label>Nota para Claude (opcional, aplica a todos)</label><input id="pd-nota-${tipo}" placeholder="ej: corresponden a junio 2025">
     <div class="acciones"><button class="btn" onclick="subirPendiente('${tipo}')">Dejar en cola</button></div>
@@ -245,7 +245,7 @@ function formPendiente(tipo,accept){
 function listaPend(tipo){
   const ps=DB[ARCH.pend].data.pendientes.filter(p=>p.tipo===tipo);
   if(!ps.length)return '';
-  return `<div class="card" style="border-color:var(--ambar)"><b class="small" style="text-transform:uppercase;letter-spacing:.08em;color:var(--ambar)">En cola para procesar (${ps.length})</b>
+  return `<div class="card" style="border-color:var(--ambar)"><b class="small" style="text-transform:uppercase;letter-spacing:.08em;color:var(--ambar)">En cola — pendiente del administrador (${ps.length})</b>
   ${ps.map(p=>`<div class="small" style="margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <span class="mono">${fFecha(p.subido)}</span>
     <a href="https://github.com/${cfg.owner}/${cfg.repo}/blob/main/${p.archivo}" target="_blank">${esc(p.nombre)}</a>
@@ -330,7 +330,7 @@ function rPanel(){
     <div class="sem-box verde"><div class="n">${g.verde.length}</div><div class="l">Con holgura</div></div>
   </div>
   ${invBajo.length?`<div class="card" style="border-color:var(--rojo)"><b style="color:var(--rojo)">⚠ Inventario en negativo:</b> <span class="mono small">${invBajo.map(p=>esc(p.nombre)).join(', ')}</span></div>`:''}
-  ${DB[ARCH.pend].data.pendientes.length?`<div class="card" style="border-color:var(--ambar)">📄 <b>${DB[ARCH.pend].data.pendientes.length}</b> documento(s) en cola esperando que Claude los procese y cargue.</div>`:''}
+  ${DB[ARCH.pend].data.pendientes.length?`<div class="card" style="border-color:var(--ambar)">📄 <b>${DB[ARCH.pend].data.pendientes.length}</b> documento(s) en cola esperando ser procesados por el administrador.</div>`:''}
   ${destOrden.length?destOrden.map(dst=>tablaGrupo(dst,grupos[dst])).join(''):'<div class="card vacio">No hay ítems pendientes de despacho.</div>'}
   <h2>Cotizaciones sin responder (${cotP.length})</h2>
   ${cotP.length?cotP.map(c=>`<div class="tag"><div class="bar gris"></div><div class="body"><div class="top"><span class="folio">COT ${esc(c.folio)}</span><span class="chip">${fFecha(c.fecha)}</span><span class="muted small">${esc(c.cliente)}</span></div></div></div>`).join(''):'<div class="card vacio">Sin cotizaciones pendientes.</div>'}`;
