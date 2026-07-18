@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Novetec · Gestión de Despacho</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -75,6 +77,10 @@ td.num,th.num{text-align:right;font-family:var(--mono)}
 .vacio{text-align:center;color:var(--muted);padding:30px;font-size:14px}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font-family:var(--mono);font-size:13px;padding:12px 18px;border-radius:8px;display:none;z-index:99;max-width:90vw}
 #velo{position:fixed;inset:0;background:rgba(22,35,46,.35);display:none;align-items:center;justify-content:center;z-index:50;font-family:var(--mono);color:#fff;font-size:14px}
+#splash{position:fixed;inset:0;background:#fff;display:none;align-items:center;justify-content:center;flex-direction:column;z-index:200;opacity:1;transition:opacity .6s ease}
+#splash.out{opacity:0;pointer-events:none}
+#splash img{width:min(46vw,260px);animation:splashIn .7s ease}
+@keyframes splashIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
 details.form{border:1.5px dashed var(--line);border-radius:var(--radius);margin-bottom:16px;background:#FAFBFC}
 details.form summary{padding:13px 16px;font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;list-style:none}
 details.form summary::before{content:'+ '}
@@ -120,6 +126,7 @@ a{color:var(--ink)}
 <main id="vista"></main>
 </div>
 
+<div id="splash"><img src="logo.png" alt="Novetec SPA"></div>
 <div id="toast"></div>
 <div id="velo"><span id="velo-msg">Guardando…</span></div>
 
@@ -763,13 +770,18 @@ async function ajusteInv(nombre){
 
 /* ================= Arranque ================= */
 async function iniciar(){
+  // Splash de identidad: mínimo 1.5s y fade out
+  const sp=document.getElementById('splash');
+  sp.style.display='flex';
+  const splashListo=new Promise(r=>setTimeout(r,1500));
   document.getElementById('setup').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('hoy-lbl').textContent=new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
-  velo(true,'Cargando datos…');
   try{await cargarTodo();render()}
   catch(e){toast('Error al cargar datos: '+e.message)}
-  velo(false);
+  await splashListo;
+  sp.classList.add('out');
+  setTimeout(()=>sp.style.display='none',700);
 }
 (function(){
   const saved=localStorage.getItem(LSKEY);
