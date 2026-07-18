@@ -237,11 +237,14 @@ async function subirPendiente(tipo){
   velo(true,`Subiendo ${files.length} documento(s)…`);
   try{
     const nota=v('pd-nota-'+tipo).trim();
+    const fenvEl=document.getElementById('pd-fenv-'+tipo);
+    const fenv=fenvEl?fenvEl.value:null;
+    if(tipo==='guias_despacho'&&!fenv){velo(false);toast('Indica la fecha de envío del viaje.');return}
     for(let i=0;i<files.length;i++){
       const f=files[i];
       velo(true,`Subiendo ${i+1} de ${files.length}: ${f.name}`);
       const ruta=await subirDocumento('pendientes/'+tipo,f);
-      DB[ARCH.pend].data.pendientes.push({id:'P-'+Date.now()+'-'+i,tipo,archivo:ruta,nombre:f.name,subido:hoyISO(),nota});
+      DB[ARCH.pend].data.pendientes.push({id:'P-'+Date.now()+'-'+i,tipo,archivo:ruta,nombre:f.name,subido:hoyISO(),nota,...(fenv?{fecha_envio:fenv}:{})});
     }
     await guardarArchivo(ARCH.pend,`${files.length} documento(s) en cola (${tipo})`);
     toast(`${files.length} documento(s) en cola ✓ El administrador los procesará y cargará los datos.`);render();
@@ -249,9 +252,10 @@ async function subirPendiente(tipo){
   velo(false);
 }
 function formPendiente(tipo,accept){
-  return `<details class="form"><summary>Subir documento de ${TIPO_LBL[tipo].toLowerCase()}</summary><div class="inner">
-    <p class="small muted" style="margin-top:10px">Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.</p>
+  return `<details class="form"><summary>Subir documento de ${TIPO_LBL[tipo].toLowerCase()}${tipo==='guias_despacho'?' (bundle del viaje)':''}</summary><div class="inner">
+    <p class="small muted" style="margin-top:10px">${tipo==='guias_despacho'?'Sube TODAS las guías del viaje juntas e indica la fecha de envío: con eso el administrador procesa y genera la hoja de ruta.':'Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.'}</p>
     <label>Archivos (puedes seleccionar varios)</label><input id="pd-file-${tipo}" type="file" accept="${accept}" multiple>
+    ${tipo==='guias_despacho'?`<label>Fecha de envío del viaje</label><input id="pd-fenv-${tipo}" type="date">`:''}
     <label>Nota para el administrador (opcional, aplica a todos)</label><input id="pd-nota-${tipo}" placeholder="ej: corresponden a junio 2025">
     <div class="acciones"><button class="btn" onclick="subirPendiente('${tipo}')">Dejar en cola</button></div>
   </div></details>`;
