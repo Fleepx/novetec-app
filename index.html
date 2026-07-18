@@ -135,7 +135,7 @@ a{color:var(--ink)}
 const LSKEY='novetec_cfg';
 let cfg=null;
 let DB={}; // path -> {data, sha}
-const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json'};
+const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json'};
 
 const b64dec=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,'')),c=>c.charCodeAt(0)));
 function b64enc(s){const b=new TextEncoder().encode(s);let r='';for(let i=0;i<b.length;i+=8192)r+=String.fromCharCode(...b.subarray(i,i+8192));return btoa(r)}
@@ -171,6 +171,20 @@ async function borrarArchivoRepo(p,msg){
   try{const j=await gh(`contents/${encodeURI(p)}?t=${Date.now()}`);
     await gh(`contents/${encodeURI(p)}`,{method:'DELETE',body:JSON.stringify({message:msg,sha:j.sha})});
   }catch(e){/* si el archivo ya no existe, continuar */}
+}
+async function descargarArchivo(p,nombre){
+  velo(true,'Descargando…');
+  try{
+    const r=await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(p)}?t=${Date.now()}`,
+      {headers:{'Authorization':'Bearer '+cfg.token,'Accept':'application/vnd.github.raw'}});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const b=await r.blob();
+    const u=URL.createObjectURL(b);
+    const a=document.createElement('a');a.href=u;a.download=nombre||p.split('/').pop();
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(u),5000);
+  }catch(e){toast('Error al descargar: '+e.message)}
+  velo(false);
 }
 async function cargarTodo(){await Promise.all(Object.values(ARCH).map(cargarArchivo))}
 
@@ -216,7 +230,7 @@ function semaforo(oc){
 const ESTADO_LBL={pendiente:'Pendiente',parcial:'Despacho parcial',despachada:'Despachada'};
 
 /* Cola de documentos por procesar con Claude */
-const TIPO_LBL={cotizaciones:'Cotización',ordenes_compra:'OC'};
+const TIPO_LBL={cotizaciones:'Cotización',ordenes_compra:'OC',guias_despacho:'Guía de despacho'};
 async function subirPendiente(tipo){
   const files=[...document.getElementById('pd-file-'+tipo).files];
   if(!files.length){toast('Selecciona al menos un archivo.');return}
@@ -248,7 +262,7 @@ function listaPend(tipo){
   return `<div class="card" style="border-color:var(--ambar)"><b class="small" style="text-transform:uppercase;letter-spacing:.08em;color:var(--ambar)">En cola — pendiente del administrador (${ps.length})</b>
   ${ps.map(p=>`<div class="small" style="margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <span class="mono">${fFecha(p.subido)}</span>
-    <a href="https://github.com/${cfg.owner}/${cfg.repo}/blob/main/${p.archivo}" target="_blank">${esc(p.nombre)}</a>
+    <a href="#" onclick="event.preventDefault();descargarArchivo('${esc(p.archivo)}')">${esc(p.nombre)}</a>
     ${p.nota?`<span class="muted">· ${esc(p.nota)}</span>`:''}
     <button class="btn mini peligro" onclick="borrarPendiente('${esc(p.id)}')">Quitar</button>
   </div>`).join('')}</div>`;
@@ -401,7 +415,7 @@ function rCot(){
       ${c.items.map(i=>`<tr><td>${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num">${clp(i.cantidad*i.precio_unitario)}</td></tr>`).join('')}
       <tr><td colspan="3" style="border:none"></td><td class="num" style="font-weight:600">${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</td></tr></table>
       ${c.notas?`<p class="small muted">${esc(c.notas)}</p>`:''}
-      ${c.archivo?`<p class="small"><a href="https://github.com/${cfg.owner}/${cfg.repo}/blob/main/${c.archivo}" target="_blank">Ver documento</a></p>`:''}
+      ${c.archivo?`<p class="small"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(c.archivo)}')">Descargar documento</a></p>`:''}
       <div class="acciones">
       ${c.estado==='enviada'?`
         <button class="btn mini" onclick="tab='oc';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='oc'));render();prefillOC('${esc(c.id)}')">El cliente envió OC → registrarla</button>
@@ -483,7 +497,7 @@ function rOC(){
         return `<tr><td>${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num" style="${comp<i.cantidad?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(i.cantidad-(i.cantidad_despachada||0))}</td></tr>`}).join('')}</table>
       ${o.compras?.length?`<p class="small muted" style="margin-top:6px">Compras: ${o.compras.map(c=>`<span class="mono">${fFecha(c.fecha)}</span> ${esc(c.proveedor||'s/proveedor')} (${c.items.map(i=>`${esc(i.producto)} ×${num(i.cantidad)}`).join(', ')})`).join(' · ')}</p>`:''}
       ${o.guias?.length?`<p class="small muted" style="margin-top:6px">Guías: <span class="mono">${o.guias.map(esc).join(', ')}</span></p>`:''}
-      ${o.archivo?`<p class="small"><a href="https://github.com/${cfg.owner}/${cfg.repo}/blob/main/${o.archivo}" target="_blank">Ver documento</a></p>`:''}
+      ${o.archivo?`<p class="small"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(o.archivo)}')">Descargar documento</a></p>`:''}
       <div class="acciones">
         ${ocComp(o)<ocTot(o)?`<button class="btn mini sec" onclick="toggleCompra('${encodeURIComponent(o.folio)}')">Registrar compra</button>`:''}
         ${e!=='despachada'?`<button class="btn mini" onclick="tab='guias';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='guias'));render();document.getElementById('g-oc').value='${esc(o.folio)}';document.getElementById('g-oc').dispatchEvent(new Event('change'))">Despachar</button>`:''}
@@ -630,9 +644,21 @@ async function guardarCompra(fe){
 /* ================= Guías de despacho ================= */
 function rGuias(){
   const gs=[...DB[ARCH.guias].data.guias].reverse();
+  const hrs=[...DB[ARCH.hr].data.hojas].reverse();
   const ocsAct=DB[ARCH.oc].data.ordenes.filter(o=>ocEstado(o)!=='despachada');
   return `
-  <details class="form" open><summary>Registrar guía de despacho</summary><div class="inner">
+  ${formPendiente('guias_despacho','.pdf,.jpg,.jpeg,.png,.xls,.xlsx')}
+  ${listaPend('guias_despacho')}
+  <h2>Hojas de ruta</h2>
+  ${hrs.length?hrs.map(h=>`<div class="card">
+    <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
+      <span class="mono" style="font-weight:600">Hoja de Ruta N°${esc(String(h.numero))}</span>
+      <span class="chip">${fFecha(h.fecha)}</span>
+      <span class="muted small">Guías: <span class="mono">${(h.guias||[]).map(esc).join(', ')}</span></span>
+      <button class="btn mini" style="margin-left:auto" onclick="descargarArchivo('${esc(h.archivo)}','Hoja_de_Ruta_N${esc(String(h.numero))}.docx')">Descargar</button>
+    </div>
+  </div>`).join(''):'<div class="card vacio">Aún no hay hojas de ruta generadas.</div>'}
+  <details class="form"><summary>Registrar guía de despacho manualmente</summary><div class="inner">
     <div class="grid3">
       <div><label>N° de guía</label><input id="g-num"></div>
       <div><label>Fecha</label><input id="g-fecha" type="date" value="${hoyISO()}"></div>
