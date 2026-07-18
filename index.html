@@ -267,14 +267,49 @@ function render(){
 }
 
 /* ================= Panel ================= */
+let panelSort={campo:'oc',dir:1};
+function sortPanel(campo){if(panelSort.campo===campo)panelSort.dir*=-1;else panelSort={campo,dir:1};render()}
 function rPanel(){
   const ocs=DB[ARCH.oc].data.ordenes;
   const act=ocs.filter(o=>ocEstado(o)!=='despachada');
   const g={vencida:[],rojo:[],ambar:[],verde:[],gris:[]};
   act.forEach(o=>g[semaforo(o).c].push(o));
-  const orden=[...g.vencida,...g.rojo,...g.ambar,...g.verde,...g.gris];
   const cotP=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='enviada');
   const invBajo=DB[ARCH.inv].data.productos.filter(p=>p.cantidad<0);
+
+  // Filas: un renglón por ítem pendiente de despacho
+  const filas=[];
+  act.forEach(o=>{const s=semaforo(o);
+    o.items.forEach(i=>{
+      const pend=(+i.cantidad||0)-(+i.cantidad_despachada||0);
+      if(pend<=0)return;
+      filas.push({cot:o.cotizacion_sap||'',oc:o.folio,producto:i.producto,cantidad:+i.cantidad||0,
+        pendiente:pend,destino:o.destino||'Sin destino',precio:+i.precio_unitario||0,sem:s});
+    });
+  });
+  const c=panelSort.campo,d=panelSort.dir;
+  filas.sort((a,b)=>{const va=a[c],vb=b[c];
+    return (typeof va==='string'?va.localeCompare(vb,'es'):va-vb)*d});
+  const grupos={};
+  filas.forEach(f=>{(grupos[f.destino]=grupos[f.destino]||[]).push(f)});
+  const th=(lbl,campo,cls='')=>`<th class="${cls}" style="cursor:pointer;user-select:none" onclick="sortPanel('${campo}')">${lbl}${panelSort.campo===campo?(panelSort.dir>0?' ▲':' ▼'):''}</th>`;
+  const tablaGrupo=(dest,fs)=>`
+    <h2>${esc(dest)} <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· ${fs.length} ítem(s) pendiente(s)</span></h2>
+    <div class="card" style="overflow-x:auto"><table>
+      <tr>${th('Urgencia','sem')}${th('Cotización','cot','')}${th('OC','oc')}${th('Producto','producto')}${th('Solicitado','cantidad','num')}${th('Pendiente','pendiente','num')}${th('Precio','precio','num')}</tr>
+      ${fs.map(f=>`<tr>
+        <td><span class="chip ${f.sem.c}">${f.sem.txt}</span></td>
+        <td class="mono small">${esc(f.cot)||'—'}</td>
+        <td class="mono">${esc(f.oc)}</td>
+        <td>${esc(f.producto)}</td>
+        <td class="num">${num(f.cantidad)}</td>
+        <td class="num" style="font-weight:600">${num(f.pendiente)}</td>
+        <td class="num">${clp(f.precio)}</td>
+      </tr>`).join('')}
+    </table></div>`;
+  // ordenar grupos: destino con ítem más urgente primero
+  const urg={vencida:0,rojo:1,ambar:2,verde:3,gris:4};
+  const destOrden=Object.keys(grupos).sort((a,b)=>Math.min(...grupos[a].map(f=>urg[f.sem.c]))-Math.min(...grupos[b].map(f=>urg[f.sem.c])));
   return `
   <div class="sem-strip">
     <div class="sem-box vencida"><div class="n">${g.vencida.length}</div><div class="l">Vencidas</div></div>
@@ -284,8 +319,7 @@ function rPanel(){
   </div>
   ${invBajo.length?`<div class="card" style="border-color:var(--rojo)"><b style="color:var(--rojo)">⚠ Inventario en negativo:</b> <span class="mono small">${invBajo.map(p=>esc(p.nombre)).join(', ')}</span></div>`:''}
   ${DB[ARCH.pend].data.pendientes.length?`<div class="card" style="border-color:var(--ambar)">📄 <b>${DB[ARCH.pend].data.pendientes.length}</b> documento(s) en cola esperando que Claude los procese y cargue.</div>`:''}
-  <h2>Órdenes por despachar (${act.length})</h2>
-  ${orden.length?orden.map(tagOC).join(''):'<div class="card vacio">No hay órdenes pendientes de despacho.</div>'}
+  ${destOrden.length?destOrden.map(dst=>tablaGrupo(dst,grupos[dst])).join(''):'<div class="card vacio">No hay ítems pendientes de despacho.</div>'}
   <h2>Cotizaciones sin responder (${cotP.length})</h2>
   ${cotP.length?cotP.map(c=>`<div class="tag"><div class="bar gris"></div><div class="body"><div class="top"><span class="folio">COT ${esc(c.folio)}</span><span class="chip">${fFecha(c.fecha)}</span><span class="muted small">${esc(c.cliente)}</span></div></div></div>`).join(''):'<div class="card vacio">Sin cotizaciones pendientes.</div>'}`;
 }
