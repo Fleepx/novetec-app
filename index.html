@@ -135,7 +135,7 @@ a{color:var(--ink)}
 const LSKEY='novetec_cfg';
 let cfg=null;
 let DB={}; // path -> {data, sha}
-const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json'};
+const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json',prod:'data/productos.json'};
 
 const b64dec=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,'')),c=>c.charCodeAt(0)));
 function b64enc(s){const b=new TextEncoder().encode(s);let r='';for(let i=0;i<b.length;i+=8192)r+=String.fromCharCode(...b.subarray(i,i+8192));return btoa(r)}
@@ -208,7 +208,23 @@ function dias(iso){if(!iso)return null;const[a,m,d]=iso.split('-').map(Number);c
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';clearTimeout(t._x);t._x=setTimeout(()=>t.style.display='none',4200)}
 function velo(on,msg){document.getElementById('velo').style.display=on?'flex':'none';if(msg)document.getElementById('velo-msg').textContent=msg}
 
-/* Estado y semáforo de OC */
+/* Maestro de productos: sin duplicados, codigo propio NOV-#### */
+const normProd=s=>String(s||'').toUpperCase().replace(/[^A-Z0-9 ]/g,'').replace(/\s+/g,' ').trim();
+function prodMaestro(nombre){const n=normProd(nombre);
+  return DB[ARCH.prod].data.productos.find(p=>normProd(p.nombre)===n||(p.alias||[]).some(a=>normProd(a)===n))}
+function crearProdMaestro(nombre,unidad){const d=DB[ARCH.prod].data;d.correlativo++;
+  const p={codigo:'NOV-'+String(d.correlativo).padStart(4,'0'),nombre:nombre.trim(),unidad:(unidad||'UN').toUpperCase(),codigos_cliente:{},alias:[]};
+  d.productos.push(p);DB[ARCH.prod]._nuevos=true;return p}
+function invProdDe(nombre,unidad,crear=true){
+  let m=prodMaestro(nombre);
+  if(!m){if(!crear)return null;m=crearProdMaestro(nombre,unidad)}
+  let p=DB[ARCH.inv].data.productos.find(x=>x.codigo===m.codigo);
+  if(!p&&crear){p={codigo:m.codigo,nombre:m.nombre,cantidad:0,unidad:m.unidad};DB[ARCH.inv].data.productos.push(p)}
+  return p}
+async function guardarMaestroSiNuevo(){
+  if(DB[ARCH.prod]._nuevos){await guardarArchivo(ARCH.prod,'Maestro: nuevos productos');DB[ARCH.prod]._nuevos=false}}
+
+/* Estado y semaforo de OC */
 function ocTot(oc){return oc.items.reduce((s,i)=>s+(+i.cantidad||0),0)}
 function ocDesp(oc){return oc.items.reduce((s,i)=>s+(+i.cantidad_despachada||0),0)}
 function ocEstado(oc){const t=ocTot(oc),d=ocDesp(oc);return d<=0?'pendiente':(d<t?'parcial':'despachada')}
@@ -308,7 +324,7 @@ function rPanel(){
 
   // Filas: un renglón por ítem pendiente de despacho
   const filas=[];
-  const stockDe=nom=>{const p=DB[ARCH.inv].data.productos.find(x=>x.nombre.trim().toLowerCase()===nom.trim().toLowerCase());return p?p.cantidad:0};
+  const stockDe=nom=>{const p=invProdDe(nom,null,false);return p?p.cantidad:0};
   act.forEach(o=>{const s=semaforo(o);
     o.items.forEach(i=>{
       const pend=(+i.cantidad||0)-(+i.cantidad_despachada||0);
@@ -379,7 +395,7 @@ function filaItem(pre={}){
     <button type="button" onclick="this.parentElement.remove()" title="Quitar">×</button>
   </div>`;
 }
-function dlProd(){return `<datalist id="dl-prod">${DB[ARCH.inv].data.productos.map(p=>`<option value="${esc(p.nombre)}">`).join('')}</datalist>`}
+function dlProd(){return `<datalist id="dl-prod">${DB[ARCH.prod].data.productos.map(p=>`<option value="${esc(p.nombre)}">`).join('')}</datalist>`}
 function leerItems(cont,conPrecio=true){
   return [...document.querySelectorAll(`#${cont} .item-row`)].map(r=>({
     producto:r.querySelector('.it-prod').value.trim(),
@@ -551,9 +567,9 @@ async function borrarOC(fe){
   try{
     const inv=DB[ARCH.inv].data;
     comprasBod.forEach(cp=>cp.items.forEach(it=>{
-      const p=inv.productos.find(x=>x.nombre.trim().toLowerCase()===it.producto.trim().toLowerCase());
+      const p=invProdDe(it.producto,null,false);
       if(p){p.cantidad-=it.cantidad;
-        inv.movimientos.push({fecha:hoyISO(),tipo:'ajuste',producto:p.nombre,cantidad:-it.cantidad,referencia:`Reverso por baja de OC ${folio}`})}
+        inv.movimientos.push({fecha:hoyISO(),tipo:'ajuste',codigo:p.codigo,producto:p.nombre,cantidad:-it.cantidad,referencia:`Reverso por baja de OC ${folio}`})}
     }));
     const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===o.cotizacion_id);
     if(c){c.estado='enviada';c.oc_asociada=null}
@@ -583,10 +599,9 @@ async function borrarGuia(numero){
     }
     const inv=DB[ARCH.inv].data;
     g.items.forEach(it=>{
-      let p=inv.productos.find(x=>x.nombre.trim().toLowerCase()===it.producto.trim().toLowerCase());
-      if(!p){p={nombre:it.producto,cantidad:0,unidad:'un'};inv.productos.push(p)}
+      const p=invProdDe(it.producto);
       p.cantidad+=it.cantidad;
-      inv.movimientos.push({fecha:hoyISO(),tipo:'ingreso',producto:p.nombre,cantidad:it.cantidad,referencia:`Reverso por eliminación de guía N°${numero}`});
+      inv.movimientos.push({fecha:hoyISO(),tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:it.cantidad,referencia:`Reverso por eliminación de guía N°${numero}`});
     });
     arr.splice(arr.indexOf(g),1);
     await guardarArchivo(ARCH.guias,`Guía N°${numero} eliminada`);
@@ -632,11 +647,11 @@ async function guardarCompra(fe){
     if(aBodega){
       const inv=DB[ARCH.inv].data;
       itemsC.forEach(it=>{
-        let p=inv.productos.find(x=>x.nombre.trim().toLowerCase()===it.producto.trim().toLowerCase());
-        if(!p){p={nombre:it.producto,cantidad:0,unidad:'un'};inv.productos.push(p)}
+        const p=invProdDe(it.producto);
         p.cantidad+=it.cantidad;
-        inv.movimientos.push({fecha,tipo:'ingreso',producto:p.nombre,cantidad:it.cantidad,referencia:`Compra OC ${folio}${prov?' · '+prov:''}`});
+        inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:it.cantidad,referencia:`Compra OC ${folio}${prov?' · '+prov:''}`});
       });
+      await guardarMaestroSiNuevo();
     }
     await guardarArchivo(ARCH.oc,`OC ${folio}: compra registrada${prov?' ('+prov+')':''}`);
     if(aBodega)await guardarArchivo(ARCH.inv,`Inventario: ingreso por compra OC ${folio}`);
@@ -721,11 +736,11 @@ async function crearGuia(){
     // 3. Inventario
     const inv=DB[ARCH.inv].data;let negativos=[];
     itemsGuia.forEach(it=>{
-      let p=inv.productos.find(x=>x.nombre.trim().toLowerCase()===it.producto.trim().toLowerCase());
-      if(!p){p={nombre:it.producto,cantidad:0,unidad:'un'};inv.productos.push(p)}
+      const p=invProdDe(it.producto);
       p.cantidad-=it.cantidad;if(p.cantidad<0)negativos.push(p.nombre);
-      inv.movimientos.push({fecha,tipo:'salida',producto:p.nombre,cantidad:it.cantidad,referencia:`Guía N°${numero} · OC ${folioOC}`});
+      inv.movimientos.push({fecha,tipo:'salida',codigo:p.codigo,producto:p.nombre,cantidad:it.cantidad,referencia:`Guía N°${numero} · OC ${folioOC}`});
     });
+    await guardarMaestroSiNuevo();
     await guardarArchivo(ARCH.guias,`Guía N°${numero} registrada (OC ${folioOC})`);
     await guardarArchivo(ARCH.oc,`OC ${folioOC}: despacho guía N°${numero}`);
     await guardarArchivo(ARCH.inv,`Inventario: salida por guía N°${numero}`);
@@ -750,23 +765,23 @@ function rInv(){
     <div class="acciones"><button class="btn" onclick="ingresoInv()">Registrar ingreso</button></div>
   </div></details>
   <h2>Stock actual (${prods.length} productos)</h2>
-  <div class="card">${prods.length?`<table><tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
-    ${prods.map(p=>`<tr><td>${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
+  <div class="card">${prods.length?`<table><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
+    ${prods.map(p=>`<tr><td class="mono small">${esc(p.codigo||'—')}</td><td>${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
     <td class="num"><button class="btn mini sec" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')">✎</button> <button class="btn mini peligro" onclick="borrarProd('${esc(p.nombre).replace(/'/g,"\\'")}')">🗑</button></td></tr>`).join('')}</table>`
     :'<div class="vacio">Bodega sin productos registrados. Usa "Registrar ingreso" para la carga inicial.</div>'}</div>
   <h2>Últimos movimientos</h2>
-  <div class="card">${movs.length?`<table><tr><th>Fecha</th><th>Tipo</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
-    ${movs.map(m=>`<tr><td class="mono small">${fFecha(m.fecha)}</td><td><span class="chip ${m.tipo==='salida'?'rojo':m.tipo==='ingreso'?'verde':''}">${m.tipo}</span></td><td>${esc(m.producto)}</td><td class="num">${num(m.cantidad)}</td><td class="small muted">${esc(m.referencia||'')}</td></tr>`).join('')}</table>`
+  <div class="card">${movs.length?`<table><tr><th>Fecha</th><th>Tipo</th><th>Código</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
+    ${movs.map(m=>`<tr><td class="mono small">${fFecha(m.fecha)}</td><td class="mono small">${esc(m.codigo||'—')}</td><td><span class="chip ${m.tipo==='salida'?'rojo':m.tipo==='ingreso'?'verde':''}">${m.tipo}</span></td><td>${esc(m.producto)}</td><td class="num">${num(m.cantidad)}</td><td class="small muted">${esc(m.referencia||'')}</td></tr>`).join('')}</table>`
     :'<div class="vacio">Sin movimientos aún.</div>'}</div>`;
 }
 async function ingresoInv(){
   const nombre=v('i-prod').trim(),cant=+v('i-cant');
   if(!nombre||!(cant>0)){toast('Falta producto o cantidad.');return}
   const inv=DB[ARCH.inv].data;
-  let p=inv.productos.find(x=>x.nombre.trim().toLowerCase()===nombre.toLowerCase());
-  if(!p){p={nombre,cantidad:0,unidad:'un'};inv.productos.push(p)}
+  const p=invProdDe(nombre);
   p.cantidad+=cant;
-  inv.movimientos.push({fecha:hoyISO(),tipo:'ingreso',producto:p.nombre,cantidad:cant,referencia:v('i-ref').trim()});
+  inv.movimientos.push({fecha:hoyISO(),tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:cant,referencia:v('i-ref').trim()});
+  await guardarMaestroSiNuevo();
   velo(true);
   try{await guardarArchivo(ARCH.inv,`Inventario: ingreso ${nombre} (+${cant})`);toast('Ingreso registrado ✓');render()}
   catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
