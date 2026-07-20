@@ -146,9 +146,22 @@ async function gh(path,opts={}){
   if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(`${r.status}: ${e.message||'error de GitHub'}`)}
   return r.json();
 }
+const ESTRUCTURAS_BASE={'data/cotizaciones.json':{cotizaciones:[]},'data/ordenes_compra.json':{ordenes:[]},
+ 'data/guias_despacho.json':{guias:[]},'data/inventario.json':{productos:[],movimientos:[]},
+ 'data/pendientes.json':{pendientes:[]},'data/hojas_ruta.json':{hojas:[]},
+ 'data/productos.json':{productos:[],correlativo:0},
+ 'data/config.json':{empresa:'Novetec SPA',semaforo:{rojo_dias:5,amarillo_dias:10},proxima_hoja_ruta:1}};
 async function cargarArchivo(p){
-  const j=await gh(`contents/${p}?t=${Date.now()}`);
-  DB[p]={data:JSON.parse(b64dec(j.content)),sha:j.sha};
+  try{
+    const j=await gh(`contents/${p}?t=${Date.now()}`);
+    DB[p]={data:JSON.parse(b64dec(j.content)),sha:j.sha};
+  }catch(e){
+    // Auto-recuperación: si el archivo no existe, la app lo crea con estructura vacía
+    if(e.message.startsWith('404')&&ESTRUCTURAS_BASE[p]){
+      DB[p]={data:JSON.parse(JSON.stringify(ESTRUCTURAS_BASE[p])),sha:undefined};
+      try{const j=await gh(`contents/${p}`,{method:'PUT',body:JSON.stringify({message:'Inicialización automática: '+p,content:b64enc(JSON.stringify(DB[p].data,null,2))})});DB[p].sha=j.content.sha}catch(_){/* seguir en memoria */}
+    } else throw e;
+  }
 }
 async function guardarArchivo(p,msg){
   try{
