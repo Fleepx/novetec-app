@@ -305,16 +305,16 @@ function rPanel(){
   const g={vencida:[],rojo:[],ambar:[],verde:[],gris:[]};
   act.forEach(o=>g[semaforo(o).c].push(o));
   const cotP=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='enviada');
-  const invBajo=DB[ARCH.inv].data.productos.filter(p=>p.cantidad<0);
 
   // Filas: un renglón por ítem pendiente de despacho
   const filas=[];
+  const stockDe=nom=>{const p=DB[ARCH.inv].data.productos.find(x=>x.nombre.trim().toLowerCase()===nom.trim().toLowerCase());return p?p.cantidad:0};
   act.forEach(o=>{const s=semaforo(o);
     o.items.forEach(i=>{
       const pend=(+i.cantidad||0)-(+i.cantidad_despachada||0);
       if(pend<=0)return;
       filas.push({cot:o.cotizacion_sap||'',oc:o.folio,producto:i.producto,cantidad:+i.cantidad||0,
-        pendiente:pend,destino:o.destino||'Sin destino',precio:+i.precio_unitario||0,sem:s});
+        pendiente:pend,stock:stockDe(i.producto),destino:o.destino||'Sin destino',precio:+i.precio_unitario||0,sem:s});
     });
   });
   const c=panelSort.campo,d=panelSort.dir;
@@ -326,7 +326,7 @@ function rPanel(){
   const tablaGrupo=(dest,fs)=>`
     <h2>${esc(dest)} <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· ${fs.length} ítem(s) pendiente(s)</span></h2>
     <div class="card" style="overflow-x:auto"><table>
-      <tr>${th('Urgencia','sem')}${th('Cotización','cot','')}${th('OC','oc')}${th('Producto','producto')}${th('Solicitado','cantidad','num')}${th('Pendiente','pendiente','num')}${th('Precio','precio','num')}</tr>
+      <tr>${th('Urgencia','sem')}${th('Cotización','cot','')}${th('OC','oc')}${th('Producto','producto')}${th('Solicitado','cantidad','num')}${th('Pendiente','pendiente','num')}${th('Stock','stock','num')}${th('Precio','precio','num')}</tr>
       ${fs.map(f=>`<tr>
         <td><span class="chip ${f.sem.c}">${f.sem.txt}</span></td>
         <td class="mono small">${esc(f.cot)||'—'}</td>
@@ -334,6 +334,7 @@ function rPanel(){
         <td>${esc(f.producto)}</td>
         <td class="num">${num(f.cantidad)}</td>
         <td class="num" style="font-weight:600">${num(f.pendiente)}</td>
+        <td class="num" style="${f.stock<f.pendiente?'color:var(--rojo);font-weight:600':''}">${num(f.stock)}</td>
         <td class="num">${clp(f.precio)}</td>
       </tr>`).join('')}
     </table></div>`;
@@ -347,7 +348,6 @@ function rPanel(){
     <div class="sem-box ambar"><div class="n">${g.ambar.length}</div><div class="l">≤ ${DB[ARCH.conf].data.semaforo.amarillo_dias} días</div></div>
     <div class="sem-box verde"><div class="n">${g.verde.length}</div><div class="l">Con holgura</div></div>
   </div>
-  ${invBajo.length?`<div class="card" style="border-color:var(--rojo)"><b style="color:var(--rojo)">⚠ Inventario en negativo:</b> <span class="mono small">${invBajo.map(p=>esc(p.nombre)).join(', ')}</span></div>`:''}
   ${DB[ARCH.pend].data.pendientes.length?`<div class="card" style="border-color:var(--ambar)">📄 <b>${DB[ARCH.pend].data.pendientes.length}</b> documento(s) en cola esperando ser procesados por el administrador.</div>`:''}
   ${destOrden.length?destOrden.map(dst=>tablaGrupo(dst,grupos[dst])).join(''):'<div class="card vacio">No hay ítems pendientes de despacho.</div>'}
   <h2>Cotizaciones sin responder (${cotP.length})</h2>
