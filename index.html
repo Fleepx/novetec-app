@@ -764,7 +764,7 @@ async function crearGuia(){
     if(f.cant>pend){toast(`"${it.producto}": no puedes despachar más de ${num(pend)}.`);return}}
   velo(true,'Registrando despacho…');
   try{
-    const itemsGuia=filas.map(f=>({producto:o.items[f.ix].producto,cantidad:f.cant}));
+    const itemsGuia=filas.map(f=>({producto:o.items[f.ix].producto,codigo:o.items[f.ix].codigo||null,cantidad:f.cant}));
     // 1. Guía
     DB[ARCH.guias].data.guias.push({numero,fecha,destino,folio_oc:folioOC,items:itemsGuia,hoja_ruta:null});
     // 2. Avance OC
@@ -773,7 +773,15 @@ async function crearGuia(){
     // 3. Inventario
     const inv=DB[ARCH.inv].data;let negativos=[];
     itemsGuia.forEach(it=>{
-      const p=invProdDe(it.producto);
+      // Candado: si el ítem trae código NOV (heredado de la OC), descontar SIEMPRE por código
+      let p;
+      if(it.codigo){
+        p=inv.productos.find(x=>x.codigo===it.codigo);
+        if(!p){const m=DB[ARCH.prod].data.productos.find(x=>x.codigo===it.codigo);
+          p={codigo:it.codigo,nombre:m?m.nombre:it.producto,cantidad:0,unidad:m?m.unidad:'UN'};inv.productos.push(p)}
+      } else {
+        p=invProdDe(it.producto);
+      }
       p.cantidad-=it.cantidad;if(p.cantidad<0)negativos.push(p.nombre);
       inv.movimientos.push({fecha,tipo:'salida',codigo:p.codigo,producto:p.nombre,cantidad:it.cantidad,referencia:`Guía N°${numero} · OC ${folioOC}`});
     });
