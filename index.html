@@ -7,6 +7,7 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -143,7 +144,7 @@ a{color:var(--ink)}
 const LSKEY='novetec_cfg';
 let cfg=null;
 let DB={}; // path -> {data, sha}
-const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json',prod:'data/productos.json'};
+const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json',prod:'data/productos.json',sin:'data/sinonimos.json'};
 
 const b64dec=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,'')),c=>c.charCodeAt(0)));
 function b64enc(s){const b=new TextEncoder().encode(s);let r='';for(let i=0;i<b.length;i+=8192)r+=String.fromCharCode(...b.subarray(i,i+8192));return btoa(r)}
@@ -177,7 +178,7 @@ async function guardarArchivo(p,msg){
     DB[p].sha=j.content.sha;
   }catch(e){
     if(e.message.startsWith('409')||e.message.startsWith('422')){
-      toast('⚠ Otro usuario guardó cambios. Recargando datos…');await cargarTodo();render();throw new Error('conflicto');
+      toast('Atención: otro usuario guardó cambios. Recargando datos…');await cargarTodo();render();throw new Error('conflicto');
     }
     throw e;
   }
@@ -245,12 +246,17 @@ function invProdDe(nombre,unidad,crear=true){
 async function guardarMaestroSiNuevo(){
   if(DB[ARCH.prod]._nuevos){await guardarArchivo(ARCH.prod,'Maestro: nuevos productos');DB[ARCH.prod]._nuevos=false}}
 /* Similitud simple para desambiguar nombres parecidos */
-// Lematiza a raíz simple: minúsculas sin tildes y sin plural (lápices→lapic→lapiz aprox)
+// Lematiza a raíz simple: minúsculas sin tildes y sin plural (lapices a lapiz aproximado)
 function raiz(t){t=t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   t=t.replace(/ces$/,'z').replace(/es$/,'').replace(/s$/,'');return t}
 function tokens(s){return normProd(s).split(' ').filter(t=>t.length>2).map(raiz)}
+function expandirSinonimos(toks){
+  const grupos=(DB[ARCH.sin]&&DB[ARCH.sin].data.grupos)||[];
+  const set=new Set(toks);
+  toks.forEach(t=>{grupos.forEach(g=>{const gr=g.map(raiz);if(gr.includes(t))gr.forEach(x=>set.add(x))})});
+  return [...set];}
 function candidatosMaestro(nombre){
-  const tq=tokens(nombre); if(!tq.length)return [];
+  const tq=expandirSinonimos(tokens(nombre)); if(!tq.length)return [];
   return DB[ARCH.prod].data.productos
     .map(p=>{
       const nombres=[p.nombre,...(p.alias||[])];
@@ -299,7 +305,7 @@ function ocComp(oc){return oc.items.reduce((s,i)=>s+(+i.cantidad_comprada||0),0)
 function chipCompra(oc){const t=ocTot(oc),c=ocComp(oc);
   if(c<=0)return '<span class="chip rojo">Compra pendiente</span>';
   if(c<t)return `<span class="chip ambar">Compra parcial ${num(c)}/${num(t)}</span>`;
-  return '<span class="chip ink">Comprada ✓</span>'}
+  return '<span class="chip ink">Comprada</span>'}
 function semaforo(oc){
   if(ocEstado(oc)==='despachada')return {c:'gris',txt:'despachada'};
   const dd=dias(oc.fecha_entrega);
@@ -330,7 +336,7 @@ async function subirPendiente(tipo){
       DB[ARCH.pend].data.pendientes.push({id:'P-'+Date.now()+'-'+i,tipo,archivo:ruta,nombre:f.name,subido:hoyISO(),nota,...(fenv?{fecha_envio:fenv}:{})});
     }
     await guardarArchivo(ARCH.pend,`${files.length} documento(s) en cola (${tipo})`);
-    toast(`${files.length} documento(s) en cola ✓ El administrador los procesará y cargará los datos.`);render();
+    toast(`${files.length} documento(s) en cola El administrador los procesará y cargará los datos.`);render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
@@ -354,7 +360,7 @@ function formPendiente(tipo,accept){
     <label>Archivos</label>
     <div class="dropzone" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'${tipo}')" onclick="document.getElementById('pd-file-${tipo}').click()">
       <input id="pd-file-${tipo}" type="file" accept="${accept}" multiple style="display:none" onchange="dzContar('${tipo}')" onclick="event.stopPropagation()">
-      <div class="dz-icono">⇪</div>
+      <div class="dz-icono"><i class="fa-solid fa-cloud-arrow-up"></i></div>
       <div><b>Arrastra los archivos aquí</b> o haz clic para elegirlos</div>
       <div class="small muted">Se aceptan PDF, Excel, Word e imágenes · varios a la vez</div>
       <div id="pd-count-${tipo}" class="mono small" style="margin-top:6px;color:var(--verde)"></div>
@@ -426,7 +432,7 @@ function rPanel(){
     return (typeof va==='string'?va.localeCompare(vb,'es'):va-vb)*d});
   const grupos={};
   filas.forEach(f=>{(grupos[f.destino]=grupos[f.destino]||[]).push(f)});
-  const th=(lbl,campo,cls='')=>`<th class="${cls}" style="cursor:pointer;user-select:none" onclick="sortPanel('${campo}')">${lbl}${panelSort.campo===campo?(panelSort.dir>0?' ▲':' ▼'):''}</th>`;
+  const th=(lbl,campo,cls='')=>`<th class="${cls}" style="cursor:pointer;user-select:none" onclick="sortPanel('${campo}')">${lbl}${panelSort.campo===campo?(panelSort.dir>0?' <i class="fa-solid fa-arrow-up-short-wide" style="font-size:11px"></i>':' <i class="fa-solid fa-arrow-down-wide-short" style="font-size:11px"></i>'):''}</th>`;
   const tablaGrupo=(dest,fs)=>`
     <h2>${esc(dest)} <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· ${fs.length} ítem(s) pendiente(s)</span></h2>
     <div class="card" style="overflow-x:auto"><table>
@@ -452,7 +458,7 @@ function rPanel(){
     <div class="sem-box ambar"><div class="n">${g.ambar.length}</div><div class="l">≤ ${DB[ARCH.conf].data.semaforo.amarillo_dias} días</div></div>
     <div class="sem-box verde"><div class="n">${g.verde.length}</div><div class="l">Con holgura</div></div>
   </div>
-  ${DB[ARCH.pend].data.pendientes.length?`<div class="card" style="border-color:var(--ambar)">📄 <b>${DB[ARCH.pend].data.pendientes.length}</b> documento(s) en cola esperando ser procesados por el administrador.</div>`:''}
+  ${DB[ARCH.pend].data.pendientes.length?`<div class="card" style="border-color:var(--ambar)"><i class="fa-solid fa-file-lines"></i> <b>${DB[ARCH.pend].data.pendientes.length}</b> documento(s) en cola esperando ser procesados por el administrador.</div>`:''}
   ${destOrden.length?destOrden.map(dst=>tablaGrupo(dst,grupos[dst])).join(''):'<div class="card vacio">No hay ítems pendientes de despacho.</div>'}
   <h2>Cotizaciones sin responder (${cotP.length})</h2>
   ${cotP.length?cotP.map(c=>`<div class="tag"><div class="bar gris"></div><div class="body"><div class="top"><span class="folio">COT ${esc(c.folio)}</span><span class="chip">${fFecha(c.fecha)}</span><span class="muted small">${esc(c.cliente)}</span></div></div></div>`).join(''):'<div class="card vacio">Sin cotizaciones pendientes.</div>'}`;
@@ -517,7 +523,7 @@ function rCot(){
         <span class="${est}">${c.estado}</span>
         <span class="chip">${fFecha(c.fecha)}</span>
         <span class="muted small">${esc(c.cliente)}</span>
-        ${c.oc_asociada?`<span class="chip ink">→ OC ${esc(c.oc_asociada)}</span>`:''}
+        ${c.oc_asociada?`<span class="chip ink">OC ${esc(c.oc_asociada)}</span>`:''}
       </div>
       ${(()=>{
         const bodegas=[...new Set(c.items.map(i=>i.bodega).filter(Boolean))];
@@ -528,7 +534,7 @@ function rCot(){
           const orden=['Rancagua','San Francisco de Mostazal','El Peumo','Longovilo'];
           const grupos=orden.filter(b=>bodegas.includes(b)).concat(bodegas.filter(b=>!orden.includes(b)));
           html=grupos.map(b=>{const its=c.items.filter(i=>i.bodega===b);
-            return `<div class="small" style="font-weight:700;margin:10px 0 4px;color:var(--ink)">📍 ${esc(b)} <span class="muted" style="font-weight:400">· ${its.length} ítem(s)</span></div>
+            return `<div class="small" style="font-weight:700;margin:10px 0 4px;color:var(--ink)"><i class="fa-solid fa-location-dot"></i> ${esc(b)} <span class="muted" style="font-weight:400">· ${its.length} ítem(s)</span></div>
             <table><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(its)}</table>`;}).join('');
         } else {
           html=`<table style="margin-top:10px"><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(c.items)}
@@ -543,7 +549,7 @@ function rCot(){
       ${c.archivo?`<p class="small"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(c.archivo)}')">Descargar documento</a></p>`:''}
       <div class="acciones">
       ${c.estado==='enviada'?`
-        <button class="btn mini" onclick="tab='oc';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='oc'));render();prefillOC('${esc(c.id)}')">El cliente envió OC → registrarla</button>
+        <button class="btn mini" onclick="tab='oc';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='oc'));render();prefillOC('${esc(c.id)}')">El cliente envió OC registrar OC</button>
         <button class="btn mini peligro" onclick="rechazarCot('${esc(c.id)}')">Cliente la rechazó</button>`:''}
       ${c.estado!=='convertida'?`<button class="btn mini peligro" onclick="borrarCot('${esc(c.id)}')">Eliminar</button>`:'<span class="small muted">Para eliminarla, da de baja primero su OC.</span>'}
       </div>
@@ -556,7 +562,7 @@ async function crearCot(){
   try{
     DB[ARCH.cot].data.cotizaciones.push({id:'COT-'+Date.now(),folio:v('c-folio').trim(),fecha:v('c-fecha'),cliente:v('c-cliente').trim(),estado:'enviada',oc_asociada:null,items,archivo:null,notas:v('c-notas').trim()});
     await guardarArchivo(ARCH.cot,`Cotización ${v('c-folio').trim()} registrada`);
-    toast('Cotización guardada ✓');render();
+    toast('Cotización guardada');render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
@@ -569,7 +575,7 @@ async function borrarCot(id){
     arr.splice(arr.indexOf(c),1);
     await guardarArchivo(ARCH.cot,`Cotización ${c.folio} eliminada`);
     if(c.archivo)await borrarArchivoRepo(c.archivo,`Borrado documento de cotización ${c.folio}`);
-    toast('Cotización eliminada ✓');render();
+    toast('Cotización eliminada');render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
@@ -655,7 +661,7 @@ async function crearOC(){
     if(c){c.estado='convertida';c.oc_asociada=folio}
     await guardarArchivo(ARCH.oc,`OC ${folio} registrada`);
     await guardarArchivo(ARCH.cot,`Cotización ${c?c.folio:''} convertida en OC ${folio}`);
-    toast('OC guardada ✓');render();
+    toast('OC guardada');render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
@@ -683,14 +689,14 @@ async function borrarOC(fe){
     if(c)await guardarArchivo(ARCH.cot,`Cotización ${c.folio} liberada por baja de OC ${folio}`);
     if(comprasBod.length)await guardarArchivo(ARCH.inv,`Inventario: reverso por baja de OC ${folio}`);
     if(o.archivo)await borrarArchivoRepo(o.archivo,`Borrado documento de OC ${folio}`);
-    toast(`OC ${folio} dada de baja ✓`);render();
+    toast(`OC ${folio} dada de baja`);render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
 async function borrarGuia(numero){
   const arr=DB[ARCH.guias].data.guias;const g=arr.find(x=>x.numero===numero);if(!g)return;
   let msg=`¿Eliminar la guía N°${numero}?\n\nSe devolverán sus cantidades al inventario y al pendiente de la OC ${g.folio_oc}.`;
-  if(g.hoja_ruta)msg+=`\n⚠ Esta guía ya está en la Hoja de Ruta N°${g.hoja_ruta}.`;
+  if(g.hoja_ruta)msg+=`\n<i class="fa-solid fa-triangle-exclamation"></i> Esta guía ya está en la Hoja de Ruta N°${g.hoja_ruta}.`;
   if(!confirm(msg))return;
   velo(true,'Eliminando guía…');
   try{
@@ -712,7 +718,7 @@ async function borrarGuia(numero){
     await guardarArchivo(ARCH.guias,`Guía N°${numero} eliminada`);
     if(o)await guardarArchivo(ARCH.oc,`OC ${g.folio_oc}: reverso de guía N°${numero}`);
     await guardarArchivo(ARCH.inv,`Inventario: reverso de guía N°${numero}`);
-    toast(`Guía N°${numero} eliminada y cantidades devueltas ✓`);render();
+    toast(`Guía N°${numero} eliminada y cantidades devueltas`);render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
@@ -760,7 +766,7 @@ async function guardarCompra(fe){
     }
     await guardarArchivo(ARCH.oc,`OC ${folio}: compra registrada${prov?' ('+prov+')':''}`);
     if(aBodega)await guardarArchivo(ARCH.inv,`Inventario: ingreso por compra OC ${folio}`);
-    toast('Compra registrada ✓');render();
+    toast('Compra registrada');render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
@@ -857,7 +863,7 @@ async function crearGuia(){
     await guardarArchivo(ARCH.guias,`Guía N°${numero} registrada (OC ${folioOC})`);
     await guardarArchivo(ARCH.oc,`OC ${folioOC}: despacho guía N°${numero}`);
     await guardarArchivo(ARCH.inv,`Inventario: salida por guía N°${numero}`);
-    toast('Despacho registrado ✓'+(negativos.length?` ⚠ Stock negativo: ${negativos.join(', ')}`:''));
+    toast('Despacho registrado'+(negativos.length?` <i class="fa-solid fa-triangle-exclamation"></i> Stock negativo: ${negativos.join(', ')}`:''));
     render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
@@ -880,7 +886,7 @@ function rInv(){
   <h2>Stock actual (${prods.length} productos)</h2>
   <div class="card">${prods.length?`<table><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
     ${prods.map(p=>`<tr><td class="mono small">${esc(p.codigo||'—')}</td><td>${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
-    <td class="num"><button class="btn mini sec" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')">✎</button> <button class="btn mini peligro" onclick="borrarProd('${esc(p.nombre).replace(/'/g,"\\'")}')">🗑</button></td></tr>`).join('')}</table>`
+    <td class="num"><button class="btn mini sec" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-pen"></i></button> <button class="btn mini peligro" onclick="borrarProd('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')}</table>`
     :'<div class="vacio">Bodega sin productos registrados. Usa "Registrar ingreso" para la carga inicial.</div>'}</div>
   <h2>Últimos movimientos</h2>
   <div class="card">${movs.length?`<table><tr><th>Fecha</th><th>Tipo</th><th>Código</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
@@ -900,7 +906,7 @@ async function ingresoInv(){
   inv.movimientos.push({fecha:hoyISO(),tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:cant,referencia:v('i-ref').trim()});
   await guardarMaestroSiNuevo();
   velo(true);
-  try{await guardarArchivo(ARCH.inv,`Inventario: ingreso ${nombre} (+${cant})`);toast('Ingreso registrado ✓');render()}
+  try{await guardarArchivo(ARCH.inv,`Inventario: ingreso ${nombre} (+${cant})`);toast('Ingreso registrado');render()}
   catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
@@ -908,12 +914,12 @@ async function borrarProd(nombre){
   const inv=DB[ARCH.inv].data;
   const p=inv.productos.find(x=>x.nombre===nombre);if(!p)return;
   let msg=`¿Eliminar el producto "${nombre}" del inventario?`;
-  if(p.cantidad!==0)msg+=`\n⚠ Tiene stock ${num(p.cantidad)} — se descartará ese saldo.`;
+  if(p.cantidad!==0)msg+=`\n<i class="fa-solid fa-triangle-exclamation"></i> Tiene stock ${num(p.cantidad)} — se descartará ese saldo.`;
   if(!confirm(msg))return;
   inv.productos.splice(inv.productos.indexOf(p),1);
   inv.movimientos.push({fecha:hoyISO(),tipo:'ajuste',producto:nombre,cantidad:-p.cantidad,referencia:'Producto eliminado del inventario'});
   velo(true,'Eliminando…');
-  try{await guardarArchivo(ARCH.inv,`Inventario: producto "${nombre}" eliminado`);toast('Producto eliminado ✓');render()}
+  try{await guardarArchivo(ARCH.inv,`Inventario: producto "${nombre}" eliminado`);toast('Producto eliminado');render()}
   catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
@@ -925,7 +931,7 @@ async function ajusteInv(nombre){
   const dif=+nv-p.cantidad;p.cantidad=+nv;
   inv.movimientos.push({fecha:hoyISO(),tipo:'ajuste',producto:nombre,cantidad:dif,referencia:'Ajuste manual'});
   velo(true);
-  try{await guardarArchivo(ARCH.inv,`Inventario: ajuste ${nombre} → ${nv}`);toast('Ajuste guardado ✓');render()}
+  try{await guardarArchivo(ARCH.inv,`Inventario: ajuste ${nombre} a ${nv}`);toast('Ajuste guardado');render()}
   catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
