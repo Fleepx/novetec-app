@@ -81,6 +81,11 @@ td.num,th.num{text-align:right;font-family:var(--mono)}
 #splash.out{opacity:0;pointer-events:none}
 #splash img{width:min(46vw,260px);animation:splashIn .7s ease}
 @keyframes splashIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+.modal-ov{position:fixed;inset:0;background:rgba(22,35,46,.45);display:flex;align-items:center;justify-content:center;z-index:120;padding:16px}
+.modal{background:#fff;border-radius:var(--radius);padding:20px;max-width:460px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.modal .cand{display:block;width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:8px;padding:10px 12px;margin-top:8px;cursor:pointer;font-family:var(--sans);font-size:14px}
+.modal .cand:hover{border-color:var(--ink);background:#EEF3F7}
+.modal .cand.nuevo{border-style:dashed;color:var(--muted);margin-top:14px}
 .dropzone{border:2px dashed var(--line);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;background:#fff;transition:all .15s}
 .dropzone.hover{border-color:var(--ink);background:#EEF3F7}
 .dropzone .dz-icono{font-size:24px;color:var(--muted);margin-bottom:4px}
@@ -239,6 +244,52 @@ function invProdDe(nombre,unidad,crear=true){
   return p}
 async function guardarMaestroSiNuevo(){
   if(DB[ARCH.prod]._nuevos){await guardarArchivo(ARCH.prod,'Maestro: nuevos productos');DB[ARCH.prod]._nuevos=false}}
+/* Similitud simple para desambiguar nombres parecidos */
+// Lematiza a raíz simple: minúsculas sin tildes y sin plural (lápices→lapic→lapiz aprox)
+function raiz(t){t=t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  t=t.replace(/ces$/,'z').replace(/es$/,'').replace(/s$/,'');return t}
+function tokens(s){return normProd(s).split(' ').filter(t=>t.length>2).map(raiz)}
+function candidatosMaestro(nombre){
+  const tq=tokens(nombre); if(!tq.length)return [];
+  return DB[ARCH.prod].data.productos
+    .map(p=>{
+      const nombres=[p.nombre,...(p.alias||[])];
+      let mejor=0;
+      nombres.forEach(nm=>{const tn=tokens(nm);
+        const comp=tq.filter(t=>tn.includes(t)).length;
+        if(!comp)return;
+        // relevancia: proporción de tokens de la búsqueda cubiertos + del nombre cubiertos
+        const score=(comp/tq.length)*0.6 + (comp/tn.length)*0.4;
+        if(score>mejor)mejor=score;});
+      return {p,s:mejor};
+    })
+    .filter(x=>x.s>0)
+    .sort((a,b)=>b.s-a.s)
+    .map(x=>x.p);}
+// Devuelve el producto del maestro elegido (exacto, o vía modal si hay similares), o {crear:nombre}
+function resolverProducto(nombre){
+  return new Promise(res=>{
+    const exacto=prodMaestro(nombre);
+    if(exacto){res(exacto);return}
+    const cand=candidatosMaestro(nombre);
+    if(!cand.length){res({crear:nombre});return}
+    const ov=document.createElement('div');ov.className='modal-ov';
+    const filtro=cand.length>8?`<input id="cand-filtro" placeholder="Filtrar lista…" style="margin:8px 0">`:'';
+    ov.innerHTML=`<div class="modal">
+      <b>¿A qué producto corresponde?</b>
+      <p class="small muted">Escribiste "<b>${esc(nombre)}</b>". Hay ${cand.length} producto(s) similar(es) en el maestro — elige el correcto para ingresar/descontar sobre ese código, o créalo como nuevo si ninguno corresponde.</p>
+      ${filtro}
+      <div id="cand-list" style="max-height:46vh;overflow-y:auto">${cand.map((p,i)=>`<button class="cand" data-i="${i}"><span class="mono small">${esc(p.codigo)}</span> ${esc(p.nombre)} <span class="mono small muted">· ${esc(p.unidad)}</span>${p.alias&&p.alias.length?`<br><span class="small muted">alias: ${esc(p.alias.slice(0,2).join(', '))}</span>`:''}</button>`).join('')}</div>
+      <button class="cand nuevo" data-i="-1">+ Crear "<b>${esc(nombre)}</b>" como producto NUEVO (distinto a los de arriba)</button>
+    </div>`;
+    document.body.appendChild(ov);
+    ov.querySelectorAll('.cand').forEach(b=>b.onclick=()=>{const i=+b.dataset.i;ov.remove();res(i<0?{crear:nombre}:cand[i]);});
+    const fi=ov.querySelector('#cand-filtro');
+    if(fi)fi.oninput=()=>{const q=normProd(fi.value);
+      ov.querySelectorAll('#cand-list .cand').forEach(b=>{b.style.display=normProd(b.textContent).includes(q)?'block':'none'})};
+  });
+}
+
 
 /* Estado y semaforo de OC */
 function ocTot(oc){return oc.items.reduce((s,i)=>s+(+i.cantidad||0),0)}
@@ -823,7 +874,11 @@ async function ingresoInv(){
   const nombre=v('i-prod').trim(),cant=+v('i-cant');
   if(!nombre||!(cant>0)){toast('Falta producto o cantidad.');return}
   const inv=DB[ARCH.inv].data;
-  const p=invProdDe(nombre);
+  const elegido=await resolverProducto(nombre);
+  let m;
+  if(elegido.crear){m=crearProdMaestro(elegido.crear,'UN')}else{m=elegido}
+  let p=inv.productos.find(x=>x.codigo===m.codigo);
+  if(!p){p={codigo:m.codigo,nombre:m.nombre,cantidad:0,unidad:m.unidad};inv.productos.push(p)}
   p.cantidad+=cant;
   inv.movimientos.push({fecha:hoyISO(),tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:cant,referencia:v('i-ref').trim()});
   await guardarMaestroSiNuevo();
