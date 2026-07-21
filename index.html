@@ -81,6 +81,9 @@ td.num,th.num{text-align:right;font-family:var(--mono)}
 #splash.out{opacity:0;pointer-events:none}
 #splash img{width:min(46vw,260px);animation:splashIn .7s ease}
 @keyframes splashIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+.dropzone{border:2px dashed var(--line);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;background:#fff;transition:all .15s}
+.dropzone.hover{border-color:var(--ink);background:#EEF3F7}
+.dropzone .dz-icono{font-size:24px;color:var(--muted);margin-bottom:4px}
 details.form{border:1.5px dashed var(--line);border-radius:var(--radius);margin-bottom:16px;background:#FAFBFC}
 details.form summary{padding:13px 16px;font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;list-style:none}
 details.form summary::before{content:'+ '}
@@ -280,10 +283,31 @@ async function subirPendiente(tipo){
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
+function dzOver(e){e.preventDefault();e.currentTarget.classList.add('hover')}
+function dzLeave(e){e.currentTarget.classList.remove('hover')}
+function dzDrop(e,tipo){
+  e.preventDefault();e.currentTarget.classList.remove('hover');
+  const input=document.getElementById('pd-file-'+tipo);
+  const dt=new DataTransfer();
+  [...input.files,...e.dataTransfer.files].forEach(f=>dt.items.add(f));
+  input.files=dt.files;dzContar(tipo);
+}
+function dzContar(tipo){
+  const input=document.getElementById('pd-file-'+tipo);
+  const el=document.getElementById('pd-count-'+tipo);
+  el.textContent=input.files.length?`${input.files.length} archivo(s) listos: ${[...input.files].map(f=>f.name).join(', ').slice(0,120)}`:'';
+}
 function formPendiente(tipo,accept){
   return `<details class="form"><summary>Subir documento de ${TIPO_LBL[tipo].toLowerCase()}${tipo==='guias_despacho'?' (bundle del viaje)':''}</summary><div class="inner">
     <p class="small muted" style="margin-top:10px">${tipo==='guias_despacho'?'Sube TODAS las guías del viaje juntas e indica la fecha de envío: con eso el administrador procesa y genera la hoja de ruta.':'Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.'}</p>
-    <label>Archivos (puedes seleccionar varios)</label><input id="pd-file-${tipo}" type="file" accept="${accept}" multiple>
+    <label>Archivos</label>
+    <div class="dropzone" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'${tipo}')" onclick="document.getElementById('pd-file-${tipo}').click()">
+      <input id="pd-file-${tipo}" type="file" accept="${accept}" multiple style="display:none" onchange="dzContar('${tipo}')" onclick="event.stopPropagation()">
+      <div class="dz-icono">⇪</div>
+      <div><b>Arrastra los archivos aquí</b> o haz clic para elegirlos</div>
+      <div class="small muted">Se aceptan PDF, Excel, Word e imágenes · varios a la vez</div>
+      <div id="pd-count-${tipo}" class="mono small" style="margin-top:6px;color:var(--verde)"></div>
+    </div>
     ${tipo==='guias_despacho'?`<label>Fecha de envío del viaje</label><input id="pd-fenv-${tipo}" type="date">`:''}
     <label>Nota para el administrador (opcional, aplica a todos)</label><input id="pd-nota-${tipo}" placeholder="ej: corresponden a junio 2025">
     <div class="acciones"><button class="btn" onclick="subirPendiente('${tipo}')">Dejar en cola</button></div>
@@ -420,7 +444,7 @@ function leerItems(cont,conPrecio=true){
 function rCot(){
   const cs=[...DB[ARCH.cot].data.cotizaciones].reverse();
   return `${dlProd()}
-  ${formPendiente('cotizaciones','.pdf,.jpg,.jpeg,.png')}
+  ${formPendiente('cotizaciones','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   <details class="form"><summary>Ingresar cotización manualmente</summary><div class="inner">
     <div class="grid3">
       <div><label>Folio / N°</label><input id="c-folio"></div>
@@ -497,7 +521,7 @@ function rOC(){
   ocs.sort((a,b)=>orden[semaforo(a).c]-orden[semaforo(b).c]||(a.fecha_entrega||'').localeCompare(b.fecha_entrega||''));
   const lista=ocs.filter(o=>!ocFiltro||o.folio.toLowerCase().includes(ocFiltro)||ocEstado(o).includes(ocFiltro));
   return `${dlProd()}
-  ${formPendiente('ordenes_compra','.pdf,.xls,.xlsx')}
+  ${formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   <details class="form" id="f-oc"><summary>Ingresar OC manualmente</summary><div class="inner">
     <div class="grid3">
       <div><label>Folio OC</label><input id="o-folio"></div>
@@ -679,7 +703,7 @@ function rGuias(){
   const hrs=[...DB[ARCH.hr].data.hojas].reverse();
   const ocsAct=DB[ARCH.oc].data.ordenes.filter(o=>ocEstado(o)!=='despachada');
   return `
-  ${formPendiente('guias_despacho','.pdf,.jpg,.jpeg,.png,.xls,.xlsx')}
+  ${formPendiente('guias_despacho','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${listaPend('guias_despacho')}
   <h2>Hojas de ruta</h2>
   ${hrs.length?hrs.map(h=>`<div class="card">
