@@ -520,8 +520,9 @@ function normBodega(b){
   if(x.includes('longovilo'))return 'Longovilo';
   return s;
 }
-/* Producto cuyo documento de origen no especifica la medida: hay que confirmarla antes de
-   despachar, porque en bodega cada medida se cuenta y se carga por separado. */
+/* Producto cuyo documento de origen no especifica la medida o la TALLA: hay que confirmarla
+   antes de despachar, porque en bodega cada medida y cada talla se cuentan y se cargan por
+   separado (las tallas se separan SIEMPRE en códigos distintos). */
 function medidaPendiente(codigo){
   if(!codigo)return false;
   const p=DB[ARCH.prod].data.productos.find(x=>x.codigo===codigo);
@@ -612,7 +613,7 @@ function rPanel(){
     <colgroup><col><col style="width:8ch"><col style="width:8ch"><col style="width:7ch"><col style="width:11ch"></colgroup>
     <tr><th>Producto</th><th class="num">Total a despachar</th><th class="num">Pendiente</th><th class="num">Stock</th><th class="num">Compra</th></tr>
     ${cons.map(c=>`<tr>
-      <td class="trunc" title="${esc(c.producto)} — ${esc([...c.bodegas].join(', '))}">${medidaPendiente(c.codigo)?'<i class="fa-solid fa-ruler aviso-medida" title="El documento no especifica la medida: confirmar antes de despachar"></i>':''}${esc(c.producto)}<span class="small muted sep">${esc([...c.bodegas].join(' · '))}</span></td>
+      <td class="trunc" title="${esc(c.producto)} — ${esc([...c.bodegas].join(', '))}">${medidaPendiente(c.codigo)?'<i class="fa-solid fa-ruler aviso-medida" title="El documento no especifica la medida o la talla: confirmar antes de despachar"></i>':''}${esc(c.producto)}<span class="small muted sep">${esc([...c.bodegas].join(' · '))}</span></td>
       <td class="num">${num(c.cantidad)}</td>
       <td class="num" style="font-weight:600">${num(c.pendiente)}</td>
       <td class="num" style="${c.stock<c.pendiente?'color:var(--rojo);font-weight:600':''}">${num(c.stock)}</td>
@@ -639,7 +640,7 @@ function rPanel(){
       <tr>${th('OC','oc')}${th('Producto','producto')}${th('Total','cantidad','num')}${th('Pendiente','pendiente','num')}${th('Stock','stock','num')}${th('Precio','precio','num')}</tr>
       ${fs.map(f=>`<tr>
         <td class="mono trunc" title="${esc(f.oc)}${f.origen==='sap'?' (Pendientes SAP)':''}">${esc(f.oc)||'—'}${f.origen==='sap'?' <span class="chip">SAP</span>':''}</td>
-        <td class="trunc" title="${esc(f.producto)}">${medidaPendiente(f.codigo)?'<i class="fa-solid fa-ruler aviso-medida" title="El documento no especifica la medida: confirmar antes de despachar"></i>':''}${esc(f.producto)}</td>
+        <td class="trunc" title="${esc(f.producto)}">${medidaPendiente(f.codigo)?'<i class="fa-solid fa-ruler aviso-medida" title="El documento no especifica la medida o la talla: confirmar antes de despachar"></i>':''}${esc(f.producto)}</td>
         <td class="num">${num(f.cantidad)}</td>
         <td class="num" style="font-weight:600">${num(f.pendiente)}</td>
         <td class="num" style="${f.stock<f.pendiente?'color:var(--rojo);font-weight:600':''}">${num(f.stock)}</td>
