@@ -253,13 +253,33 @@ async function borrarArchivoRepo(p,msg){
     await gh(`contents/${encodeURI(p)}`,{method:'DELETE',body:JSON.stringify({message:msg,sha:j.sha})});
   }catch(e){/* si el archivo ya no existe, continuar */}
 }
+function bajarBlob(b,nombre){
+  const u=URL.createObjectURL(b);
+  const a=document.createElement('a');a.href=u;a.download=nombre;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(u),5000);
+  velo(false);
+}
 async function descargarArchivo(p,nombre){
+  if(!p||p==='null'||p==='undefined'){toast('Ese documento todavía no tiene archivo generado.');return}
   velo(true,'Descargando…');
   try{
     const r=await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(p)}?t=${Date.now()}`,
       {headers:{'Authorization':'Bearer '+cfg.token,'Accept':'application/vnd.github.raw'}});
     if(!r.ok)throw new Error('HTTP '+r.status);
     const b=await r.blob();
+    if(b.type.includes('json')&&!/\.json$/i.test(p)){
+      const t=await b.text();
+      try{const j=JSON.parse(t);
+        if(j.content){ // la API respondió en JSON: rearmamos el binario desde base64
+          const bin=atob(j.content.replace(/\s/g,''));
+          const arr=new Uint8Array(bin.length);
+          for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+          return bajarBlob(new Blob([arr]),nombre||p.split('/').pop());
+        }
+      }catch(_){}
+      throw new Error('el servidor no devolvió el archivo');
+    }
     const u=URL.createObjectURL(b);
     const a=document.createElement('a');a.href=u;a.download=nombre||p.split('/').pop();
     document.body.appendChild(a);a.click();a.remove();
@@ -1403,12 +1423,17 @@ function rGuias(){
   ${listaPend('guias_despacho')}
   <h2>Hojas de ruta</h2>
   ${hrs.length?hrs.map(h=>`<div class="card">
-    <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
-      <span class="mono" style="font-weight:600">Hoja de Ruta N°${esc(String(h.numero))}</span>
-      <span class="chip">${fFecha(h.fecha)}</span>
-      <span class="muted small">Guías: <span class="mono">${(h.guias||[]).map(esc).join(', ')}</span></span>
-      <button class="btn mini" style="margin-left:auto" onclick="descargarArchivo('${esc(h.archivo)}','Hoja_de_Ruta_N${esc(String(h.numero))}.docx')">Descargar</button>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span class="mono" style="font-weight:700;font-size:var(--fs-lg)">Hoja de Ruta N°${esc(String(h.numero??'—'))}</span>
+      <span class="chip">${fFecha(h.fecha_envio||h.fecha)}</span>
+      <span class="chip ${h.estado==='cerrada'?'ink':'ambar'}">${esc(h.estado||'borrador')}</span>
+      ${h.archivo?`<button class="btn mini" style="margin-left:auto" onclick="descargarArchivo('${esc(h.archivo)}','Guia_de_Ruta_N${esc(String(h.numero))}_${esc(fFecha(h.fecha_envio||h.fecha))}.docx')"><i class="fa-solid fa-download"></i> Descargar</button>`
+        :'<span class="chip ambar" style="margin-left:auto">sin archivo generado</span>'}
     </div>
+    <div class="small muted" style="margin-top:6px">
+      ${(h.destinos||[]).map(esc).join(' · ')}${(h.destinos||[]).length?' · ':''}guías <span class="mono">${(h.guias||[]).map(esc).join(', ')}</span>
+    </div>
+    ${h.estado!=='cerrada'?'<div class="small muted" style="margin-top:4px">Si llega otra guía con esta fecha de envío, se agrega y la hoja se regenera con el mismo número.</div>':''}
   </div>`).join(''):'<div class="card vacio">Aún no hay hojas de ruta generadas.</div>'}
   <details class="form"><summary>Registrar guía de despacho manualmente</summary><div class="inner">
     <div class="grid3">
