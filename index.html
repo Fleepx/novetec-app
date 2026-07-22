@@ -12,24 +12,48 @@
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --ink:#16232E; --paper:#F1F3F5; --card:#FFFFFF; --line:#D5DBE1; --muted:#5D6B77;
+  /* Tema claro (por defecto) */
+  --ink:#16232E; --texto:#16232E; --paper:#F1F3F5; --card:#FFFFFF; --line:#D5DBE1; --muted:#5D6B77;
+  --barra:#16232E; --btn-bg:#16232E; --btn-fg:#FFFFFF; --btn-bg-h:#0E1820;
+  --campo:#FFFFFF; --hover:#EEF3F7; --sub-bg:#FAFBFC;
   --rojo:#C7392F; --rojo-bg:#FBEAE8; --ambar:#B57708; --ambar-bg:#FCF3E1;
   --verde:#2E7D4F; --verde-bg:#E7F3EC; --gris-bg:#EAEDF0; --vencida:#7A1F17;
   --radius:10px; --mono:'IBM Plex Mono',ui-monospace,monospace; --sans:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;
   /* Escala tipográfica (guía Learn UI Design, diseño interaction-heavy).
-     16px es el piso del cuerpo y de TODOS los campos: bajo eso iOS hace zoom al tocarlos. */
-  --fs-xs:12.5px; --fs-sm:14px; --fs-md:16px; --fs-base:16px; --fs-lg:18px;
+     16px es el piso del cuerpo y de TODOS los campos: bajo eso iOS hace zoom al tocarlos.
+     --escala la controla el botón de zoom de la barra superior (1 · 1,15 · 1,3). */
+  --escala:1;
+  --fs-xs:calc(12.5px * var(--escala)); --fs-sm:calc(14px * var(--escala));
+  --fs-md:calc(16px * var(--escala)); --fs-base:calc(16px * var(--escala));
+  --fs-lg:calc(18px * var(--escala));
 }
+/* Tema oscuro */
+html[data-tema="oscuro"]{
+  --ink:#E4EBF1; --texto:#E4EBF1; --paper:#0E151C; --card:#16202B; --line:#2B3846; --muted:#93A5B6;
+  --barra:#080D12; --btn-bg:#E4EBF1; --btn-fg:#0E151C; --btn-bg-h:#FFFFFF;
+  --campo:#0F1821; --hover:#1E2A37; --sub-bg:#131C25;
+  --rojo:#F0897D; --rojo-bg:#3B1D19; --ambar:#E0A94D; --ambar-bg:#352712;
+  --verde:#6FCB95; --verde-bg:#123021; --gris-bg:#243040; --vencida:#5E1811;
+}
+html[data-tema="oscuro"] #splash img{filter:brightness(1.08)}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--sans);background:var(--paper);color:var(--ink);font-size:var(--fs-base);line-height:1.55;-webkit-font-smoothing:antialiased}
-header{background:var(--ink);color:#fff;padding:15px 20px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+body{font-family:var(--sans);background:var(--paper);color:var(--texto);font-size:var(--fs-base);line-height:1.55;-webkit-font-smoothing:antialiased}
+header{background:var(--barra);color:#fff;padding:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 header h1{font-size:17px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
 header .sub{font-family:var(--mono);font-size:var(--fs-sm);color:#9FB0BE;letter-spacing:.02em}
-header .conn{margin-left:auto;font-family:var(--mono);font-size:var(--fs-xs);color:#9FB0BE;cursor:pointer;text-decoration:underline dotted}
+header .conn{font-family:var(--mono);font-size:var(--fs-xs);color:#9FB0BE;cursor:pointer;text-decoration:underline dotted}
+/* Acciones de la barra: botones redondos */
+.hacciones{margin-left:auto;display:flex;align-items:center;gap:10px}
+.hbtn{width:38px;height:38px;flex:none;border-radius:50%;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.06);color:#E4EBF1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;overflow:hidden;position:relative;transition:background .15s,border-color .15s}
+.hbtn:hover{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.45)}
+.hbtn img{width:100%;height:100%;object-fit:cover;display:block}
+.hbtn i{font-size:15px}
+.hbtn .nivel{position:absolute;bottom:-1px;right:-1px;background:var(--btn-bg);color:var(--btn-fg);font-family:var(--mono);font-size:9.5px;font-weight:600;line-height:1;padding:2px 3px;border-radius:6px}
+@media(max-width:640px){.hacciones .conn{display:none}}
 nav{background:var(--card);border-bottom:1px solid var(--line);display:flex;overflow-x:auto;position:sticky;top:0;z-index:10}
 nav button{font-family:var(--sans);font-size:var(--fs-md);font-weight:600;letter-spacing:.01em;padding:14px 18px;border:none;background:none;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;transition:color .15s}
-nav button:hover{color:var(--ink)}
-nav button.on{color:var(--ink);border-bottom-color:var(--ink);font-weight:700}
+nav button:hover{color:var(--texto)}
+nav button.on{color:var(--texto);border-bottom-color:var(--texto);font-weight:700}
 main{max-width:1080px;margin:0 auto;padding:24px 16px 80px}
 h2{font-size:var(--fs-lg);font-weight:700;letter-spacing:-.005em;margin:34px 0 12px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;line-height:1.3}
 h2:first-child{margin-top:0}
@@ -40,16 +64,16 @@ h2 .muted{font-size:var(--fs-sm);font-weight:400}
 .muted{color:var(--muted)}
 .small{font-size:var(--fs-sm)}
 /* Rótulo de bodega dentro de una tarjeta: mismo cuerpo que el resto del texto */
-.bodega-lbl{font-size:var(--fs-base);font-weight:700;color:var(--ink);display:flex;align-items:center;gap:7px;margin:20px 0 8px}
+.bodega-lbl{font-size:var(--fs-base);font-weight:700;color:var(--texto);display:flex;align-items:center;gap:7px;margin:20px 0 8px}
 .bodega-lbl:first-child{margin-top:8px}
 .bodega-lbl .muted{font-weight:400;font-size:var(--fs-sm)}
-button.btn{font-family:var(--sans);font-weight:700;font-size:var(--fs-sm);letter-spacing:.01em;background:var(--ink);color:#fff;border:none;border-radius:8px;padding:10px 17px;cursor:pointer;transition:background .15s}
-button.btn:hover{background:#0E1820}
-button.btn.sec{background:none;color:var(--ink);border:1.5px solid var(--ink)}
+button.btn{font-family:var(--sans);font-weight:700;font-size:var(--fs-sm);letter-spacing:.01em;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:10px 17px;cursor:pointer;transition:background .15s}
+button.btn:hover{background:var(--btn-bg-h)}
+button.btn.sec{background:none;color:var(--texto);border:1.5px solid var(--texto)}
 button.btn.mini{padding:7px 12px;font-size:var(--fs-xs)}
 button.btn.peligro{background:none;border:1.5px solid var(--rojo);color:var(--rojo)}
-input,select,textarea{font-family:var(--mono);font-size:var(--fs-base);padding:10px 11px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);width:100%}
-input:focus,select:focus,textarea:focus{outline:2px solid var(--ink);outline-offset:1px}
+input,select,textarea{font-family:var(--mono);font-size:var(--fs-base);padding:10px 11px;border:1px solid var(--line);border-radius:7px;background:var(--campo);color:var(--texto);width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--texto);outline-offset:1px}
 label{display:block;font-size:var(--fs-xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:15px 0 6px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 14px}
@@ -77,7 +101,7 @@ label{display:block;font-size:var(--fs-xs);font-weight:700;letter-spacing:.06em;
 .chip.ambar{background:var(--ambar-bg);color:var(--ambar)}
 .chip.verde{background:var(--verde-bg);color:var(--verde)}
 .chip.vencida{background:var(--vencida);color:#fff}
-.chip.ink{background:var(--ink);color:#fff}
+.chip.ink{background:var(--btn-bg);color:var(--btn-fg)}
 table{width:100%;border-collapse:collapse;font-size:var(--fs-sm);line-height:1.4}
 th{font-size:var(--fs-xs);font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1.5px solid var(--line);white-space:nowrap}
 td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
@@ -87,29 +111,29 @@ td .small.sep::before{content:'·';color:var(--line);margin:0 5px}
 /* Celda de una sola línea: si el texto no cabe, se corta con puntos suspensivos.
    Al hacer clic se despliega completo (puede ocupar más de una línea). */
 td.trunc{max-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
-td.trunc:hover{background:#F6F8FA}
-td.trunc.abierto{white-space:normal;overflow:visible;text-overflow:clip;background:#F6F8FA}
+td.trunc:hover{background:var(--hover)}
+td.trunc.abierto{white-space:normal;overflow:visible;text-overflow:clip;background:var(--hover)}
 td.num,th.num{text-align:right;font-family:var(--mono);letter-spacing:-.01em}
 .item-row{display:grid;grid-template-columns:1fr 110px 130px 34px;gap:8px;margin-bottom:8px}
 @media(max-width:640px){.item-row{grid-template-columns:1fr 80px 100px 30px}}
 .item-row button{border:none;background:none;color:var(--rojo);font-size:18px;cursor:pointer}
 .acciones{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;align-items:center}
 .vacio{text-align:center;color:var(--muted);padding:32px;font-size:var(--fs-sm)}
-#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font-family:var(--mono);font-size:var(--fs-sm);padding:13px 18px;border-radius:8px;display:none;z-index:99;max-width:90vw}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--btn-bg);color:var(--btn-fg);font-family:var(--mono);font-size:var(--fs-sm);padding:13px 18px;border-radius:8px;display:none;z-index:99;max-width:90vw}
 #velo{position:fixed;inset:0;background:rgba(22,35,46,.35);display:none;align-items:center;justify-content:center;z-index:50;font-family:var(--mono);color:#fff;font-size:var(--fs-md)}
-#splash{position:fixed;inset:0;background:#fff;display:none;align-items:center;justify-content:center;flex-direction:column;z-index:200;opacity:1;transition:opacity .6s ease}
+#splash{position:fixed;inset:0;background:var(--paper);display:none;align-items:center;justify-content:center;flex-direction:column;z-index:200;opacity:1;transition:opacity .6s ease}
 #splash.out{opacity:0;pointer-events:none}
 #splash img{width:min(46vw,260px);animation:splashIn .7s ease}
 @keyframes splashIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
 .modal-ov{position:fixed;inset:0;background:rgba(22,35,46,.45);display:flex;align-items:center;justify-content:center;z-index:120;padding:16px}
-.modal{background:#fff;border-radius:var(--radius);padding:20px;max-width:460px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
-.modal .cand{display:block;width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:8px;padding:11px 13px;margin-top:8px;cursor:pointer;font-family:var(--sans);font-size:var(--fs-sm);line-height:1.4}
-.modal .cand:hover{border-color:var(--ink);background:#EEF3F7}
+.modal{background:var(--card);border-radius:var(--radius);padding:20px;max-width:460px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.modal .cand{display:block;width:100%;text-align:left;border:1px solid var(--line);background:var(--campo);border-radius:8px;padding:11px 13px;margin-top:8px;cursor:pointer;font-family:var(--sans);font-size:var(--fs-sm);line-height:1.4}
+.modal .cand:hover{border-color:var(--texto);background:var(--hover)}
 .modal .cand.nuevo{border-style:dashed;color:var(--muted);margin-top:14px}
-.dropzone{border:2px dashed var(--line);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;background:#fff;transition:all .15s}
-.dropzone.hover{border-color:var(--ink);background:#EEF3F7}
+.dropzone{border:2px dashed var(--line);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;background:var(--campo);transition:all .15s}
+.dropzone.hover{border-color:var(--texto);background:var(--hover)}
 .dropzone .dz-icono{font-size:26px;color:var(--muted);margin-bottom:6px}
-details.form{border:1.5px dashed var(--line);border-radius:var(--radius);margin-bottom:16px;background:#FAFBFC}
+details.form{border:1.5px dashed var(--line);border-radius:var(--radius);margin-bottom:16px;background:var(--sub-bg)}
 details.form summary{padding:14px 16px;font-weight:700;font-size:var(--fs-base);letter-spacing:0;cursor:pointer;list-style:none}
 details.form summary::before{content:'+ '}
 details.form[open] summary::before{content:'– '}
@@ -118,7 +142,7 @@ details.form .inner{padding:0 16px 16px}
 #setup{max-width:460px;margin:60px auto;padding:0 16px}
 #setup .card{padding:26px}
 #setup h1{font-size:20px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px}
-a{color:var(--ink)}
+a{color:var(--texto)}
 </style>
 </head>
 <body>
@@ -142,7 +166,11 @@ a{color:var(--ink)}
 <header>
   <h1>Novetec · Despacho</h1>
   <span class="sub" id="hoy-lbl"></span>
-  <span class="conn" onclick="cambiarConexion()">cambiar conexión</span>
+  <div class="hacciones">
+    <button class="hbtn" id="btn-tema" onclick="alternarTema()" title="Modo oscuro" aria-label="Modo oscuro"><img src="logo-marca.png" alt=""></button>
+    <button class="hbtn" id="btn-zoom" onclick="ciclarZoom()" title="Ampliar la vista" aria-label="Ampliar la vista"><i class="fa-solid fa-magnifying-glass-plus"></i><span class="nivel" id="zoom-nivel" style="display:none"></span></button>
+    <span class="conn" onclick="cambiarConexion()">cambiar conexión</span>
+  </div>
 </header>
 <nav id="tabs">
   <button data-t="panel" class="on">Panel</button>
@@ -375,9 +403,9 @@ function dzContar(tipo){
   el.textContent=input.files.length?`${input.files.length} archivo(s) listos: ${[...input.files].map(f=>f.name).join(', ').slice(0,120)}`:'';
 }
 function formPendiente(tipo,accept){
-  const titulo=tipo==='pendientes_sap'?'Subir reporte Pendientes SAP (adjudicados)':`Subir documento de ${TIPO_LBL[tipo].toLowerCase()}${tipo==='guias_despacho'?' (bundle del viaje)':''}`;
+  const titulo=tipo==='ordenes_compra'?'Subir órdenes de compra o reporte de pendientes SAP':`Subir documento de ${TIPO_LBL[tipo].toLowerCase()}${tipo==='guias_despacho'?' (bundle del viaje)':''}`;
   return `<details class="form"><summary>${titulo}</summary><div class="inner">
-    <p class="small muted" style="margin-top:10px">${tipo==='guias_despacho'?'Sube TODAS las guías del viaje juntas e indica la fecha de envío: con eso el administrador procesa y genera la hoja de ruta.':tipo==='pendientes_sap'?'Sube el reporte SAP de adjudicados del cliente (columnas Fecha doc / Material / Texto breve / Doc.compras / Cantidad / Ce. / Por entregar / Prc.neto). El administrador lo procesa y el Panel lo consolida junto a las OC. Cada reporte nuevo reemplaza al anterior.':'Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.'}</p>
+    <p class="small muted" style="margin-top:10px">${tipo==='guias_despacho'?'Sube TODAS las guías del viaje juntas e indica la fecha de envío: con eso el administrador procesa y genera la hoja de ruta.':tipo==='ordenes_compra'?'Sube aquí tanto las órdenes de compra como el reporte de pendientes SAP del cliente, tal como llegaron. El administrador reconoce cada documento y lo carga donde corresponde.':'Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.'}</p>
     <label>Archivos</label>
     <div class="dropzone" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'${tipo}')" onclick="document.getElementById('pd-file-${tipo}').click()">
       <input id="pd-file-${tipo}" type="file" accept="${accept}" multiple style="display:none" onchange="dzContar('${tipo}')" onclick="event.stopPropagation()">
@@ -392,7 +420,8 @@ function formPendiente(tipo,accept){
   </div></details>`;
 }
 function listaPend(tipo){
-  const ps=DB[ARCH.pend].data.pendientes.filter(p=>p.tipo===tipo);
+  const tipos=Array.isArray(tipo)?tipo:[tipo];
+  const ps=DB[ARCH.pend].data.pendientes.filter(p=>tipos.includes(p.tipo));
   if(!ps.length)return '';
   return `<div class="card" style="border-color:var(--ambar)"><b class="small" style="text-transform:uppercase;letter-spacing:.08em;color:var(--ambar)">En cola — pendiente del administrador (${ps.length})</b>
   ${ps.map(p=>`<div class="small" style="margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -414,6 +443,38 @@ async function borrarPendiente(id){
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
+
+/* ================= Tema y zoom de la vista ================= */
+const TEMA_KEY='novetec_tema', ZOOM_KEY='novetec_zoom';
+const ZOOMS=[1,1.15,1.3];
+function aplicarTema(t){
+  document.documentElement.setAttribute('data-tema',t);
+  const b=document.getElementById('btn-tema');
+  if(b)b.title=b.ariaLabel=(t==='oscuro'?'Modo claro':'Modo oscuro');
+}
+function alternarTema(){
+  const nuevo=document.documentElement.getAttribute('data-tema')==='oscuro'?'claro':'oscuro';
+  localStorage.setItem(TEMA_KEY,nuevo);aplicarTema(nuevo);
+  toast(nuevo==='oscuro'?'Modo oscuro activado':'Modo claro activado');
+}
+function aplicarZoom(z){
+  document.documentElement.style.setProperty('--escala',z);
+  const el=document.getElementById('zoom-nivel');
+  if(el){el.textContent=Math.round(z*100)+'%';el.style.display=z===1?'none':'block'}
+  const b=document.getElementById('btn-zoom');
+  if(b)b.querySelector('i').className=z===ZOOMS[ZOOMS.length-1]?'fa-solid fa-magnifying-glass-minus':'fa-solid fa-magnifying-glass-plus';
+}
+function ciclarZoom(){
+  const actual=+(localStorage.getItem(ZOOM_KEY)||1);
+  const i=ZOOMS.indexOf(ZOOMS.find(z=>Math.abs(z-actual)<0.01));
+  const z=ZOOMS[(i+1)%ZOOMS.length];
+  localStorage.setItem(ZOOM_KEY,z);aplicarZoom(z);
+  toast('Vista al '+Math.round(z*100)+'%');
+}
+(function preferencias(){
+  aplicarTema(localStorage.getItem(TEMA_KEY)||'claro');
+  aplicarZoom(+(localStorage.getItem(ZOOM_KEY)||1));
+})();
 
 /* ================= Navegación ================= */
 let tab='panel';
@@ -782,8 +843,6 @@ function rOC(){
   const psapReg=psapD.registros||[];
   return `${dlProd()}
   ${formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
-  ${formPendiente('pendientes_sap','.pdf,.xls,.xlsx,.jpg,.jpeg,.png')}
-  ${listaPend('pendientes_sap')}
   ${psapReg.length?`<details class="form"><summary>Pendientes SAP cargados (${psapReg.length})${psapD.actualizado?` · reporte del ${fFecha(psapD.actualizado)}`:''}</summary><div class="inner" style="overflow-x:auto">
     <p class="small muted" style="margin-top:10px">Registros del último reporte SAP de adjudicados. Si un Doc. compras ya está cargado como OC, en el Panel manda la OC y el registro se omite.</p>
     <table><tr><th>Fecha doc</th><th>Doc. compras</th><th>Producto</th><th class="num">Cantidad</th><th>Bodega</th><th class="num">Por entregar</th><th class="num">Prc. neto</th><th class="num">Comprado</th></tr>
@@ -814,7 +873,7 @@ function rOC(){
     <button class="btn mini sec" type="button" onclick="document.getElementById('o-items').insertAdjacentHTML('beforeend',filaItem())">+ ítem</button>
     <div class="acciones"><button class="btn" onclick="crearOC()">Guardar OC</button></div>
   </div></details>
-  ${listaPend('ordenes_compra')}
+  ${listaPend(['ordenes_compra','pendientes_sap'])}
   <div class="filtro"><input placeholder="Filtrar por folio o estado…" value="${esc(ocFiltro)}" oninput="ocFiltro=this.value.toLowerCase();render();this.focus()"></div>
   ${lista.length?lista.map(o=>{
     const s=semaforo(o),e=ocEstado(o);
