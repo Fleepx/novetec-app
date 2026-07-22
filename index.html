@@ -495,7 +495,7 @@ function dzContar(tipo){
 function formPendiente(tipo,accept){
   const titulo=tipo==='ordenes_compra'?'Subir órdenes de compra o reporte de pendientes SAP':`Subir documento de ${TIPO_LBL[tipo].toLowerCase()}${tipo==='guias_despacho'?' (bundle del viaje)':''}`;
   return `<details class="form"><summary>${titulo}</summary><div class="inner">
-    <p class="small muted" style="margin-top:10px">${tipo==='guias_despacho'?'Sube TODAS las guías del viaje juntas e indica la fecha de envío: con eso el administrador procesa y genera la hoja de ruta.':tipo==='ordenes_compra'?'Sube aquí tanto las órdenes de compra como el reporte de pendientes SAP del cliente, tal como llegaron. El administrador reconoce cada documento y lo carga donde corresponde.':'Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.'}</p>
+    <p class="small muted" style="margin-top:10px">${tipo==='guias_despacho'?'Antes de subir las guías, marca las compras en el Panel: el orden es compras, después guía, después hoja de ruta. Sube las guías del viaje e indica la fecha de envío; las guías que compartan fecha se agrupan en la misma hoja de ruta aunque las cargues en momentos distintos.':tipo==='ordenes_compra'?'Sube aquí tanto las órdenes de compra como el reporte de pendientes SAP del cliente, tal como llegaron. El administrador reconoce cada documento y lo carga donde corresponde.':'Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.'}</p>
     <label>Archivos</label>
     <div class="dropzone" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'${tipo}')" onclick="document.getElementById('pd-file-${tipo}').click()">
       <input id="pd-file-${tipo}" type="file" accept="${accept}" multiple style="display:none" onchange="dzContar('${tipo}')" onclick="event.stopPropagation()">
@@ -1447,18 +1447,33 @@ function rGuias(){
     <p class="small muted">Al registrar: se descuenta el inventario, se actualiza el avance de la OC y la guía queda lista para la próxima hoja de ruta.</p>
   </div></details>
   <h2>Guías registradas</h2>
-  ${gs.length?gs.map(g=>`<div class="card">
-    <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
-      <span class="mono" style="font-weight:600">Guía N° ${esc(g.numero)}</span>
+  ${gs.length?gs.map(g=>{
+    const ds=g.discrepancias||[];
+    const oc=DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===String(g.oc||g.folio_oc));
+    const nomOC=cod=>{const i=oc&&oc.items.find(x=>x.codigo===cod);return i?i.producto:null};
+    return `<div class="card"${ds.length?' style="border-color:var(--ambar)"':''}>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span class="mono" style="font-weight:700;font-size:var(--fs-lg)">Guía N° ${esc(g.numero)}</span>
       <span class="chip">${fFecha(g.fecha)}</span>
-      <span class="chip ink">OC ${esc(g.folio_oc)}</span>
+      <span class="chip ink">OC ${esc(g.oc||g.folio_oc)}</span>
       <span class="muted small">${esc(g.destino||'')}</span>
       ${g.hoja_ruta?`<span class="chip verde">Hoja de ruta N°${g.hoja_ruta}</span>`:'<span class="chip ambar">Sin hoja de ruta</span>'}
+      ${ds.length?`<span class="chip ambar"><i class="fa-solid fa-triangle-exclamation"></i> ${ds.length} alerta(s)</span>`:'<span class="chip verde">concilia con la OC</span>'}
       <button class="btn mini peligro" style="margin-left:auto" onclick="borrarGuia('${esc(g.numero)}')">Eliminar</button>
     </div>
-    <table class="tprod" style="margin-top:12px;min-width:340px"><colgroup><col><col style="width:10ch"></colgroup><tr><th>Producto</th><th class="num">Cantidad</th></tr>
-    ${g.items.map(i=>`<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td></tr>`).join('')}</table>
-  </div>`).join(''):'<div class="card vacio">Aún no hay guías registradas.</div>'}`;
+    <table class="tprod" style="margin-top:12px;min-width:520px"><colgroup><col><col><col style="width:10ch"></colgroup>
+      <tr><th>Producto según la OC (manda)</th><th>Nombre en la guía</th><th class="num">Cantidad</th></tr>
+    ${g.items.map(i=>{const no=nomOC(i.codigo);const dif=no&&no.trim().toUpperCase()!==i.producto.trim().toUpperCase();
+      return `<tr>
+        <td class="trunc" title="${esc(no||i.producto)}">${esc(no||i.producto)}</td>
+        <td class="trunc" title="${esc(i.producto)}" style="${dif?'color:var(--ambar)':'color:var(--muted)'}">${dif?esc(i.producto):'igual'}</td>
+        <td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}</td></tr>`}).join('')}</table>
+    ${ds.length?`<div class="card" style="border-color:var(--ambar);margin:12px 0 0">
+      <b>Diferencias con la orden de compra</b>
+      <ul style="margin:8px 0 0 18px">${ds.map(x=>`<li class="small"><b>${esc(x.tipo)}</b>: ${esc(x.detalle)}</li>`).join('')}</ul>
+      <p class="small muted" style="margin-top:8px">La orden de compra es el documento que manda: define nombre, precio y monto.</p>
+    </div>`:''}
+  </div>`}).join(''):'<div class="card vacio">Aún no hay guías registradas.</div>'}`;
 }
 function prepFormGuia(){
   const sel=document.getElementById('g-oc');
