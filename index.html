@@ -111,15 +111,15 @@ td .small.sep::before{content:'·';color:var(--line);margin:0 5px}
 /* Celda de una sola línea: si el texto no cabe, se corta con puntos suspensivos.
    Al hacer clic se despliega completo (puede ocupar más de una línea). */
 td.trunc{max-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
-/* Tablas del Panel: anchos fijos para las columnas de cifras y de acción, y TODO el espacio
-   sobrante para el nombre del producto (prioridad de lectura pedida por Jefe, 22-07-2026).
-   Los anchos van en ch para que acompañen al botón de zoom. */
-table.panel{table-layout:fixed}
-table.panel th{white-space:normal;vertical-align:bottom}
-table.panel td.trunc{max-width:none}
-table.panel td,table.panel th{padding-left:8px;padding-right:8px}
-table.panel td:first-child,table.panel th:first-child{padding-left:2px}
-table.panel td:last-child,table.panel th:last-child{padding-right:2px}
+/* Grilla estándar de TODA la app (Jefe, 22-07-2026): las columnas de cifras y de acción llevan
+   ancho fijo y el NOMBRE DEL PRODUCTO se queda con todo el espacio sobrante. Los anchos van en
+   ch para que acompañen al botón de zoom de la barra. */
+table.tprod{table-layout:fixed}
+table.tprod th{white-space:normal;vertical-align:bottom}
+table.tprod td.trunc{max-width:none}
+table.tprod td,table.tprod th{padding-left:8px;padding-right:8px}
+table.tprod td:first-child,table.tprod th:first-child{padding-left:2px}
+table.tprod td:last-child,table.tprod th:last-child{padding-right:2px}
 .aviso-medida{color:var(--ambar);margin-right:5px;cursor:help}
 td.trunc:hover{background:var(--hover)}
 td.trunc.abierto{white-space:normal;overflow:visible;text-overflow:clip;background:var(--hover)}
@@ -608,7 +608,7 @@ function rPanel(){
   /* ZONA SUPERIOR: resumen consolidado solo de confirmado (OC + Pendientes SAP) */
   const zonaResumen=`
   <h2>Resumen consolidado <span class="muted">· confirmado: OC + Pendientes SAP${psapMeta.actualizado?` (reporte del ${fFecha(psapMeta.actualizado)})`:''}</span></h2>
-  ${cons.length?`<div class="card" style="overflow-x:auto"><table class="panel" style="min-width:540px">
+  ${cons.length?`<div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:540px">
     <colgroup><col><col style="width:8ch"><col style="width:8ch"><col style="width:7ch"><col style="width:11ch"></colgroup>
     <tr><th>Producto</th><th class="num">Total a despachar</th><th class="num">Pendiente</th><th class="num">Stock</th><th class="num">Compra</th></tr>
     ${cons.map(c=>`<tr>
@@ -634,7 +634,7 @@ function rPanel(){
   const th=(lbl,campo,cls='')=>`<th class="${cls}" style="cursor:pointer;user-select:none" onclick="sortPanel('${campo}')">${lbl}${panelSort.campo===campo?(panelSort.dir>0?' <i class="fa-solid fa-arrow-up-short-wide" style="font-size:11px"></i>':' <i class="fa-solid fa-arrow-down-wide-short" style="font-size:11px"></i>'):''}</th>`;
   const tablaGrupo=(dest,fs)=>`
     <h2><i class="fa-solid fa-warehouse" style="font-size:15px;color:var(--muted)"></i> ${esc(dest)} <span class="muted">· ${fs.length} ítem(s) pendiente(s)</span></h2>
-    <div class="card" style="overflow-x:auto"><table class="panel" style="min-width:600px">
+    <div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:600px">
       <colgroup><col style="width:12.5ch"><col><col style="width:7ch"><col style="width:8ch"><col style="width:7ch"><col style="width:9ch"></colgroup>
       <tr>${th('OC','oc')}${th('Producto','producto')}${th('Total','cantidad','num')}${th('Pendiente','pendiente','num')}${th('Stock','stock','num')}${th('Precio','precio','num')}</tr>
       ${fs.map(f=>`<tr>
@@ -649,12 +649,24 @@ function rPanel(){
   const destOrden=BODEGAS_ORDEN.filter(b=>grupos[b])
     .concat(Object.keys(grupos).filter(b=>!BODEGAS_ORDEN.includes(b)).sort((a,b)=>a.localeCompare(b,'es')));
   return `
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+    <button class="btn mini sec" onclick="alternarNombres(this)"><i class="fa-solid fa-arrows-up-down-left-right"></i> Desplegar nombres</button>
+  </div>
   ${zonaResumen}
   ${DB[ARCH.pend].data.pendientes.length?`<div class="card" style="border-color:var(--ambar)"><i class="fa-solid fa-file-lines"></i> <b>${DB[ARCH.pend].data.pendientes.length}</b> documento(s) en cola esperando ser procesados por el administrador.</div>`:''}
   ${destOrden.length?destOrden.map(dst=>tablaGrupo(dst,grupos[dst])).join(''):'<div class="card vacio">No hay ítems pendientes de despacho.</div>'}
   <h2>Cotizaciones sin responder (${cotP.length})</h2>
   ${cotP.length?cotP.map(c=>`<div class="tag"><div class="bar gris"></div><div class="body"><div class="top"><span class="folio">COT ${esc(c.folio)}</span><span class="chip">${fFecha(c.fecha)}</span><span class="muted small">${esc(c.cliente)}</span></div></div></div>`).join(''):'<div class="card vacio">Sin cotizaciones pendientes.</div>'}`;
 }
+/* Despliega o contrae de una vez todos los nombres cortados de la vista (util en celular) */
+function alternarNombres(btn){
+  const celdas=[...document.querySelectorAll('#vista td.trunc')];
+  const abrir=celdas.some(c=>!c.classList.contains('abierto'));
+  celdas.forEach(c=>c.classList.toggle('abierto',abrir));
+  btn.innerHTML=abrir?'<i class="fa-solid fa-compress"></i> Contraer nombres'
+                     :'<i class="fa-solid fa-arrows-up-down-left-right"></i> Desplegar nombres';
+}
+
 /* ===== Marcado de compras desde el Panel =====
    Al marcar: ingreso a inventario por el TOTAL pendiente de compra del producto
    (un código NOV, un stock global). Varias bodegas de destino → modal de reparto;
@@ -802,9 +814,9 @@ function rCot(){
           const grupos=orden.filter(b=>bodegas.includes(b)).concat(bodegas.filter(b=>!orden.includes(b)));
           html=grupos.map(b=>{const its=c.items.filter(i=>i.bodega===b);
             return `<div class="bodega-lbl"><i class="fa-solid fa-location-dot" style="font-size:13px;color:var(--muted)"></i> ${esc(b)} <span class="muted">· ${its.length} ítem(s)</span></div>
-            <table><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(its)}</table>`;}).join('');
+            <table class="tprod" style="min-width:460px"><colgroup><col><col style="width:9ch"><col style="width:11ch"><col style="width:12ch"></colgroup><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(its)}</table>`;}).join('');
         } else {
-          html=`<table style="margin-top:12px"><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(c.items)}
+          html=`<table class="tprod" style="margin-top:12px;min-width:460px"><colgroup><col><col style="width:9ch"><col style="width:11ch"><col style="width:12ch"></colgroup><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(c.items)}
             <tr><td colspan="3" style="border:none"></td><td class="num" style="font-weight:700">${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</td></tr></table>`;
         }
         if(conBodega)html+=`<div class="small" style="text-align:right;font-weight:700;margin-top:10px;padding-top:8px;border-top:1px solid var(--line)">Neto: ${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</div>`;
@@ -856,16 +868,44 @@ let ocFiltro='';
 function rOC(){
   const ocs=[...DB[ARCH.oc].data.ordenes];
   const cots=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='enviada');
-  const orden={vencida:0,rojo:1,ambar:2,verde:3,gris:4};
-  ocs.sort((a,b)=>orden[semaforo(a).c]-orden[semaforo(b).c]||(a.fecha_entrega||'').localeCompare(b.fecha_entrega||''));
+  // Orden por FOLIO de OC, nada mas (Jefe, 22-07-2026)
+  ocs.sort((a,b)=>String(a.folio).localeCompare(String(b.folio),'es',{numeric:true}));
   const lista=ocs.filter(o=>!ocFiltro||o.folio.toLowerCase().includes(ocFiltro)||ocEstado(o).includes(ocFiltro));
+  // OC que solo conocemos por el reporte de pendientes SAP (aun sin su documento cargado)
+  const folios=new Set(ocs.map(o=>String(o.folio)));
+  const soloSap={};
+  ((DB[ARCH.psap]&&DB[ARCH.psap].data.registros)||[]).forEach(r=>{
+    const f=String(r.doc_compras||'');
+    if(!f||folios.has(f))return;
+    (soloSap[f]=soloSap[f]||[]).push(r);
+  });
+  const foliosSap=Object.keys(soloSap).sort((a,b)=>a.localeCompare(b,'es',{numeric:true}))
+    .filter(f=>!ocFiltro||f.toLowerCase().includes(ocFiltro));
+  const tarjetaSap=f=>{const rs=soloSap[f];
+    const bod=[...new Set(rs.map(r=>r.bodega))].join(' · ');
+    const pend=rs.reduce((s,r)=>s+(+r.por_entregar||0)*(+r.precio_neto||0),0);
+    return `<div class="tag"><div class="bar gris"></div><div class="body">
+      <div class="top">
+        <span class="folio">OC ${esc(f)}</span>
+        <span class="chip">Pendientes SAP</span>
+        <span class="muted small">${fFecha(rs[0].fecha_doc)} · ${esc(bod)} · por entregar <b class="mono">${clp(pend)}</b></span>
+      </div>
+      <table class="tprod" style="margin-top:12px;min-width:460px"><colgroup><col><col style="width:8ch"><col style="width:10ch"><col style="width:11ch"></colgroup>
+        <tr><th>Producto</th><th class="num">Pedido</th><th class="num">Por entregar</th><th class="num">Prc. neto</th></tr>
+        ${rs.map(r=>`<tr><td class="trunc" title="${esc(r.producto)}">${esc(r.producto)}</td>
+          <td class="num">${num(r.cantidad)}</td>
+          <td class="num" style="font-weight:600">${num(r.por_entregar)}</td>
+          <td class="num">${clp(r.precio_neto)}</td></tr>`).join('')}
+      </table>
+      <p class="small muted" style="margin-top:8px">Conocida por el reporte SAP del cliente. Su documento de OC aún no se ha cargado, por eso no tiene acciones de compra ni despacho.</p>
+    </div></div>`;};
   const psapD=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{registros:[]};
   const psapReg=psapD.registros||[];
   return `${dlProd()}
   ${formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${psapReg.length?`<details class="form"><summary>Pendientes SAP cargados (${psapReg.length})${psapD.actualizado?` · reporte del ${fFecha(psapD.actualizado)}`:''}</summary><div class="inner" style="overflow-x:auto">
     <p class="small muted" style="margin-top:10px">Registros del último reporte SAP de adjudicados. Si un Doc. compras ya está cargado como OC, en el Panel manda la OC y el registro se omite.</p>
-    <table><tr><th>Fecha doc</th><th>Doc. compras</th><th>Producto</th><th class="num">Cantidad</th><th>Bodega</th><th class="num">Por entregar</th><th class="num">Prc. neto</th><th class="num">Comprado</th></tr>
+    <table class="tprod" style="min-width:820px"><colgroup><col style="width:10ch"><col style="width:12ch"><col><col style="width:8ch"><col style="width:12ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"></colgroup><tr><th>Fecha doc</th><th>Doc. compras</th><th>Producto</th><th class="num">Cantidad</th><th>Bodega</th><th class="num">Por entregar</th><th class="num">Prc. neto</th><th class="num">Comprado</th></tr>
     ${psapReg.map(r=>`<tr>
       <td class="mono small">${fFecha(r.fecha_doc)}</td>
       <td class="mono">${esc(String(r.doc_compras||'—'))}</td>
@@ -905,7 +945,7 @@ function rOC(){
         ${chipCompra(o)}
         <span class="muted small">Emisión ${fFecha(o.fecha_emision)} · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b> · ${esc(o.destino||'—')}</span>
       </div>
-      <table style="margin-top:12px"><tr><th>Producto</th><th class="num">Pedido</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th></tr>
+      <table class="tprod" style="margin-top:12px;min-width:520px"><colgroup><col><col style="width:8ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th></tr>
       ${o.items.map(i=>{const comp=+i.cantidad_comprada||0;
         return `<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num" style="${comp<i.cantidad?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(i.cantidad-(i.cantidad_despachada||0))}</td></tr>`}).join('')}</table>
       ${o.compras?.length?`<p class="small muted" style="margin-top:6px">Compras: ${o.compras.map(c=>`<span class="mono">${fFecha(c.fecha)}</span> ${esc(c.proveedor||'s/proveedor')} (${c.items.map(i=>`${esc(i.producto)} ×${num(i.cantidad)}`).join(', ')})`).join(' · ')}</p>`:''}
@@ -917,7 +957,8 @@ function rOC(){
         <button class="btn mini peligro" onclick="borrarOC('${encodeURIComponent(o.folio)}')">Dar de baja</button>
       </div>
       <div id="fc-${encodeURIComponent(o.folio)}"></div>
-    </div></div>`}).join(''):'<div class="card vacio">No hay órdenes de compra.</div>'}`;
+    </div></div>`}).join(''):(foliosSap.length?'':'<div class="card vacio">No hay órdenes de compra.</div>')}
+  ${foliosSap.length?`<h2>Órdenes conocidas por el reporte SAP (${foliosSap.length})</h2>${foliosSap.map(tarjetaSap).join('')}`:''}`;
 }
 function prefillOC(cotId){
   const d=document.getElementById('f-oc');d.open=true;
@@ -1016,7 +1057,7 @@ function toggleCompra(fe){
       <div><label>Fecha de compra</label><input id="pc-fecha-${fe}" type="date" value="${hoyISO()}"></div>
       <div><label>Bodega</label><label style="text-transform:none;font-weight:400;letter-spacing:0;display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink)"><input type="checkbox" id="pc-bod-${fe}" checked style="width:auto"> Ingresar a inventario</label></div>
     </div>
-    <table style="margin-top:8px"><tr><th>Producto</th><th class="num">Por comprar</th><th style="width:140px">Comprado ahora</th></tr>
+    <table class="tprod" style="margin-top:8px;min-width:440px"><colgroup><col><col style="width:10ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Por comprar</th><th>Comprado ahora</th></tr>
     ${pend.map(i=>`<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.porComprar)}</td><td><input type="number" data-ix="${i.ix}" min="0" max="${i.porComprar}" step="any" placeholder="0"></td></tr>`).join('')}</table>
     <div class="acciones"><button class="btn mini" onclick="guardarCompra('${fe}')">Guardar compra</button><button class="btn mini sec" onclick="toggleCompra('${fe}')">Cancelar</button></div>
   </div>`;
@@ -1091,7 +1132,7 @@ function rGuias(){
       ${g.hoja_ruta?`<span class="chip verde">Hoja de ruta N°${g.hoja_ruta}</span>`:'<span class="chip ambar">Sin hoja de ruta</span>'}
       <button class="btn mini peligro" style="margin-left:auto" onclick="borrarGuia('${esc(g.numero)}')">Eliminar</button>
     </div>
-    <table style="margin-top:12px"><tr><th>Producto</th><th class="num">Cantidad</th></tr>
+    <table class="tprod" style="margin-top:12px;min-width:340px"><colgroup><col><col style="width:10ch"></colgroup><tr><th>Producto</th><th class="num">Cantidad</th></tr>
     ${g.items.map(i=>`<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td></tr>`).join('')}</table>
   </div>`).join(''):'<div class="card vacio">Aún no hay guías registradas.</div>'}`;
 }
@@ -1104,7 +1145,7 @@ function prepFormGuia(){
     document.getElementById('g-dest').value=o.destino||'';
     const pend=o.items.map((i,ix)=>({...i,ix,pendiente:(+i.cantidad||0)-(+i.cantidad_despachada||0)})).filter(i=>i.pendiente>0);
     box.innerHTML=`<label>Cantidades a despachar</label>
-      <table><tr><th>Producto</th><th class="num">Pendiente</th><th style="width:130px">Despachar</th></tr>
+      <table class="tprod" style="min-width:440px"><colgroup><col><col style="width:9ch"><col style="width:15ch"></colgroup><tr><th>Producto</th><th class="num">Pendiente</th><th>Despachar</th></tr>
       ${pend.map(i=>`<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.pendiente)}</td>
         <td><input type="number" class="g-cant" data-ix="${i.ix}" min="0" max="${i.pendiente}" step="any" value="${i.pendiente}"></td></tr>`).join('')}</table>`;
   });
@@ -1166,12 +1207,12 @@ function rInv(){
     <div class="acciones"><button class="btn" onclick="ingresoInv()">Registrar ingreso</button></div>
   </div></details>
   <h2>Stock actual (${prods.length} productos)</h2>
-  <div class="card">${prods.length?`<table><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
+  <div class="card">${prods.length?`<table class="tprod" style="min-width:460px"><colgroup><col style="width:11ch"><col><col style="width:9ch"><col style="width:10ch"></colgroup><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
     ${prods.map(p=>`<tr><td class="mono small">${esc(p.codigo||'—')}</td><td class="trunc" title="${esc(p.nombre)}">${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
     <td class="num"><button class="btn mini sec" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-pen"></i></button> <button class="btn mini peligro" onclick="borrarProd('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')}</table>`
     :'<div class="vacio">Bodega sin productos registrados. Usa "Registrar ingreso" para la carga inicial.</div>'}</div>
   <h2>Últimos movimientos</h2>
-  <div class="card">${movs.length?`<table><tr><th>Fecha</th><th>Código</th><th>Tipo</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
+  <div class="card">${movs.length?`<table class="tprod" style="min-width:720px"><colgroup><col style="width:11ch"><col style="width:11ch"><col style="width:9ch"><col><col style="width:8ch"><col style="width:20ch"></colgroup><tr><th>Fecha</th><th>Código</th><th>Tipo</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
     ${movs.map(m=>`<tr><td class="mono small">${fFecha(m.fecha)}</td><td class="mono small">${esc(m.codigo||'—')}</td><td><span class="chip ${m.tipo==='salida'?'rojo':m.tipo==='ingreso'?'verde':''}">${m.tipo}</span></td><td class="trunc" title="${esc(m.producto)}">${esc(m.producto)}</td><td class="num">${num(m.cantidad)}</td><td class="trunc small muted" title="${esc(m.referencia||'')}">${esc(m.referencia||'')}</td></tr>`).join('')}</table>`
     :'<div class="vacio">Sin movimientos aún.</div>'}</div>`;
 }
