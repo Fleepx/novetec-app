@@ -16,39 +16,41 @@
   --rojo:#C7392F; --rojo-bg:#FBEAE8; --ambar:#B57708; --ambar-bg:#FCF3E1;
   --verde:#2E7D4F; --verde-bg:#E7F3EC; --gris-bg:#EAEDF0; --vencida:#7A1F17;
   --radius:10px; --mono:'IBM Plex Mono',ui-monospace,monospace; --sans:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;
-  --fs-xs:11.5px; --fs-sm:13px; --fs-md:14px; --fs-base:15px;
+  /* Escala tipográfica (guía Learn UI Design, diseño interaction-heavy).
+     16px es el piso del cuerpo y de TODOS los campos: bajo eso iOS hace zoom al tocarlos. */
+  --fs-xs:12.5px; --fs-sm:14px; --fs-md:16px; --fs-base:16px; --fs-lg:18px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:var(--sans);background:var(--paper);color:var(--ink);font-size:var(--fs-base);line-height:1.55;-webkit-font-smoothing:antialiased}
 header{background:var(--ink);color:#fff;padding:15px 20px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
-header h1{font-size:16px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
-header .sub{font-family:var(--mono);font-size:var(--fs-xs);color:#9FB0BE;letter-spacing:.02em}
+header h1{font-size:17px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
+header .sub{font-family:var(--mono);font-size:var(--fs-sm);color:#9FB0BE;letter-spacing:.02em}
 header .conn{margin-left:auto;font-family:var(--mono);font-size:var(--fs-xs);color:#9FB0BE;cursor:pointer;text-decoration:underline dotted}
 nav{background:var(--card);border-bottom:1px solid var(--line);display:flex;overflow-x:auto;position:sticky;top:0;z-index:10}
-nav button{font-family:var(--sans);font-size:var(--fs-sm);font-weight:600;letter-spacing:.03em;padding:14px 18px;border:none;background:none;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;transition:color .15s}
+nav button{font-family:var(--sans);font-size:var(--fs-md);font-weight:600;letter-spacing:.01em;padding:14px 18px;border:none;background:none;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;transition:color .15s}
 nav button:hover{color:var(--ink)}
 nav button.on{color:var(--ink);border-bottom-color:var(--ink);font-weight:700}
 main{max-width:1080px;margin:0 auto;padding:24px 16px 80px}
-h2{font-size:var(--fs-sm);font-weight:800;letter-spacing:.09em;text-transform:uppercase;margin:32px 0 12px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+h2{font-size:var(--fs-lg);font-weight:700;letter-spacing:-.005em;margin:34px 0 12px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;line-height:1.3}
 h2:first-child{margin-top:0}
-h2 .muted{letter-spacing:.01em}
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+h2 .muted{font-size:var(--fs-sm);font-weight:400}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px;overflow-x:auto}
 .card>table:first-child{margin-top:-2px}
 .mono{font-family:var(--mono);letter-spacing:-.01em}
 .muted{color:var(--muted)}
 .small{font-size:var(--fs-sm)}
 /* Rótulo de bodega dentro de una tarjeta: mismo cuerpo que el resto del texto */
-.bodega-lbl{font-size:var(--fs-md);font-weight:700;color:var(--ink);display:flex;align-items:center;gap:7px;margin:18px 0 7px}
+.bodega-lbl{font-size:var(--fs-base);font-weight:700;color:var(--ink);display:flex;align-items:center;gap:7px;margin:20px 0 8px}
 .bodega-lbl:first-child{margin-top:8px}
 .bodega-lbl .muted{font-weight:400;font-size:var(--fs-sm)}
-button.btn{font-family:var(--sans);font-weight:700;font-size:var(--fs-sm);letter-spacing:.02em;background:var(--ink);color:#fff;border:none;border-radius:8px;padding:10px 16px;cursor:pointer;transition:background .15s}
+button.btn{font-family:var(--sans);font-weight:700;font-size:var(--fs-sm);letter-spacing:.01em;background:var(--ink);color:#fff;border:none;border-radius:8px;padding:10px 17px;cursor:pointer;transition:background .15s}
 button.btn:hover{background:#0E1820}
 button.btn.sec{background:none;color:var(--ink);border:1.5px solid var(--ink)}
-button.btn.mini{padding:6px 11px;font-size:12.5px}
+button.btn.mini{padding:7px 12px;font-size:var(--fs-xs)}
 button.btn.peligro{background:none;border:1.5px solid var(--rojo);color:var(--rojo)}
-input,select,textarea{font-family:var(--mono);font-size:var(--fs-md);padding:9px 11px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);width:100%}
+input,select,textarea{font-family:var(--mono);font-size:var(--fs-base);padding:10px 11px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);width:100%}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--ink);outline-offset:1px}
-label{display:block;font-size:var(--fs-xs);font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:14px 0 5px}
+label{display:block;font-size:var(--fs-xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:15px 0 6px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 14px}
 @media(max-width:640px){.grid2,.grid3{grid-template-columns:1fr}}
@@ -69,47 +71,47 @@ label{display:block;font-size:var(--fs-xs);font-weight:700;letter-spacing:.07em;
 .tag .bar.vencida{background:var(--vencida)}.tag .bar.gris{background:#AEB9C2}
 .tag .body{flex:1;padding:12px 14px;min-width:0}
 .tag .top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-.tag .folio{font-family:var(--mono);font-weight:600;font-size:var(--fs-base);letter-spacing:-.01em}
-.chip{display:inline-block;font-family:var(--mono);font-size:var(--fs-xs);font-weight:600;padding:2px 9px;border-radius:20px;background:var(--gris-bg);color:var(--muted);white-space:nowrap}
+.tag .folio{font-family:var(--mono);font-weight:700;font-size:var(--fs-lg);letter-spacing:-.01em}
+.chip{display:inline-block;font-family:var(--mono);font-size:var(--fs-xs);font-weight:600;padding:3px 10px;border-radius:20px;background:var(--gris-bg);color:var(--muted);white-space:nowrap}
 .chip.rojo{background:var(--rojo-bg);color:var(--rojo)}
 .chip.ambar{background:var(--ambar-bg);color:var(--ambar)}
 .chip.verde{background:var(--verde-bg);color:var(--verde)}
 .chip.vencida{background:var(--vencida);color:#fff}
 .chip.ink{background:var(--ink);color:#fff}
-table{width:100%;border-collapse:collapse;font-size:var(--fs-sm);line-height:1.35}
-th{font-size:var(--fs-xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;padding:7px 10px;border-bottom:1.5px solid var(--line);white-space:nowrap}
-td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+table{width:100%;border-collapse:collapse;font-size:var(--fs-sm);line-height:1.4}
+th{font-size:var(--fs-xs);font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1.5px solid var(--line);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
 tr:last-child td{border-bottom:none}
-td .small{line-height:1.3;display:block;margin-top:1px}
+td .small{font-size:var(--fs-xs);line-height:1.3;display:block;margin-top:2px}
 td.num,th.num{text-align:right;font-family:var(--mono);letter-spacing:-.01em}
 .item-row{display:grid;grid-template-columns:1fr 110px 130px 34px;gap:8px;margin-bottom:8px}
 @media(max-width:640px){.item-row{grid-template-columns:1fr 80px 100px 30px}}
 .item-row button{border:none;background:none;color:var(--rojo);font-size:18px;cursor:pointer}
 .acciones{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;align-items:center}
-.vacio{text-align:center;color:var(--muted);padding:30px;font-size:var(--fs-md)}
-#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font-family:var(--mono);font-size:var(--fs-sm);padding:12px 18px;border-radius:8px;display:none;z-index:99;max-width:90vw}
-#velo{position:fixed;inset:0;background:rgba(22,35,46,.35);display:none;align-items:center;justify-content:center;z-index:50;font-family:var(--mono);color:#fff;font-size:14px}
+.vacio{text-align:center;color:var(--muted);padding:32px;font-size:var(--fs-sm)}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font-family:var(--mono);font-size:var(--fs-sm);padding:13px 18px;border-radius:8px;display:none;z-index:99;max-width:90vw}
+#velo{position:fixed;inset:0;background:rgba(22,35,46,.35);display:none;align-items:center;justify-content:center;z-index:50;font-family:var(--mono);color:#fff;font-size:var(--fs-md)}
 #splash{position:fixed;inset:0;background:#fff;display:none;align-items:center;justify-content:center;flex-direction:column;z-index:200;opacity:1;transition:opacity .6s ease}
 #splash.out{opacity:0;pointer-events:none}
 #splash img{width:min(46vw,260px);animation:splashIn .7s ease}
 @keyframes splashIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
 .modal-ov{position:fixed;inset:0;background:rgba(22,35,46,.45);display:flex;align-items:center;justify-content:center;z-index:120;padding:16px}
 .modal{background:#fff;border-radius:var(--radius);padding:20px;max-width:460px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
-.modal .cand{display:block;width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:8px;padding:10px 12px;margin-top:8px;cursor:pointer;font-family:var(--sans);font-size:var(--fs-md);line-height:1.4}
+.modal .cand{display:block;width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:8px;padding:11px 13px;margin-top:8px;cursor:pointer;font-family:var(--sans);font-size:var(--fs-sm);line-height:1.4}
 .modal .cand:hover{border-color:var(--ink);background:#EEF3F7}
 .modal .cand.nuevo{border-style:dashed;color:var(--muted);margin-top:14px}
 .dropzone{border:2px dashed var(--line);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;background:#fff;transition:all .15s}
 .dropzone.hover{border-color:var(--ink);background:#EEF3F7}
-.dropzone .dz-icono{font-size:24px;color:var(--muted);margin-bottom:4px}
+.dropzone .dz-icono{font-size:26px;color:var(--muted);margin-bottom:6px}
 details.form{border:1.5px dashed var(--line);border-radius:var(--radius);margin-bottom:16px;background:#FAFBFC}
-details.form summary{padding:13px 16px;font-weight:700;font-size:var(--fs-sm);letter-spacing:.04em;cursor:pointer;list-style:none}
+details.form summary{padding:14px 16px;font-weight:700;font-size:var(--fs-base);letter-spacing:0;cursor:pointer;list-style:none}
 details.form summary::before{content:'+ '}
 details.form[open] summary::before{content:'– '}
 details.form .inner{padding:0 16px 16px}
 .filtro{margin-bottom:12px}
 #setup{max-width:460px;margin:60px auto;padding:0 16px}
 #setup .card{padding:26px}
-#setup h1{font-size:18px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px}
+#setup h1{font-size:20px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px}
 a{color:var(--ink)}
 </style>
 </head>
@@ -510,7 +512,7 @@ function rPanel(){
 
   /* ZONA SUPERIOR: resumen consolidado solo de confirmado (OC + Pendientes SAP) */
   const zonaResumen=`
-  <h2>Resumen consolidado <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· confirmado: OC + Pendientes SAP${psapMeta.actualizado?` (reporte del ${fFecha(psapMeta.actualizado)})`:''}</span></h2>
+  <h2>Resumen consolidado <span class="muted">· confirmado: OC + Pendientes SAP${psapMeta.actualizado?` (reporte del ${fFecha(psapMeta.actualizado)})`:''}</span></h2>
   ${cons.length?`<div class="card" style="overflow-x:auto"><table>
     <tr><th>Producto</th><th class="num">Total a despachar</th><th class="num">Pendiente</th><th class="num">Stock</th><th>Compra</th></tr>
     ${cons.map(c=>`<tr>
@@ -535,7 +537,7 @@ function rPanel(){
   filas.forEach(f=>{(grupos[f.bodega]=grupos[f.bodega]||[]).push(f)});
   const th=(lbl,campo,cls='')=>`<th class="${cls}" style="cursor:pointer;user-select:none" onclick="sortPanel('${campo}')">${lbl}${panelSort.campo===campo?(panelSort.dir>0?' <i class="fa-solid fa-arrow-up-short-wide" style="font-size:11px"></i>':' <i class="fa-solid fa-arrow-down-wide-short" style="font-size:11px"></i>'):''}</th>`;
   const tablaGrupo=(dest,fs)=>`
-    <h2><i class="fa-solid fa-warehouse" style="font-size:12px"></i> ${esc(dest)} <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· ${fs.length} ítem(s) pendiente(s)</span></h2>
+    <h2><i class="fa-solid fa-warehouse" style="font-size:15px;color:var(--muted)"></i> ${esc(dest)} <span class="muted">· ${fs.length} ítem(s) pendiente(s)</span></h2>
     <div class="card" style="overflow-x:auto"><table>
       <tr>${th('Urgencia','sem')}${th('Cotización','cot','')}${th('OC','oc')}${th('Producto','producto')}${th('Total','cantidad','num')}${th('Pendiente','pendiente','num')}${th('Stock','stock','num')}${th('Precio','precio','num')}</tr>
       ${fs.map(f=>`<tr>
@@ -704,7 +706,7 @@ function rCot(){
           const orden=['Rancagua','San Francisco de Mostazal','El Peumo','Longovilo'];
           const grupos=orden.filter(b=>bodegas.includes(b)).concat(bodegas.filter(b=>!orden.includes(b)));
           html=grupos.map(b=>{const its=c.items.filter(i=>i.bodega===b);
-            return `<div class="bodega-lbl"><i class="fa-solid fa-location-dot" style="font-size:12px;color:var(--muted)"></i> ${esc(b)} <span class="muted">· ${its.length} ítem(s)</span></div>
+            return `<div class="bodega-lbl"><i class="fa-solid fa-location-dot" style="font-size:13px;color:var(--muted)"></i> ${esc(b)} <span class="muted">· ${its.length} ítem(s)</span></div>
             <table><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(its)}</table>`;}).join('');
         } else {
           html=`<table style="margin-top:12px"><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(c.items)}
@@ -714,7 +716,7 @@ function rCot(){
         return html;
       })()}
       ${c.notas?`<p class="small muted" style="margin-top:12px">${esc(c.notas)}</p>`:''}
-      ${c.archivo?`<p class="small" style="margin-top:8px"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(c.archivo)}')"><i class="fa-solid fa-download" style="font-size:11px"></i> Descargar documento</a></p>`:''}
+      ${c.archivo?`<p class="small" style="margin-top:8px"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(c.archivo)}')"><i class="fa-solid fa-download" style="font-size:12px"></i> Descargar documento</a></p>`:''}
       <div class="acciones">
       ${c.estado==='enviada'?`
         <button class="btn mini" onclick="tab='oc';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='oc'));render();prefillOC('${esc(c.id)}')">El cliente envió la OC · registrarla</button>
