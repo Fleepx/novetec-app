@@ -555,6 +555,9 @@ function lineasConfirmadas(){
   });
   return lineas;
 }
+/* Las lineas siguen trayendo `sem` (urgencia) y `cot` (cotizacion) aunque el Panel ya no
+   muestre esas columnas (orden de Jefe, 22-07-2026): quedan listas por si se reactivan.
+   El semaforo de fechas se sigue viendo en la pestana Ordenes de compra. */
 /* Consolidado por producto (un código NOV = una fila, stock GLOBAL) */
 function consolidadoConfirmado(lineas){
   const map={};
@@ -569,7 +572,7 @@ function consolidadoConfirmado(lineas){
     .map(c=>({...c,stock:stockDeCodigo(c.codigo,c.producto)}))
     .sort((a,b)=>a.producto.localeCompare(b.producto,'es'));
 }
-let panelSort={campo:'oc',dir:1};
+let panelSort={campo:'producto',dir:1};
 function sortPanel(campo){if(panelSort.campo===campo)panelSort.dir*=-1;else panelSort={campo,dir:1};render()}
 /* SEMÁFORO SUPERIOR DEL PANEL — DESACTIVADO por orden de Jefe (22-07-2026).
    El código se conserva completo aquí. Para REACTIVARLO basta con agregar `${semStripHTML()}`
@@ -598,7 +601,7 @@ function rPanel(){
   ${cons.length?`<div class="card" style="overflow-x:auto"><table>
     <tr><th>Producto</th><th class="num">Total a despachar</th><th class="num">Pendiente</th><th class="num">Stock</th><th>Compra</th></tr>
     ${cons.map(c=>`<tr>
-      <td class="trunc" title="${esc(c.producto)} — ${esc([...c.bodegas].join(', '))}">${c.codigo?`<span class="mono small muted">${esc(c.codigo)}</span> `:''}${esc(c.producto)}${medidaPendiente(c.codigo)?' <span class="chip ambar" title="El documento no especifica la medida: confirmar antes de despachar">Medida por definir</span>':''}<span class="small muted sep">${esc([...c.bodegas].join(' · '))}</span></td>
+      <td class="trunc" title="${esc(c.producto)} — ${esc([...c.bodegas].join(', '))}">${esc(c.producto)}${medidaPendiente(c.codigo)?' <span class="chip ambar" title="El documento no especifica la medida: confirmar antes de despachar">Medida por definir</span>':''}<span class="small muted sep">${esc([...c.bodegas].join(' · '))}</span></td>
       <td class="num">${num(c.cantidad)}</td>
       <td class="num" style="font-weight:600">${num(c.pendiente)}</td>
       <td class="num" style="${c.stock<c.pendiente?'color:var(--rojo);font-weight:600':''}">${num(c.stock)}</td>
@@ -621,12 +624,10 @@ function rPanel(){
   const tablaGrupo=(dest,fs)=>`
     <h2><i class="fa-solid fa-warehouse" style="font-size:15px;color:var(--muted)"></i> ${esc(dest)} <span class="muted">· ${fs.length} ítem(s) pendiente(s)</span></h2>
     <div class="card" style="overflow-x:auto"><table>
-      <tr>${th('Urgencia','sem')}${th('Cotización','cot','')}${th('OC','oc')}${th('Producto','producto')}${th('Total','cantidad','num')}${th('Pendiente','pendiente','num')}${th('Stock','stock','num')}${th('Precio','precio','num')}</tr>
+      <tr>${th('OC','oc')}${th('Producto','producto')}${th('Total','cantidad','num')}${th('Pendiente','pendiente','num')}${th('Stock','stock','num')}${th('Precio','precio','num')}</tr>
       ${fs.map(f=>`<tr>
-        <td><span class="chip ${f.sem.c}">${f.sem.txt}</span></td>
-        <td class="mono small">${esc(f.cot)||'—'}</td>
         <td class="mono">${esc(f.oc)||'—'}${f.origen==='sap'?' <span class="chip">SAP</span>':''}</td>
-        <td class="trunc" title="${esc(f.producto)}">${esc(f.producto)}</td>
+        <td class="trunc" title="${esc(f.producto)}">${esc(f.producto)}${medidaPendiente(f.codigo)?' <span class="chip ambar">Medida por definir</span>':''}</td>
         <td class="num">${num(f.cantidad)}</td>
         <td class="num" style="font-weight:600">${num(f.pendiente)}</td>
         <td class="num" style="${f.stock<f.pendiente?'color:var(--rojo);font-weight:600':''}">${num(f.stock)}</td>
