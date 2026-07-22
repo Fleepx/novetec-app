@@ -201,7 +201,7 @@ a{color:var(--texto)}
 const LSKEY='novetec_cfg';
 let cfg=null;
 let DB={}; // path -> {data, sha}
-const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json',prod:'data/productos.json',sin:'data/sinonimos.json',psap:'data/pendientes_sap.json'};
+const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json',prod:'data/productos.json',sin:'data/sinonimos.json',psap:'data/pendientes_sap.json',arch:'data/archivos.json'};
 
 const b64dec=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,'')),c=>c.charCodeAt(0)));
 function b64enc(s){const b=new TextEncoder().encode(s);let r='';for(let i=0;i<b.length;i+=8192)r+=String.fromCharCode(...b.subarray(i,i+8192));return btoa(r)}
@@ -217,6 +217,7 @@ const ESTRUCTURAS_BASE={'data/cotizaciones.json':{cotizaciones:[]},'data/ordenes
  'data/pendientes.json':{pendientes:[]},'data/hojas_ruta.json':{hojas:[]},
  'data/productos.json':{productos:[],correlativo:0},
  'data/pendientes_sap.json':{registros:[],actualizado:null,archivo_origen:null},
+ 'data/archivos.json':{archivos:[]},
  'data/config.json':{empresa:'Novetec SPA',semaforo:{rojo_dias:5,amarillo_dias:10},proxima_hoja_ruta:1}};
 async function cargarArchivo(p){
   try{
@@ -378,22 +379,81 @@ const ESTADO_LBL={pendiente:'Pendiente',parcial:'Despacho parcial',despachada:'D
 
 /* Cola de documentos por procesar con Claude */
 const TIPO_LBL={cotizaciones:'Cotización',ordenes_compra:'OC',guias_despacho:'Guía de despacho',pendientes_sap:'Pendientes SAP'};
+/* Huella SHA-256 del archivo: es lo que permite reconocer un documento ya cargado
+   aunque venga con otro nombre (Jefe, 22-07-2026). */
+async function huella(file){
+  const buf=await file.arrayBuffer();
+  const h=await crypto.subtle.digest('SHA-256',buf);
+  return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+const EST_LBL={procesado:'ya fue procesado',en_cola:'ya está en la cola esperando proceso',
+               duplicado:'ya fue rechazado antes por duplicado',descartado:'fue descartado antes'};
+function modalDuplicados(dups,nuevos){
+  return new Promise(res=>{
+    const ov=document.createElement('div');ov.className='modal-ov';
+    ov.innerHTML=`<div class="modal">
+      <b>${dups.length===1?'Este documento ya había entrado al sistema':'Estos documentos ya habían entrado al sistema'}</b>
+      <p class="small muted">Se comparó el contenido del archivo, no el nombre: aunque lo hayas renombrado, es el mismo documento.</p>
+      ${dups.map(d=>`<div class="card" style="margin:10px 0;padding:12px">
+        <div><b>${esc(d.file.name)}</b></div>
+        <div class="small muted" style="margin-top:4px">${EST_LBL[d.reg.estado]||'ya está registrado'}${d.reg.fecha?` el ${fFecha(d.reg.fecha)}`:''}${d.reg.referencia?` · ${esc(d.reg.referencia)}`:''}${d.reg.nombre&&d.reg.nombre!==d.file.name?` · se subió como "${esc(d.reg.nombre)}"`:''}</div>
+      </div>`).join('')}
+      <p class="small muted">${nuevos.length?`Los otros ${nuevos.length} archivo(s) sí son nuevos.`:'No hay ningún archivo nuevo en esta subida.'}</p>
+      <div class="acciones">
+        ${nuevos.length?'<button class="btn mini" id="dup-omitir">Subir solo los nuevos</button>':''}
+        <button class="btn mini sec" id="dup-igual">Subir igual, incluidos los repetidos</button>
+        <button class="btn mini sec" id="dup-cancel">Cancelar</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    const cerrar=r=>{ov.remove();res(r)};
+    const b1=ov.querySelector('#dup-omitir');if(b1)b1.onclick=()=>cerrar('omitir');
+    ov.querySelector('#dup-igual').onclick=()=>cerrar('todos');
+    ov.querySelector('#dup-cancel').onclick=()=>cerrar(null);
+  });
+}
 async function subirPendiente(tipo){
-  const files=[...document.getElementById('pd-file-'+tipo).files];
+  let files=[...document.getElementById('pd-file-'+tipo).files];
   if(!files.length){toast('Selecciona al menos un archivo.');return}
-  velo(true,`Subiendo ${files.length} documento(s)…`);
+  velo(true,'Revisando si ya fueron cargados…');
   try{
     const nota=v('pd-nota-'+tipo).trim();
     const fenvEl=document.getElementById('pd-fenv-'+tipo);
     const fenv=fenvEl?fenvEl.value:null;
     if(tipo==='guias_despacho'&&!fenv){velo(false);toast('Indica la fecha de envío del viaje.');return}
+
+    // 1. Huella de cada archivo y cruce contra el registro y contra la propia tanda
+    const reg=(DB[ARCH.arch]&&DB[ARCH.arch].data.archivos)||[];
+    const hs=[];
+    for(const f of files) hs.push({file:f,h:await huella(f)});
+    const dups=[],nuevos=[],vistos=new Set();
+    hs.forEach(x=>{
+      const previo=reg.find(r=>r.hash===x.h);
+      const repetidoEnTanda=vistos.has(x.h);
+      vistos.add(x.h);
+      if(previo) dups.push({...x,reg:previo});
+      else if(repetidoEnTanda) dups.push({...x,reg:{estado:'duplicado',nombre:x.file.name,referencia:'repetido dentro de esta misma subida'}});
+      else nuevos.push(x);
+    });
+    if(dups.length){
+      velo(false);
+      const q=await modalDuplicados(dups,nuevos);
+      if(!q)return;
+      files=(q==='omitir'?nuevos:hs).map(x=>x.file);
+      if(!files.length){toast('No quedaron archivos por subir.');return}
+    }
+    const porNombre={};hs.forEach(x=>{porNombre[x.file.name]=x.h});
+
+    // 2. Subida
     for(let i=0;i<files.length;i++){
       const f=files[i];
       velo(true,`Subiendo ${i+1} de ${files.length}: ${f.name}`);
       const ruta=await subirDocumento('pendientes/'+tipo,f);
-      DB[ARCH.pend].data.pendientes.push({id:'P-'+Date.now()+'-'+i,tipo,archivo:ruta,nombre:f.name,subido:hoyISO(),nota,...(fenv?{fecha_envio:fenv}:{})});
+      DB[ARCH.pend].data.pendientes.push({id:'P-'+Date.now()+'-'+i,tipo,archivo:ruta,nombre:f.name,hash:porNombre[f.name],subido:hoyISO(),nota,...(fenv?{fecha_envio:fenv}:{})});
+      reg.push({hash:porNombre[f.name],nombre:f.name,tipo,ruta,estado:'en_cola',fecha:hoyISO(),referencia:null});
     }
     await guardarArchivo(ARCH.pend,`${files.length} documento(s) en cola (${tipo})`);
+    await guardarArchivo(ARCH.arch,`Registro de archivos: ${files.length} documento(s)`);
     toast(`${files.length} documento(s) en cola. El administrador los procesará y cargará los datos.`);render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
