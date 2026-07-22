@@ -144,7 +144,7 @@ a{color:var(--ink)}
 const LSKEY='novetec_cfg';
 let cfg=null;
 let DB={}; // path -> {data, sha}
-const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json',prod:'data/productos.json',sin:'data/sinonimos.json'};
+const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json',prod:'data/productos.json',sin:'data/sinonimos.json',psap:'data/pendientes_sap.json'};
 
 const b64dec=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,'')),c=>c.charCodeAt(0)));
 function b64enc(s){const b=new TextEncoder().encode(s);let r='';for(let i=0;i<b.length;i+=8192)r+=String.fromCharCode(...b.subarray(i,i+8192));return btoa(r)}
@@ -159,6 +159,7 @@ const ESTRUCTURAS_BASE={'data/cotizaciones.json':{cotizaciones:[]},'data/ordenes
  'data/guias_despacho.json':{guias:[]},'data/inventario.json':{productos:[],movimientos:[]},
  'data/pendientes.json':{pendientes:[]},'data/hojas_ruta.json':{hojas:[]},
  'data/productos.json':{productos:[],correlativo:0},
+ 'data/pendientes_sap.json':{registros:[],actualizado:null,archivo_origen:null},
  'data/config.json':{empresa:'Novetec SPA',semaforo:{rojo_dias:5,amarillo_dias:10},proxima_hoja_ruta:1}};
 async function cargarArchivo(p){
   try{
@@ -319,7 +320,7 @@ function semaforo(oc){
 const ESTADO_LBL={pendiente:'Pendiente',parcial:'Despacho parcial',despachada:'Despachada'};
 
 /* Cola de documentos por procesar con Claude */
-const TIPO_LBL={cotizaciones:'Cotización',ordenes_compra:'OC',guias_despacho:'Guía de despacho'};
+const TIPO_LBL={cotizaciones:'Cotización',ordenes_compra:'OC',guias_despacho:'Guía de despacho',pendientes_sap:'Pendientes SAP'};
 async function subirPendiente(tipo){
   const files=[...document.getElementById('pd-file-'+tipo).files];
   if(!files.length){toast('Selecciona al menos un archivo.');return}
@@ -355,8 +356,9 @@ function dzContar(tipo){
   el.textContent=input.files.length?`${input.files.length} archivo(s) listos: ${[...input.files].map(f=>f.name).join(', ').slice(0,120)}`:'';
 }
 function formPendiente(tipo,accept){
-  return `<details class="form"><summary>Subir documento de ${TIPO_LBL[tipo].toLowerCase()}${tipo==='guias_despacho'?' (bundle del viaje)':''}</summary><div class="inner">
-    <p class="small muted" style="margin-top:10px">${tipo==='guias_despacho'?'Sube TODAS las guías del viaje juntas e indica la fecha de envío: con eso el administrador procesa y genera la hoja de ruta.':'Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.'}</p>
+  const titulo=tipo==='pendientes_sap'?'Subir reporte Pendientes SAP (adjudicados)':`Subir documento de ${TIPO_LBL[tipo].toLowerCase()}${tipo==='guias_despacho'?' (bundle del viaje)':''}`;
+  return `<details class="form"><summary>${titulo}</summary><div class="inner">
+    <p class="small muted" style="margin-top:10px">${tipo==='guias_despacho'?'Sube TODAS las guías del viaje juntas e indica la fecha de envío: con eso el administrador procesa y genera la hoja de ruta.':tipo==='pendientes_sap'?'Sube el reporte SAP de adjudicados del cliente (columnas Fecha doc / Material / Texto breve / Doc.compras / Cantidad / Ce. / Por entregar / Prc.neto). El administrador lo procesa y el Panel lo consolida junto a las OC. Cada reporte nuevo reemplaza al anterior.':'Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.'}</p>
     <label>Archivos</label>
     <div class="dropzone" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'${tipo}')" onclick="document.getElementById('pd-file-${tipo}').click()">
       <input id="pd-file-${tipo}" type="file" accept="${accept}" multiple style="display:none" onchange="dzContar('${tipo}')" onclick="event.stopPropagation()">
@@ -407,40 +409,128 @@ function render(){
 }
 
 /* ================= Panel ================= */
-let panelSort={campo:'oc',dir:1};
-function sortPanel(campo){if(panelSort.campo===campo)panelSort.dir*=-1;else panelSort={campo,dir:1};render()}
-function rPanel(){
+/* Bodegas del cliente: orden fijo de presentación y mapeo de centros SAP */
+const BODEGAS_ORDEN=['Rancagua','San Francisco de Mostazal','El Peumo','Longovilo'];
+const CENTRO_BODEGA={'C394':'Rancagua','C001':'Rancagua','C011':'Rancagua','C395':'San Francisco de Mostazal','097':'Longovilo','7187':'El Peumo'};
+function bodegaDeCentro(c){return CENTRO_BODEGA[String(c||'').trim().toUpperCase()]||null}
+function normBodega(b){
+  const s=String(b||'').trim();if(!s)return 'Sin destino';
+  const x=s.toLowerCase();
+  if(x.includes('rancagua')||x.includes('central'))return 'Rancagua';
+  if(x.includes('mostazal')||x.includes('san francisco'))return 'San Francisco de Mostazal';
+  if(x.includes('peumo')||x.includes('calera'))return 'El Peumo';
+  if(x.includes('longovilo'))return 'Longovilo';
+  return s;
+}
+function codigoDeItem(nombre,codigo){
+  if(codigo)return codigo;
+  const m=prodMaestro(nombre);return m?m.codigo:null;
+}
+function stockDeCodigo(codigo,nombre){
+  let p=codigo?DB[ARCH.inv].data.productos.find(x=>x.codigo===codigo):null;
+  if(!p&&nombre)p=invProdDe(nombre,null,false);
+  return p?(+p.cantidad||0):0;
+}
+/* Líneas CONFIRMADAS: ítems de OC activas + registros Pendientes SAP.
+   Si el doc_compras de un registro SAP ya existe como OC cargada, manda la OC (se omite el registro). */
+function lineasConfirmadas(){
   const ocs=DB[ARCH.oc].data.ordenes;
-  const act=ocs.filter(o=>ocEstado(o)!=='despachada');
-  const g={vencida:[],rojo:[],ambar:[],verde:[],gris:[]};
-  act.forEach(o=>g[semaforo(o).c].push(o));
-  const cotP=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='enviada');
-
-  // Filas: un renglón por ítem pendiente de despacho
-  const filas=[];
-  const stockDe=nom=>{const p=invProdDe(nom,null,false);return p?p.cantidad:0};
-  act.forEach(o=>{const s=semaforo(o);
+  const folios=new Set(ocs.map(o=>String(o.folio)));
+  const lineas=[];
+  ocs.filter(o=>ocEstado(o)!=='despachada').forEach(o=>{const s=semaforo(o);
     o.items.forEach(i=>{
-      const pend=(+i.cantidad||0)-(+i.cantidad_despachada||0);
-      if(pend<=0)return;
-      filas.push({cot:o.cotizacion_sap||'',oc:o.folio,producto:i.producto,cantidad:+i.cantidad||0,
-        pendiente:pend,stock:stockDe(i.producto),destino:o.destino||'Sin destino',precio:+i.precio_unitario||0,sem:s});
+      const total=+i.cantidad||0;
+      const pendiente=Math.max(total-(+i.cantidad_despachada||0),0);
+      const porComprar=Math.max(total-(+i.cantidad_comprada||0),0);
+      if(pendiente<=0&&porComprar<=0)return;
+      lineas.push({origen:'oc',ref:i,oc:String(o.folio),cot:o.cotizacion_sap||'',producto:i.producto,
+        codigo:codigoDeItem(i.producto,i.codigo),cantidad:total,pendiente,porComprar,
+        bodega:normBodega(o.destino),precio:+i.precio_unitario||0,sem:s});
     });
   });
-  const c=panelSort.campo,d=panelSort.dir;
-  filas.sort((a,b)=>{const va=a[c],vb=b[c];
-    return (typeof va==='string'?va.localeCompare(vb,'es'):va-vb)*d});
+  const psap=((DB[ARCH.psap]&&DB[ARCH.psap].data.registros)||[]).filter(r=>!folios.has(String(r.doc_compras||'')));
+  psap.forEach(r=>{
+    const total=+r.cantidad||0;
+    const pendiente=+r.por_entregar||0;
+    const porComprar=Math.max(total-(+r.cantidad_comprada||0),0);
+    if(pendiente<=0&&porComprar<=0)return;
+    lineas.push({origen:'sap',ref:r,oc:String(r.doc_compras||''),cot:'',producto:r.producto,
+      codigo:r.codigo||codigoDeItem(r.producto,null),cantidad:total,pendiente,porComprar,
+      bodega:normBodega(r.bodega||bodegaDeCentro(r.centro)||''),precio:+r.precio_neto||0,sem:{c:'gris',txt:'SAP'}});
+  });
+  return lineas;
+}
+/* Consolidado por producto (un código NOV = una fila, stock GLOBAL) */
+function consolidadoConfirmado(lineas){
+  const map={};
+  lineas.forEach(l=>{
+    const k=l.codigo||('N:'+normProd(l.producto));
+    const c=map[k]=map[k]||{k,codigo:l.codigo,producto:l.producto,cantidad:0,pendiente:0,porComprar:0,bodegas:new Set(),lineas:[]};
+    if(l.codigo&&!c.codigo)c.codigo=l.codigo;
+    c.cantidad+=l.cantidad;c.pendiente+=l.pendiente;c.porComprar+=l.porComprar;
+    c.bodegas.add(l.bodega);c.lineas.push(l);
+  });
+  return Object.values(map)
+    .map(c=>({...c,stock:stockDeCodigo(c.codigo,c.producto)}))
+    .sort((a,b)=>a.producto.localeCompare(b.producto,'es'));
+}
+let panelSort={campo:'oc',dir:1};
+function sortPanel(campo){if(panelSort.campo===campo)panelSort.dir*=-1;else panelSort={campo,dir:1};render()}
+/* SEMÁFORO SUPERIOR DEL PANEL — DESACTIVADO por orden de Jefe (22-07-2026).
+   El código se conserva completo aquí. Para REACTIVARLO basta con agregar `${semStripHTML()}`
+   al inicio del template que retorna rPanel(). */
+function semStripHTML(){
+  const act=DB[ARCH.oc].data.ordenes.filter(o=>ocEstado(o)!=='despachada');
+  const g={vencida:[],rojo:[],ambar:[],verde:[],gris:[]};
+  act.forEach(o=>g[semaforo(o).c].push(o));
+  return `
+  <div class="sem-strip">
+    <div class="sem-box vencida"><div class="n">${g.vencida.length}</div><div class="l">Vencidas</div></div>
+    <div class="sem-box rojo"><div class="n">${g.rojo.length}</div><div class="l">≤ ${DB[ARCH.conf].data.semaforo.rojo_dias} días</div></div>
+    <div class="sem-box ambar"><div class="n">${g.ambar.length}</div><div class="l">≤ ${DB[ARCH.conf].data.semaforo.amarillo_dias} días</div></div>
+    <div class="sem-box verde"><div class="n">${g.verde.length}</div><div class="l">Con holgura</div></div>
+  </div>`;
+}
+function rPanel(){
+  const cotP=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='enviada');
+  const lineas=lineasConfirmadas();
+  const cons=consolidadoConfirmado(lineas);
+  const psapMeta=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{};
+
+  /* ZONA SUPERIOR: resumen consolidado solo de confirmado (OC + Pendientes SAP) */
+  const zonaResumen=`
+  <h2>Resumen consolidado <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· confirmado: OC + Pendientes SAP${psapMeta.actualizado?` (reporte del ${fFecha(psapMeta.actualizado)})`:''}</span></h2>
+  ${cons.length?`<div class="card" style="overflow-x:auto"><table>
+    <tr><th>Producto</th><th class="num">Total a despachar</th><th class="num">Pendiente</th><th class="num">Stock</th><th>Compra</th></tr>
+    ${cons.map(c=>`<tr>
+      <td>${c.codigo?`<span class="mono small muted">${esc(c.codigo)}</span> `:''}${esc(c.producto)}<div class="small muted">${[...c.bodegas].map(esc).join(' · ')}</div></td>
+      <td class="num">${num(c.cantidad)}</td>
+      <td class="num" style="font-weight:600">${num(c.pendiente)}</td>
+      <td class="num" style="${c.stock<c.pendiente?'color:var(--rojo);font-weight:600':''}">${num(c.stock)}</td>
+      <td>${c.porComprar>0?`<button class="btn mini sec" onclick="marcarCompra('${encodeURIComponent(c.k)}')"><i class="fa-solid fa-cart-plus"></i> Marcar compra (${num(c.porComprar)})</button>`:'<span class="chip ink"><i class="fa-solid fa-check"></i> Comprada</span>'}</td>
+    </tr>`).join('')}
+  </table></div>`:'<div class="card vacio">No hay pendientes confirmados (OC ni Pendientes SAP).</div>'}`;
+
+  /* ZONA INFERIOR: detalle por bodega, orden fijo Rancagua → San Francisco Mostazal → El Peumo → Longovilo.
+     Se muestran SIEMPRE Total y Pendiente, aunque no haya stock. */
+  const filas=lineas.filter(l=>l.pendiente>0);
+  filas.forEach(f=>{f.stock=stockDeCodigo(f.codigo,f.producto)});
+  const cS=panelSort.campo,dS=panelSort.dir;
+  const urg={vencida:0,rojo:1,ambar:2,verde:3,gris:4};
+  const valS=f=>cS==='sem'?urg[f.sem.c]:f[cS];
+  filas.sort((a,b)=>{const va=valS(a),vb=valS(b);
+    return (typeof va==='string'?va.localeCompare(vb,'es'):va-vb)*dS});
   const grupos={};
-  filas.forEach(f=>{(grupos[f.destino]=grupos[f.destino]||[]).push(f)});
+  filas.forEach(f=>{(grupos[f.bodega]=grupos[f.bodega]||[]).push(f)});
   const th=(lbl,campo,cls='')=>`<th class="${cls}" style="cursor:pointer;user-select:none" onclick="sortPanel('${campo}')">${lbl}${panelSort.campo===campo?(panelSort.dir>0?' <i class="fa-solid fa-arrow-up-short-wide" style="font-size:11px"></i>':' <i class="fa-solid fa-arrow-down-wide-short" style="font-size:11px"></i>'):''}</th>`;
   const tablaGrupo=(dest,fs)=>`
-    <h2>${esc(dest)} <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· ${fs.length} ítem(s) pendiente(s)</span></h2>
+    <h2><i class="fa-solid fa-warehouse" style="font-size:12px"></i> ${esc(dest)} <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0">· ${fs.length} ítem(s) pendiente(s)</span></h2>
     <div class="card" style="overflow-x:auto"><table>
-      <tr>${th('Urgencia','sem')}${th('Cotización','cot','')}${th('OC','oc')}${th('Producto','producto')}${th('Solicitado','cantidad','num')}${th('Pendiente','pendiente','num')}${th('Stock','stock','num')}${th('Precio','precio','num')}</tr>
+      <tr>${th('Urgencia','sem')}${th('Cotización','cot','')}${th('OC','oc')}${th('Producto','producto')}${th('Total','cantidad','num')}${th('Pendiente','pendiente','num')}${th('Stock','stock','num')}${th('Precio','precio','num')}</tr>
       ${fs.map(f=>`<tr>
         <td><span class="chip ${f.sem.c}">${f.sem.txt}</span></td>
         <td class="mono small">${esc(f.cot)||'—'}</td>
-        <td class="mono">${esc(f.oc)}</td>
+        <td class="mono">${esc(f.oc)||'—'}${f.origen==='sap'?' <span class="chip">SAP</span>':''}</td>
         <td>${esc(f.producto)}</td>
         <td class="num">${num(f.cantidad)}</td>
         <td class="num" style="font-weight:600">${num(f.pendiente)}</td>
@@ -448,20 +538,89 @@ function rPanel(){
         <td class="num">${clp(f.precio)}</td>
       </tr>`).join('')}
     </table></div>`;
-  // ordenar grupos: destino con ítem más urgente primero
-  const urg={vencida:0,rojo:1,ambar:2,verde:3,gris:4};
-  const destOrden=Object.keys(grupos).sort((a,b)=>Math.min(...grupos[a].map(f=>urg[f.sem.c]))-Math.min(...grupos[b].map(f=>urg[f.sem.c])));
+  const destOrden=BODEGAS_ORDEN.filter(b=>grupos[b])
+    .concat(Object.keys(grupos).filter(b=>!BODEGAS_ORDEN.includes(b)).sort((a,b)=>a.localeCompare(b,'es')));
   return `
-  <div class="sem-strip">
-    <div class="sem-box vencida"><div class="n">${g.vencida.length}</div><div class="l">Vencidas</div></div>
-    <div class="sem-box rojo"><div class="n">${g.rojo.length}</div><div class="l">≤ ${DB[ARCH.conf].data.semaforo.rojo_dias} días</div></div>
-    <div class="sem-box ambar"><div class="n">${g.ambar.length}</div><div class="l">≤ ${DB[ARCH.conf].data.semaforo.amarillo_dias} días</div></div>
-    <div class="sem-box verde"><div class="n">${g.verde.length}</div><div class="l">Con holgura</div></div>
-  </div>
+  ${zonaResumen}
   ${DB[ARCH.pend].data.pendientes.length?`<div class="card" style="border-color:var(--ambar)"><i class="fa-solid fa-file-lines"></i> <b>${DB[ARCH.pend].data.pendientes.length}</b> documento(s) en cola esperando ser procesados por el administrador.</div>`:''}
   ${destOrden.length?destOrden.map(dst=>tablaGrupo(dst,grupos[dst])).join(''):'<div class="card vacio">No hay ítems pendientes de despacho.</div>'}
   <h2>Cotizaciones sin responder (${cotP.length})</h2>
   ${cotP.length?cotP.map(c=>`<div class="tag"><div class="bar gris"></div><div class="body"><div class="top"><span class="folio">COT ${esc(c.folio)}</span><span class="chip">${fFecha(c.fecha)}</span><span class="muted small">${esc(c.cliente)}</span></div></div></div>`).join(''):'<div class="card vacio">Sin cotizaciones pendientes.</div>'}`;
+}
+/* ===== Marcado de compras desde el Panel =====
+   Al marcar: ingreso a inventario por el TOTAL pendiente de compra del producto
+   (un código NOV, un stock global). Varias bodegas de destino → modal de reparto;
+   una sola → asignación directa sin preguntar. */
+function consPorClave(k){
+  return consolidadoConfirmado(lineasConfirmadas()).find(c=>c.k===k);
+}
+async function marcarCompra(ke){
+  const k=decodeURIComponent(ke);
+  const c=consPorClave(k);
+  if(!c||c.porComprar<=0){toast('No hay compra pendiente para este producto.');return}
+  const porBod={};
+  c.lineas.filter(l=>l.porComprar>0).forEach(l=>{porBod[l.bodega]=(porBod[l.bodega]||0)+l.porComprar});
+  const bods=Object.keys(porBod);
+  let reparto;
+  if(bods.length<=1){
+    reparto=bods.length?{[bods[0]]:c.porComprar}:{};
+  }else{
+    reparto=await modalReparto(c,porBod);
+    if(!reparto)return;
+  }
+  await aplicarCompra(c,reparto);
+}
+function modalReparto(c,porBod){
+  return new Promise(res=>{
+    const ov=document.createElement('div');ov.className='modal-ov';
+    const bods=Object.keys(porBod);
+    ov.innerHTML=`<div class="modal">
+      <b>Reparto de la compra por bodega</b>
+      <p class="small muted">"<b>${esc(c.producto)}</b>" tiene destino en ${bods.length} bodegas. La compra ingresa al inventario por el TOTAL del producto (<b class="mono">${num(c.porComprar)}</b>, un solo código y stock global); indica cómo se repartirá entre bodegas.</p>
+      ${bods.map(b=>`<label>${esc(b)} <span class="muted" style="text-transform:none;font-weight:400">· pendiente de compra: ${num(porBod[b])}</span></label>
+        <input type="number" class="rep-inp" data-b="${esc(b)}" min="0" step="any" value="${porBod[b]}">`).join('')}
+      <p class="small mono" id="rep-suma" style="margin-top:10px"></p>
+      <div class="acciones"><button class="btn mini" id="rep-ok">Confirmar reparto</button><button class="btn mini sec" id="rep-cancel">Cancelar</button></div>
+    </div>`;
+    document.body.appendChild(ov);
+    const suma=()=>[...ov.querySelectorAll('.rep-inp')].reduce((a,i)=>a+(+i.value||0),0);
+    const actualizar=()=>{const s=suma();const el=ov.querySelector('#rep-suma');
+      el.textContent=`Suma del reparto: ${num(s)} de ${num(c.porComprar)}`;
+      el.style.color=s===c.porComprar?'var(--verde)':'var(--rojo)';};
+    ov.querySelectorAll('.rep-inp').forEach(i=>i.oninput=actualizar);actualizar();
+    ov.querySelector('#rep-ok').onclick=()=>{
+      if(suma()!==c.porComprar){toast(`El reparto debe sumar exactamente ${num(c.porComprar)}.`);return}
+      const r={};ov.querySelectorAll('.rep-inp').forEach(i=>{r[i.dataset.b]=+i.value||0});
+      ov.remove();res(r);};
+    ov.querySelector('#rep-cancel').onclick=()=>{ov.remove();res(null)};
+  });
+}
+async function aplicarCompra(c,reparto){
+  velo(true,'Marcando compra…');
+  try{
+    const fecha=hoyISO();
+    let tocaOC=false,tocaPsap=false;
+    c.lineas.filter(l=>l.porComprar>0).forEach(l=>{
+      l.ref.cantidad_comprada=(+l.ref.cantidad_comprada||0)+l.porComprar;
+      if(l.origen==='oc')tocaOC=true;else tocaPsap=true;
+    });
+    // Ingreso al inventario por el TOTAL (un código, stock global)
+    const inv=DB[ARCH.inv].data;
+    let m=c.codigo?DB[ARCH.prod].data.productos.find(p=>p.codigo===c.codigo):prodMaestro(c.producto);
+    if(!m)m=crearProdMaestro(c.producto,'UN');
+    let p=inv.productos.find(x=>x.codigo===m.codigo);
+    if(!p){p={codigo:m.codigo,nombre:m.nombre,cantidad:0,unidad:m.unidad};inv.productos.push(p)}
+    p.cantidad+=c.porComprar;
+    const repTxt=Object.entries(reparto).map(([b,q])=>`${b} ${num(q)}`).join(', ');
+    inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:c.porComprar,referencia:`Compra marcada (Panel)${repTxt?' · reparto: '+repTxt:''}`});
+    await guardarMaestroSiNuevo();
+    if(tocaOC)await guardarArchivo(ARCH.oc,`Compra marcada: ${m.nombre}`);
+    if(tocaPsap)await guardarArchivo(ARCH.psap,`Compra marcada (Pendientes SAP): ${m.nombre}`);
+    await guardarArchivo(ARCH.inv,`Inventario: ingreso por compra marcada (${m.nombre} +${c.porComprar})`);
+    toast(`Compra marcada: ${m.nombre} (+${num(c.porComprar)} al inventario)`);
+    render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
 }
 function tagOC(o){
   const s=semaforo(o),e=ocEstado(o);
@@ -594,8 +753,27 @@ function rOC(){
   const orden={vencida:0,rojo:1,ambar:2,verde:3,gris:4};
   ocs.sort((a,b)=>orden[semaforo(a).c]-orden[semaforo(b).c]||(a.fecha_entrega||'').localeCompare(b.fecha_entrega||''));
   const lista=ocs.filter(o=>!ocFiltro||o.folio.toLowerCase().includes(ocFiltro)||ocEstado(o).includes(ocFiltro));
+  const psapD=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{registros:[]};
+  const psapReg=psapD.registros||[];
   return `${dlProd()}
   ${formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
+  ${formPendiente('pendientes_sap','.pdf,.xls,.xlsx,.jpg,.jpeg,.png')}
+  ${listaPend('pendientes_sap')}
+  ${psapReg.length?`<details class="form"><summary>Pendientes SAP cargados (${psapReg.length})${psapD.actualizado?` · reporte del ${fFecha(psapD.actualizado)}`:''}</summary><div class="inner" style="overflow-x:auto">
+    <p class="small muted" style="margin-top:10px">Registros del último reporte SAP de adjudicados. Si un Doc. compras ya está cargado como OC, en el Panel manda la OC y el registro se omite.</p>
+    <table><tr><th>Fecha doc</th><th>Doc. compras</th><th>Producto</th><th class="num">Cantidad</th><th>Bodega</th><th class="num">Por entregar</th><th class="num">Prc. neto</th><th class="num">Comprado</th></tr>
+    ${psapReg.map(r=>`<tr>
+      <td class="mono small">${fFecha(r.fecha_doc)}</td>
+      <td class="mono">${esc(String(r.doc_compras||'—'))}</td>
+      <td>${r.codigo?`<span class="mono small muted">${esc(r.codigo)}</span> `:''}${esc(r.producto)}</td>
+      <td class="num">${num(r.cantidad)}</td>
+      <td class="small">${esc(r.bodega||bodegaDeCentro(r.centro)||String(r.centro||'—'))}</td>
+      <td class="num" style="font-weight:600">${num(r.por_entregar)}</td>
+      <td class="num">${clp(r.precio_neto)}</td>
+      <td class="num">${num(r.cantidad_comprada||0)}</td>
+    </tr>`).join('')}</table>
+    ${psapD.archivo_origen?`<p class="small" style="margin-top:8px"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(psapD.archivo_origen)}')">Descargar reporte original</a></p>`:''}
+  </div></details>`:''}
   <details class="form" id="f-oc"><summary>Ingresar OC manualmente</summary><div class="inner">
     <div class="grid3">
       <div><label>Folio OC</label><input id="o-folio"></div>
