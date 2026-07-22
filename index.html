@@ -82,7 +82,13 @@ table{width:100%;border-collapse:collapse;font-size:var(--fs-sm);line-height:1.4
 th{font-size:var(--fs-xs);font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1.5px solid var(--line);white-space:nowrap}
 td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
 tr:last-child td{border-bottom:none}
-td .small{font-size:var(--fs-xs);line-height:1.3;display:block;margin-top:2px}
+td .small{font-size:var(--fs-xs);line-height:1.4}
+td .small.sep::before{content:'·';color:var(--line);margin:0 5px}
+/* Celda de una sola línea: si el texto no cabe, se corta con puntos suspensivos.
+   Al hacer clic se despliega completo (puede ocupar más de una línea). */
+td.trunc{max-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+td.trunc:hover{background:#F6F8FA}
+td.trunc.abierto{white-space:normal;overflow:visible;text-overflow:clip;background:#F6F8FA}
 td.num,th.num{text-align:right;font-family:var(--mono);letter-spacing:-.01em}
 .item-row{display:grid;grid-template-columns:1fr 110px 130px 34px;gap:8px;margin-bottom:8px}
 @media(max-width:640px){.item-row{grid-template-columns:1fr 80px 100px 30px}}
@@ -411,6 +417,14 @@ async function borrarPendiente(id){
 
 /* ================= Navegación ================= */
 let tab='panel';
+/* Celdas de una línea: clic para ver el texto completo, otro clic para volver a contraer.
+   Se ignora el clic si viene de un botón o enlace dentro de la celda. */
+document.addEventListener('click',e=>{
+  const td=e.target.closest('td.trunc');
+  if(!td)return;
+  if(e.target.closest('button,a,input,select'))return;
+  td.classList.toggle('abierto');
+});
 document.getElementById('tabs').addEventListener('click',e=>{
   if(e.target.dataset.t){tab=e.target.dataset.t;
     document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));render()}
@@ -516,7 +530,7 @@ function rPanel(){
   ${cons.length?`<div class="card" style="overflow-x:auto"><table>
     <tr><th>Producto</th><th class="num">Total a despachar</th><th class="num">Pendiente</th><th class="num">Stock</th><th>Compra</th></tr>
     ${cons.map(c=>`<tr>
-      <td>${c.codigo?`<span class="mono small muted">${esc(c.codigo)}</span> `:''}${esc(c.producto)}<div class="small muted">${[...c.bodegas].map(esc).join(' · ')}</div></td>
+      <td class="trunc" title="${esc(c.producto)} — ${esc([...c.bodegas].join(', '))}">${c.codigo?`<span class="mono small muted">${esc(c.codigo)}</span> `:''}${esc(c.producto)}<span class="small muted sep">${esc([...c.bodegas].join(' · '))}</span></td>
       <td class="num">${num(c.cantidad)}</td>
       <td class="num" style="font-weight:600">${num(c.pendiente)}</td>
       <td class="num" style="${c.stock<c.pendiente?'color:var(--rojo);font-weight:600':''}">${num(c.stock)}</td>
@@ -544,7 +558,7 @@ function rPanel(){
         <td><span class="chip ${f.sem.c}">${f.sem.txt}</span></td>
         <td class="mono small">${esc(f.cot)||'—'}</td>
         <td class="mono">${esc(f.oc)||'—'}${f.origen==='sap'?' <span class="chip">SAP</span>':''}</td>
-        <td>${esc(f.producto)}</td>
+        <td class="trunc" title="${esc(f.producto)}">${esc(f.producto)}</td>
         <td class="num">${num(f.cantidad)}</td>
         <td class="num" style="font-weight:600">${num(f.pendiente)}</td>
         <td class="num" style="${f.stock<f.pendiente?'color:var(--rojo);font-weight:600':''}">${num(f.stock)}</td>
@@ -700,7 +714,7 @@ function rCot(){
       ${(()=>{
         const bodegas=[...new Set(c.items.map(i=>i.bodega).filter(Boolean))];
         const conBodega=bodegas.length>0;
-        const tablaItems=arr=>arr.map(i=>`<tr><td>${esc(i.producto)}${i.marca?` <span class="small muted">· ${esc(i.marca)}</span>`:''}</td><td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num">${clp(i.cantidad*i.precio_unitario)}</td></tr>`).join('');
+        const tablaItems=arr=>arr.map(i=>`<tr><td class="trunc" title="${esc(i.producto)}${i.marca?' — '+esc(i.marca):''}">${esc(i.producto)}${i.marca?`<span class="small muted sep">${esc(i.marca)}</span>`:''}</td><td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num">${clp(i.cantidad*i.precio_unitario)}</td></tr>`).join('');
         let html='';
         if(conBodega){
           const orden=['Rancagua','San Francisco de Mostazal','El Peumo','Longovilo'];
@@ -776,7 +790,7 @@ function rOC(){
     ${psapReg.map(r=>`<tr>
       <td class="mono small">${fFecha(r.fecha_doc)}</td>
       <td class="mono">${esc(String(r.doc_compras||'—'))}</td>
-      <td>${r.codigo?`<span class="mono small muted">${esc(r.codigo)}</span> `:''}${esc(r.producto)}</td>
+      <td class="trunc" title="${esc(r.producto)}">${r.codigo?`<span class="mono small muted">${esc(r.codigo)}</span> `:''}${esc(r.producto)}</td>
       <td class="num">${num(r.cantidad)}</td>
       <td class="small">${esc(r.bodega||bodegaDeCentro(r.centro)||String(r.centro||'—'))}</td>
       <td class="num" style="font-weight:600">${num(r.por_entregar)}</td>
@@ -814,7 +828,7 @@ function rOC(){
       </div>
       <table style="margin-top:12px"><tr><th>Producto</th><th class="num">Pedido</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th></tr>
       ${o.items.map(i=>{const comp=+i.cantidad_comprada||0;
-        return `<tr><td>${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num" style="${comp<i.cantidad?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(i.cantidad-(i.cantidad_despachada||0))}</td></tr>`}).join('')}</table>
+        return `<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num" style="${comp<i.cantidad?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(i.cantidad-(i.cantidad_despachada||0))}</td></tr>`}).join('')}</table>
       ${o.compras?.length?`<p class="small muted" style="margin-top:6px">Compras: ${o.compras.map(c=>`<span class="mono">${fFecha(c.fecha)}</span> ${esc(c.proveedor||'s/proveedor')} (${c.items.map(i=>`${esc(i.producto)} ×${num(i.cantidad)}`).join(', ')})`).join(' · ')}</p>`:''}
       ${o.guias?.length?`<p class="small muted" style="margin-top:6px">Guías: <span class="mono">${o.guias.map(esc).join(', ')}</span></p>`:''}
       ${o.archivo?`<p class="small"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(o.archivo)}')">Descargar documento</a></p>`:''}
@@ -924,7 +938,7 @@ function toggleCompra(fe){
       <div><label>Bodega</label><label style="text-transform:none;font-weight:400;letter-spacing:0;display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink)"><input type="checkbox" id="pc-bod-${fe}" checked style="width:auto"> Ingresar a inventario</label></div>
     </div>
     <table style="margin-top:8px"><tr><th>Producto</th><th class="num">Por comprar</th><th style="width:140px">Comprado ahora</th></tr>
-    ${pend.map(i=>`<tr><td>${esc(i.producto)}</td><td class="num">${num(i.porComprar)}</td><td><input type="number" data-ix="${i.ix}" min="0" max="${i.porComprar}" step="any" placeholder="0"></td></tr>`).join('')}</table>
+    ${pend.map(i=>`<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.porComprar)}</td><td><input type="number" data-ix="${i.ix}" min="0" max="${i.porComprar}" step="any" placeholder="0"></td></tr>`).join('')}</table>
     <div class="acciones"><button class="btn mini" onclick="guardarCompra('${fe}')">Guardar compra</button><button class="btn mini sec" onclick="toggleCompra('${fe}')">Cancelar</button></div>
   </div>`;
 }
@@ -999,7 +1013,7 @@ function rGuias(){
       <button class="btn mini peligro" style="margin-left:auto" onclick="borrarGuia('${esc(g.numero)}')">Eliminar</button>
     </div>
     <table style="margin-top:12px"><tr><th>Producto</th><th class="num">Cantidad</th></tr>
-    ${g.items.map(i=>`<tr><td>${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td></tr>`).join('')}</table>
+    ${g.items.map(i=>`<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td></tr>`).join('')}</table>
   </div>`).join(''):'<div class="card vacio">Aún no hay guías registradas.</div>'}`;
 }
 function prepFormGuia(){
@@ -1012,7 +1026,7 @@ function prepFormGuia(){
     const pend=o.items.map((i,ix)=>({...i,ix,pendiente:(+i.cantidad||0)-(+i.cantidad_despachada||0)})).filter(i=>i.pendiente>0);
     box.innerHTML=`<label>Cantidades a despachar</label>
       <table><tr><th>Producto</th><th class="num">Pendiente</th><th style="width:130px">Despachar</th></tr>
-      ${pend.map(i=>`<tr><td>${esc(i.producto)}</td><td class="num">${num(i.pendiente)}</td>
+      ${pend.map(i=>`<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.pendiente)}</td>
         <td><input type="number" class="g-cant" data-ix="${i.ix}" min="0" max="${i.pendiente}" step="any" value="${i.pendiente}"></td></tr>`).join('')}</table>`;
   });
 }
@@ -1074,12 +1088,12 @@ function rInv(){
   </div></details>
   <h2>Stock actual (${prods.length} productos)</h2>
   <div class="card">${prods.length?`<table><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
-    ${prods.map(p=>`<tr><td class="mono small">${esc(p.codigo||'—')}</td><td>${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
+    ${prods.map(p=>`<tr><td class="mono small">${esc(p.codigo||'—')}</td><td class="trunc" title="${esc(p.nombre)}">${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
     <td class="num"><button class="btn mini sec" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-pen"></i></button> <button class="btn mini peligro" onclick="borrarProd('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')}</table>`
     :'<div class="vacio">Bodega sin productos registrados. Usa "Registrar ingreso" para la carga inicial.</div>'}</div>
   <h2>Últimos movimientos</h2>
-  <div class="card">${movs.length?`<table><tr><th>Fecha</th><th>Tipo</th><th>Código</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
-    ${movs.map(m=>`<tr><td class="mono small">${fFecha(m.fecha)}</td><td class="mono small">${esc(m.codigo||'—')}</td><td><span class="chip ${m.tipo==='salida'?'rojo':m.tipo==='ingreso'?'verde':''}">${m.tipo}</span></td><td>${esc(m.producto)}</td><td class="num">${num(m.cantidad)}</td><td class="small muted">${esc(m.referencia||'')}</td></tr>`).join('')}</table>`
+  <div class="card">${movs.length?`<table><tr><th>Fecha</th><th>Código</th><th>Tipo</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
+    ${movs.map(m=>`<tr><td class="mono small">${fFecha(m.fecha)}</td><td class="mono small">${esc(m.codigo||'—')}</td><td><span class="chip ${m.tipo==='salida'?'rojo':m.tipo==='ingreso'?'verde':''}">${m.tipo}</span></td><td class="trunc" title="${esc(m.producto)}">${esc(m.producto)}</td><td class="num">${num(m.cantidad)}</td><td class="trunc small muted" title="${esc(m.referencia||'')}">${esc(m.referencia||'')}</td></tr>`).join('')}</table>`
     :'<div class="vacio">Sin movimientos aún.</div>'}</div>`;
 }
 async function ingresoInv(){
