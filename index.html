@@ -111,6 +111,16 @@ td .small.sep::before{content:'·';color:var(--line);margin:0 5px}
 /* Celda de una sola línea: si el texto no cabe, se corta con puntos suspensivos.
    Al hacer clic se despliega completo (puede ocupar más de una línea). */
 td.trunc{max-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+/* Tablas del Panel: anchos fijos para las columnas de cifras y de acción, y TODO el espacio
+   sobrante para el nombre del producto (prioridad de lectura pedida por Jefe, 22-07-2026).
+   Los anchos van en ch para que acompañen al botón de zoom. */
+table.panel{table-layout:fixed}
+table.panel th{white-space:normal;vertical-align:bottom}
+table.panel td.trunc{max-width:none}
+table.panel td,table.panel th{padding-left:8px;padding-right:8px}
+table.panel td:first-child,table.panel th:first-child{padding-left:2px}
+table.panel td:last-child,table.panel th:last-child{padding-right:2px}
+.aviso-medida{color:var(--ambar);margin-right:5px;cursor:help}
 td.trunc:hover{background:var(--hover)}
 td.trunc.abierto{white-space:normal;overflow:visible;text-overflow:clip;background:var(--hover)}
 td.num,th.num{text-align:right;font-family:var(--mono);letter-spacing:-.01em}
@@ -598,14 +608,15 @@ function rPanel(){
   /* ZONA SUPERIOR: resumen consolidado solo de confirmado (OC + Pendientes SAP) */
   const zonaResumen=`
   <h2>Resumen consolidado <span class="muted">· confirmado: OC + Pendientes SAP${psapMeta.actualizado?` (reporte del ${fFecha(psapMeta.actualizado)})`:''}</span></h2>
-  ${cons.length?`<div class="card" style="overflow-x:auto"><table>
-    <tr><th>Producto</th><th class="num">Total a despachar</th><th class="num">Pendiente</th><th class="num">Stock</th><th>Compra</th></tr>
+  ${cons.length?`<div class="card" style="overflow-x:auto"><table class="panel" style="min-width:540px">
+    <colgroup><col><col style="width:8ch"><col style="width:8ch"><col style="width:7ch"><col style="width:11ch"></colgroup>
+    <tr><th>Producto</th><th class="num">Total a despachar</th><th class="num">Pendiente</th><th class="num">Stock</th><th class="num">Compra</th></tr>
     ${cons.map(c=>`<tr>
-      <td class="trunc" title="${esc(c.producto)} — ${esc([...c.bodegas].join(', '))}">${esc(c.producto)}${medidaPendiente(c.codigo)?' <span class="chip ambar" title="El documento no especifica la medida: confirmar antes de despachar">Medida por definir</span>':''}<span class="small muted sep">${esc([...c.bodegas].join(' · '))}</span></td>
+      <td class="trunc" title="${esc(c.producto)} — ${esc([...c.bodegas].join(', '))}">${medidaPendiente(c.codigo)?'<i class="fa-solid fa-ruler aviso-medida" title="El documento no especifica la medida: confirmar antes de despachar"></i>':''}${esc(c.producto)}<span class="small muted sep">${esc([...c.bodegas].join(' · '))}</span></td>
       <td class="num">${num(c.cantidad)}</td>
       <td class="num" style="font-weight:600">${num(c.pendiente)}</td>
       <td class="num" style="${c.stock<c.pendiente?'color:var(--rojo);font-weight:600':''}">${num(c.stock)}</td>
-      <td>${c.porComprar>0?`<button class="btn mini sec" onclick="marcarCompra('${encodeURIComponent(c.k)}')"><i class="fa-solid fa-cart-plus"></i> Marcar compra (${num(c.porComprar)})</button>`:'<span class="chip ink"><i class="fa-solid fa-check"></i> Comprada</span>'}</td>
+      <td class="num">${c.porComprar>0?`<button class="btn mini sec" style="white-space:nowrap" onclick="marcarCompra('${encodeURIComponent(c.k)}')" title="Marcar la compra de ${num(c.porComprar)}"><i class="fa-solid fa-cart-plus"></i> ${num(c.porComprar)}</button>`:'<span class="chip ink" title="Comprada"><i class="fa-solid fa-check"></i></span>'}</td>
     </tr>`).join('')}
   </table></div>`:'<div class="card vacio">No hay pendientes confirmados (OC ni Pendientes SAP).</div>'}`;
 
@@ -623,11 +634,12 @@ function rPanel(){
   const th=(lbl,campo,cls='')=>`<th class="${cls}" style="cursor:pointer;user-select:none" onclick="sortPanel('${campo}')">${lbl}${panelSort.campo===campo?(panelSort.dir>0?' <i class="fa-solid fa-arrow-up-short-wide" style="font-size:11px"></i>':' <i class="fa-solid fa-arrow-down-wide-short" style="font-size:11px"></i>'):''}</th>`;
   const tablaGrupo=(dest,fs)=>`
     <h2><i class="fa-solid fa-warehouse" style="font-size:15px;color:var(--muted)"></i> ${esc(dest)} <span class="muted">· ${fs.length} ítem(s) pendiente(s)</span></h2>
-    <div class="card" style="overflow-x:auto"><table>
+    <div class="card" style="overflow-x:auto"><table class="panel" style="min-width:600px">
+      <colgroup><col style="width:12.5ch"><col><col style="width:7ch"><col style="width:8ch"><col style="width:7ch"><col style="width:9ch"></colgroup>
       <tr>${th('OC','oc')}${th('Producto','producto')}${th('Total','cantidad','num')}${th('Pendiente','pendiente','num')}${th('Stock','stock','num')}${th('Precio','precio','num')}</tr>
       ${fs.map(f=>`<tr>
-        <td class="mono">${esc(f.oc)||'—'}${f.origen==='sap'?' <span class="chip">SAP</span>':''}</td>
-        <td class="trunc" title="${esc(f.producto)}">${esc(f.producto)}${medidaPendiente(f.codigo)?' <span class="chip ambar">Medida por definir</span>':''}</td>
+        <td class="mono trunc" title="${esc(f.oc)}${f.origen==='sap'?' (Pendientes SAP)':''}">${esc(f.oc)||'—'}${f.origen==='sap'?' <span class="chip">SAP</span>':''}</td>
+        <td class="trunc" title="${esc(f.producto)}">${medidaPendiente(f.codigo)?'<i class="fa-solid fa-ruler aviso-medida" title="El documento no especifica la medida: confirmar antes de despachar"></i>':''}${esc(f.producto)}</td>
         <td class="num">${num(f.cantidad)}</td>
         <td class="num" style="font-weight:600">${num(f.pendiente)}</td>
         <td class="num" style="${f.stock<f.pendiente?'color:var(--rojo);font-weight:600':''}">${num(f.stock)}</td>
