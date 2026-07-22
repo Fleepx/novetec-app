@@ -510,6 +510,13 @@ function normBodega(b){
   if(x.includes('longovilo'))return 'Longovilo';
   return s;
 }
+/* Producto cuyo documento de origen no especifica la medida: hay que confirmarla antes de
+   despachar, porque en bodega cada medida se cuenta y se carga por separado. */
+function medidaPendiente(codigo){
+  if(!codigo)return false;
+  const p=DB[ARCH.prod].data.productos.find(x=>x.codigo===codigo);
+  return !!(p&&p.medida_pendiente);
+}
 function codigoDeItem(nombre,codigo){
   if(codigo)return codigo;
   const m=prodMaestro(nombre);return m?m.codigo:null;
@@ -591,7 +598,7 @@ function rPanel(){
   ${cons.length?`<div class="card" style="overflow-x:auto"><table>
     <tr><th>Producto</th><th class="num">Total a despachar</th><th class="num">Pendiente</th><th class="num">Stock</th><th>Compra</th></tr>
     ${cons.map(c=>`<tr>
-      <td class="trunc" title="${esc(c.producto)} — ${esc([...c.bodegas].join(', '))}">${c.codigo?`<span class="mono small muted">${esc(c.codigo)}</span> `:''}${esc(c.producto)}<span class="small muted sep">${esc([...c.bodegas].join(' · '))}</span></td>
+      <td class="trunc" title="${esc(c.producto)} — ${esc([...c.bodegas].join(', '))}">${c.codigo?`<span class="mono small muted">${esc(c.codigo)}</span> `:''}${esc(c.producto)}${medidaPendiente(c.codigo)?' <span class="chip ambar" title="El documento no especifica la medida: confirmar antes de despachar">Medida por definir</span>':''}<span class="small muted sep">${esc([...c.bodegas].join(' · '))}</span></td>
       <td class="num">${num(c.cantidad)}</td>
       <td class="num" style="font-weight:600">${num(c.pendiente)}</td>
       <td class="num" style="${c.stock<c.pendiente?'color:var(--rojo);font-weight:600':''}">${num(c.stock)}</td>
