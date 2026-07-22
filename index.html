@@ -242,9 +242,9 @@ async function guardarArchivo(p,msg){
     throw e;
   }
 }
-async function subirDocumento(carpeta,file){
+async function subirDocumento(carpeta,file,nombreFijo){
   const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file)});
-  const ruta=`documentos/${carpeta}/${Date.now()}_${file.name.replace(/[^\w.\-]/g,'_')}`;
+  const ruta=`documentos/${carpeta}/${nombreFijo||(Date.now()+'_'+file.name.replace(/[^\w.\-]/g,'_'))}`;
   await gh(`contents/${ruta}`,{method:'PUT',body:JSON.stringify({message:`Documento: ${file.name}`,content:b64})});
   return ruta;
 }
@@ -841,6 +841,217 @@ function tagOC(o){
   </div></div>`;
 }
 
+
+/* ================= Lectura automática de OC de SAP en PDF (etapa 1) =================
+   pdf.js vive en lib/ dentro de este mismo repo. Se carga solo cuando se usa.
+   NADA se guarda sin que Jefe lo confirme en pantalla. */
+let ocLeida=null;
+async function cargarPdfJs(){
+  if(window._pdfjs)return window._pdfjs;
+  const m=await import('./lib/pdf.min.mjs');
+  m.GlobalWorkerOptions.workerSrc='./lib/pdf.worker.min.mjs';
+  window._pdfjs=m;return m;
+}
+/* Reconstruye las líneas respetando las distancias horizontales: los PDF de SAP vienen
+   en dos columnas y sin esto el texto legal se mezcla con los datos. */
+function lineasDePdf(paginas){
+  const items=[].concat(...paginas).filter(i=>i.str.trim());
+  if(!items.length)return [];
+  const anchos=items.filter(i=>i.str.length>1&&i.w>0).map(i=>i.w/i.str.length).sort((a,b)=>a-b);
+  const u=anchos[Math.floor(anchos.length/2)]||5;
+  const filas={};
+  items.forEach(i=>{const y=Math.round(i.y/3);(filas[y]=filas[y]||[]).push(i)});
+  const minX=Math.min(...items.map(i=>i.x));
+  return Object.keys(filas).sort((a,b)=>b-a).map(y=>{
+    let s='';
+    filas[y].sort((a,b)=>a.x-b.x).forEach(i=>{
+      const col=Math.round((i.x-minX)/u);
+      if(col>s.length)s+=' '.repeat(col-s.length);
+      s+=i.str;
+    });
+    return s.replace(/\s+$/,'');
+  }).filter(l=>l.trim());
+}
+const nSap=s=>{const t=String(s).trim().replace(/\./g,'').replace(',','.');return Math.round(parseFloat(t)*100)/100};
+const REGLAS_BODEGA=[[/SAN FRANCISCO|MOSTAZAL/,'San Francisco de Mostazal'],[/CENTRAL|RANCAGUA/,'Rancagua'],
+                     [/PEUMO|CALERA/,'El Peumo'],[/LONGOVILO/,'Longovilo']];
+function parseOC(lineas){
+  const txt=lineas.join('\n');
+  const g=(re,i=1)=>{const m=txt.match(re);return m?m[i].trim():null};
+  const fe=txt.match(/Fecha\s*:\s*(\d{2})\.(\d{2})\.(\d{4})/);
+  const items=[];
+  lineas.forEach(l=>{
+    const m=l.match(/^\s*(\d{2,3})\s+([\d.,]+)\s+([A-Z]{1,4})\s+Cod:\s*(\d{10})?\s*(.+?)\s{2,}([\d.,]+)\s+([\d.,]+)\s*$/);
+    if(m)items.push({pos:+m[1],cantidad:nSap(m[2]),unidad:m[3],codigo_sap:m[4]||null,
+                     producto:m[5].trim(),precio:nSap(m[6]),total:nSap(m[7])});
+  });
+  const mman=txt.match(/(?:ENTREGAR EN|DESPACHAR A)\s+([A-ZÁÉÍÓÚÑ ]{4,})/);
+  const crudo=(mman?mman[1]:g(/Lugar de Entrega\s*:\s*(.+?)(?:Direcci|$)/m))||'';
+  const bod=REGLAS_BODEGA.find(([re])=>re.test(crudo.toUpperCase()));
+  const mt=txt.match(/TOTAL SIN IVA\s*:?\s*([\d.,]+)/);
+  return {folio:g(/N[ºo°]\s*:\s*(45009\d{5})/),fecha_emision:fe?`${fe[3]}-${fe[2]}-${fe[1]}`:null,
+          cotizacion_sap:g(/Cotización\s*:\s*(\d+)/),emisor:g(/Emisor O\/C\s*:\s*(.+)/),
+          destino_texto:crudo.trim(),destino:bod?bod[1]:null,
+          total_documento:mt?nSap(mt[1]):null,items};
+}
+function validarOC(oc){
+  const e=[];
+  if(!oc.folio)e.push('No se encontró el número de la orden de compra (formato 45009XXXXX).');
+  if(!oc.fecha_emision)e.push('No se encontró la fecha de emisión.');
+  if(!oc.destino)e.push(`No se reconoció la bodega de destino${oc.destino_texto?` (el documento dice "${oc.destino_texto}")`:''}.`);
+  if(!oc.items.length)e.push('No se encontró ninguna línea de producto.');
+  oc.items.forEach(i=>{if(Math.abs(i.cantidad*i.precio-i.total)>0.5)
+    e.push(`Línea ${i.pos} (${i.producto}): ${num(i.cantidad)} × ${clp(i.precio)} no da ${clp(i.total)}.`)});
+  const suma=oc.items.reduce((a,i)=>a+i.total,0);
+  if(oc.total_documento!=null&&Math.abs(suma-oc.total_documento)>0.5)
+    e.push(`La suma de las líneas (${clp(suma)}) no coincide con el total del documento (${clp(oc.total_documento)}).`);
+  if(oc.folio&&DB[ARCH.oc].data.ordenes.some(o=>String(o.folio)===oc.folio))
+    e.push(`La orden de compra ${oc.folio} ya está cargada en el sistema.`);
+  return e;
+}
+function consolidarOC(items){
+  const m=new Map();
+  items.forEach(i=>{const k=(i.codigo_sap||i.producto)+'|'+i.precio;
+    if(m.has(k)){const c=m.get(k);c.cantidad+=i.cantidad;c.total+=i.total;c.fusion++}
+    else m.set(k,{...i,fusion:1})});
+  return [...m.values()].sort((a,b)=>a.pos-b.pos);
+}
+/* Resolución contra el maestro: lo inequívoco se resuelve solo, lo dudoso queda para Jefe */
+function resolverItems(items){
+  const prods=DB[ARCH.prod].data.productos;
+  const nrm=t=>String(t||'').toUpperCase().replace(/Ñ/g,'N').replace(/[^A-Z0-9]/g,'');
+  return items.map(i=>{
+    const porSap=i.codigo_sap?prods.filter(p=>(p.codigos_cliente||{}).agrosuper===i.codigo_sap):[];
+    const porNom=prods.filter(p=>nrm(p.nombre)===nrm(i.producto));
+    let estado='nuevo',codigo=null,opciones=[];
+    if(porSap.length&&porNom.length&&porSap.some(p=>porNom.includes(p))){
+      estado='existente';codigo=porSap.find(p=>porNom.includes(p)).codigo;
+    }else if(porSap.length===1&&!porNom.length){estado='existente';codigo=porSap[0].codigo;
+    }else if(porNom.length===1&&!porSap.length){estado='existente';codigo=porNom[0].codigo;
+    }else if(porSap.length||porNom.length){
+      estado='ambiguo';opciones=[...new Set([...porSap,...porNom])].map(p=>({codigo:p.codigo,nombre:p.nombre}));
+      codigo='';
+    }
+    return {...i,estado,codigo,opciones};
+  });
+}
+async function leerOCpdf(){
+  const inp=document.getElementById('oc-pdf');
+  const f=inp&&inp.files[0];
+  if(!f){toast('Elige el PDF de la orden de compra.');return}
+  velo(true,'Leyendo el PDF…');
+  try{
+    const h=await huella(f);
+    const reg=(DB[ARCH.arch]&&DB[ARCH.arch].data.archivos)||[];
+    const previo=reg.find(r=>r.hash===h);
+    const pdfjs=await cargarPdfJs();
+    const doc=await pdfjs.getDocument({data:new Uint8Array(await f.arrayBuffer())}).promise;
+    const pags=[];
+    for(let p=1;p<=doc.numPages;p++){
+      const c=await (await doc.getPage(p)).getTextContent();
+      pags.push(c.items.map(i=>({str:i.str,x:i.transform[4],y:i.transform[5],w:i.width})));
+    }
+    const lineas=lineasDePdf(pags);
+    if(!lineas.length){velo(false);toast('El PDF no tiene texto legible: es una imagen escaneada. Súbelo a la cola para que lo procese el administrador.');return}
+    const oc=parseOC(lineas);
+    oc.items=consolidarOC(oc.items);
+    ocLeida={...oc,archivo:f,hash:h,previo:previo||null,
+             errores:validarOC(oc),resueltos:resolverItems(oc.items),
+             fecha_entrega:oc.fecha_emision?new Date(Date.parse(oc.fecha_emision)+15*864e5).toISOString().slice(0,10):null};
+    render();
+    toast(ocLeida.errores.length?'Leído con observaciones: revísalas antes de guardar.':'PDF leído. Revisa y confirma.');
+  }catch(e){toast('No se pudo leer el PDF: '+e.message)}
+  velo(false);
+}
+function descartarOCLeida(){ocLeida=null;render();toast('Lectura descartada')}
+function fijarCodigo(pos,val){const r=ocLeida.resueltos.find(x=>x.pos===pos);if(r)r.codigo=val}
+async function guardarOCLeida(){
+  const o=ocLeida;
+  if(!o)return;
+  if(o.errores.length){toast('Hay observaciones sin resolver: no se puede guardar.');return}
+  const sinDefinir=o.resueltos.filter(r=>r.estado==='ambiguo'&&!r.codigo);
+  if(sinDefinir.length){toast(`Falta decidir el producto de ${sinDefinir.length} línea(s).`);return}
+  velo(true,'Guardando la orden de compra…');
+  try{
+    const d=DB[ARCH.prod].data;
+    const items=o.resueltos.map(r=>{
+      let cod=r.codigo;
+      if(r.estado==='nuevo'||cod==='__nuevo__'){
+        d.correlativo++;cod='NOV-'+String(d.correlativo).padStart(4,'0');
+        d.productos.push({codigo:cod,nombre:r.producto,unidad:r.unidad||'UN',
+                          codigos_cliente:r.codigo_sap?{agrosuper:r.codigo_sap}:{},alias:[]});
+      }else if(r.codigo_sap){
+        const p=d.productos.find(x=>x.codigo===cod);
+        if(p){p.codigos_cliente=p.codigos_cliente||{};if(!p.codigos_cliente.agrosuper)p.codigos_cliente.agrosuper=r.codigo_sap}
+      }
+      return {producto:r.producto,codigo:cod,codigo_sap:r.codigo_sap,cantidad:r.cantidad,
+              unidad:r.unidad,precio_unitario:r.precio,cantidad_comprada:0,cantidad_despachada:0};
+    });
+    const ruta=`documentos/ordenes_compra/OC_${o.folio}.pdf`;
+    await subirDocumento('ordenes_compra',o.archivo,`OC_${o.folio}.pdf`);
+    DB[ARCH.oc].data.ordenes.push({folio:o.folio,cotizacion_id:null,cotizacion_sap:o.cotizacion_sap,
+      emisor:o.emisor,fecha_emision:o.fecha_emision,fecha_entrega:o.fecha_entrega,destino:o.destino,
+      cliente:'Agricola Super Ltda',items,compras:[],guias:[],archivo:ruta,
+      notas:'Leída automáticamente desde el PDF y confirmada en pantalla. Fecha de entrega = emisión + 15 días.'});
+    (DB[ARCH.arch].data.archivos).push({hash:o.hash,nombre:o.archivo.name,tipo:'ordenes_compra',
+      ruta,estado:'procesado',fecha:hoyISO(),referencia:'OC '+o.folio});
+    await guardarArchivo(ARCH.prod,`Maestro: productos de la OC ${o.folio}`);
+    await guardarArchivo(ARCH.oc,`OC ${o.folio} cargada desde el PDF`);
+    await guardarArchivo(ARCH.arch,`Registro de archivos: OC ${o.folio}`);
+    ocLeida=null;toast(`Orden de compra ${o.folio} cargada`);render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+function panelOCLeida(){
+  const o=ocLeida;if(!o)return '';
+  const err=o.errores;
+  const filas=o.resueltos.map(r=>{
+    const et=r.estado==='existente'?`<span class="chip verde">${esc(r.codigo)}</span>`
+      :r.estado==='nuevo'?'<span class="chip ambar">producto nuevo</span>'
+      :`<select onchange="fijarCodigo(${r.pos},this.value)" style="width:100%">
+          <option value="">Elige el producto…</option>
+          ${r.opciones.map(op=>`<option value="${esc(op.codigo)}"${r.codigo===op.codigo?' selected':''}>${esc(op.codigo)} · ${esc(op.nombre)}</option>`).join('')}
+          <option value="__nuevo__">Crear un producto nuevo</option>
+        </select>`;
+    return `<tr>
+      <td class="trunc" title="${esc(r.producto)}">${esc(r.producto)}${r.fusion>1?` <span class="chip">${r.fusion} líneas sumadas</span>`:''}</td>
+      <td class="mono small">${esc(r.codigo_sap||'—')}</td>
+      <td class="num">${num(r.cantidad)}</td>
+      <td class="num">${clp(r.precio)}</td>
+      <td class="num">${clp(r.total)}</td>
+      <td>${et}</td></tr>`;}).join('');
+  return `<div class="card" style="border-color:${err.length?'var(--rojo)':'var(--verde)'};border-width:2px">
+    <div class="top" style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <span class="folio mono">OC ${esc(o.folio||'sin folio')}</span>
+      <span class="chip ${err.length?'rojo':'verde'}">${err.length?'con observaciones':'todo cuadra'}</span>
+      <span class="muted small">leída del PDF · confirma antes de guardar</span>
+    </div>
+    ${o.previo?`<div class="card" style="border-color:var(--ambar);margin-bottom:10px"><b>Este archivo ya había entrado al sistema</b><div class="small muted">${esc(o.previo.nombre||'')} · ${esc(o.previo.estado)}${o.previo.referencia?' · '+esc(o.previo.referencia):''}</div></div>`:''}
+    <div class="grid3">
+      <div><label>Emisión</label><div class="mono">${fFecha(o.fecha_emision)}</div></div>
+      <div><label>Entrega (emisión + 15 días)</label><div class="mono">${fFecha(o.fecha_entrega)}</div></div>
+      <div><label>Destino</label><div class="mono">${esc(o.destino||'—')}</div><div class="small muted">documento: "${esc(o.destino_texto||'')}"</div></div>
+      <div><label>Emisor</label><div class="mono small">${esc(o.emisor||'—')}</div></div>
+      <div><label>Cotización SAP</label><div class="mono small">${esc(o.cotizacion_sap||'sin cotización')}</div></div>
+      <div><label>Total sin IVA</label><div class="mono">${clp(o.total_documento)}</div></div>
+    </div>
+    <table class="tprod" style="margin-top:14px;min-width:640px">
+      <colgroup><col><col style="width:12ch"><col style="width:7ch"><col style="width:10ch"><col style="width:11ch"><col style="width:20ch"></colgroup>
+      <tr><th>Producto</th><th>Cód. SAP</th><th class="num">Cant.</th><th class="num">Precio</th><th class="num">Total</th><th>En el maestro</th></tr>
+      ${filas}
+    </table>
+    ${err.length?`<div class="card" style="border-color:var(--rojo);margin-top:12px">
+      <b style="color:var(--rojo)">No se puede guardar hasta resolver esto:</b>
+      <ul style="margin:8px 0 0 18px">${err.map(e=>`<li class="small">${esc(e)}</li>`).join('')}</ul>
+      <p class="small muted" style="margin-top:8px">Si el documento no es una OC de SAP o viene con un formato distinto, súbelo a la cola y lo procesa el administrador.</p>
+    </div>`:'<p class="small muted" style="margin-top:12px">Se verificó que cada línea cuadre (cantidad × precio = total), que la suma dé el total del documento, que la bodega esté en la lista y que el folio no esté cargado.</p>'}
+    <div class="acciones">
+      <button class="btn" onclick="guardarOCLeida()" ${err.length?'disabled style="opacity:.45;cursor:not-allowed"':''}>Guardar esta orden de compra</button>
+      <button class="btn sec" onclick="descartarOCLeida()">Descartar</button>
+    </div>
+  </div>`;
+}
+
 /* ================= Cotizaciones ================= */
 function filaItem(pre={}){
   return `<div class="item-row">
@@ -984,6 +1195,12 @@ function rOC(){
   const psapD=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{registros:[]};
   const psapReg=psapD.registros||[];
   return `${dlProd()}
+  ${ocLeida?panelOCLeida():`<details class="form" open><summary>Leer una orden de compra desde el PDF</summary><div class="inner">
+    <p class="small muted" style="margin-top:10px">Para las OC de SAP en PDF: la app las lee, valida los totales y te muestra lo que encontró para que confirmes. Nada se guarda sin tu aprobación. Si el PDF es una foto escaneada o el formato es otro, súbelo a la cola de más abajo.</p>
+    <label>Archivo PDF de la orden de compra</label>
+    <input type="file" id="oc-pdf" accept=".pdf">
+    <div class="acciones"><button class="btn" onclick="leerOCpdf()"><i class="fa-solid fa-file-import"></i> Leer el PDF</button></div>
+  </div></details>`}
   ${formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${psapReg.length?`<details class="form"><summary>Pendientes SAP cargados (${psapReg.length})${psapD.actualizado?` · reporte del ${fFecha(psapD.actualizado)}`:''}</summary><div class="inner" style="overflow-x:auto">
     <p class="small muted" style="margin-top:10px">Registros del último reporte SAP de adjudicados. Si un Doc. compras ya está cargado como OC, en el Panel manda la OC y el registro se omite.</p>
