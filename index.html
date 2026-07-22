@@ -681,64 +681,85 @@ async function marcarCompra(ke){
   if(!c||c.porComprar<=0){toast('No hay compra pendiente para este producto.');return}
   const porBod={};
   c.lineas.filter(l=>l.porComprar>0).forEach(l=>{porBod[l.bodega]=(porBod[l.bodega]||0)+l.porComprar});
-  const bods=Object.keys(porBod);
-  let reparto;
-  if(bods.length<=1){
-    reparto=bods.length?{[bods[0]]:c.porComprar}:{};
-  }else{
-    reparto=await modalReparto(c,porBod);
-    if(!reparto)return;
-  }
+  const reparto=await modalCompra(c,porBod);   // SIEMPRE pregunta la cantidad comprada
+  if(!reparto)return;
   await aplicarCompra(c,reparto);
 }
-function modalReparto(c,porBod){
+function modalCompra(c,porBod){
   return new Promise(res=>{
-    const ov=document.createElement('div');ov.className='modal-ov';
     const bods=Object.keys(porBod);
+    const varias=bods.length>1;
+    const ov=document.createElement('div');ov.className='modal-ov';
     ov.innerHTML=`<div class="modal">
-      <b>Reparto de la compra por bodega</b>
-      <p class="small muted">"<b>${esc(c.producto)}</b>" tiene destino en ${bods.length} bodegas. La compra ingresa al inventario por el TOTAL del producto (<b class="mono">${num(c.porComprar)}</b>, un solo código y stock global); indica cómo se repartirá entre bodegas.</p>
-      ${bods.map(b=>`<label>${esc(b)} <span class="muted" style="text-transform:none;font-weight:400">· pendiente de compra: ${num(porBod[b])}</span></label>
-        <input type="number" class="rep-inp" data-b="${esc(b)}" min="0" step="any" value="${porBod[b]}">`).join('')}
-      <p class="small mono" id="rep-suma" style="margin-top:10px"></p>
-      <div class="acciones"><button class="btn mini" id="rep-ok">Confirmar reparto</button><button class="btn mini sec" id="rep-cancel">Cancelar</button></div>
+      <b>¿Cuánto se compró?</b>
+      <p class="small muted">${esc(c.producto)} · pendiente de compra: <b class="mono">${num(c.porComprar)}</b>.
+      No hace falta comprar el total: lo que no ingreses queda pendiente y sigue apareciendo en el Panel.</p>
+      ${varias
+        ? `<p class="small muted">Este producto va a ${bods.length} bodegas. Indica cuánto compraste para cada una.</p>`+
+          bods.map(b=>`<label>${esc(b)} <span class="muted" style="text-transform:none;font-weight:400">· pendiente ${num(porBod[b])}</span></label>
+            <input type="number" class="cmp-inp" data-b="${esc(b)}" min="0" max="${porBod[b]}" step="any" value="${porBod[b]}">`).join('')
+        : `<label>Cantidad comprada <span class="muted" style="text-transform:none;font-weight:400">· máximo ${num(c.porComprar)}</span></label>
+           <input type="number" class="cmp-inp" data-b="${esc(bods[0]||'')}" min="0" max="${c.porComprar}" step="any" value="${c.porComprar}">`}
+      <p class="small mono" id="cmp-res" style="margin-top:12px"></p>
+      <div class="acciones"><button class="btn mini" id="cmp-ok">Registrar compra</button><button class="btn mini sec" id="cmp-cancel">Cancelar</button></div>
     </div>`;
     document.body.appendChild(ov);
-    const suma=()=>[...ov.querySelectorAll('.rep-inp')].reduce((a,i)=>a+(+i.value||0),0);
-    const actualizar=()=>{const s=suma();const el=ov.querySelector('#rep-suma');
-      el.textContent=`Suma del reparto: ${num(s)} de ${num(c.porComprar)}`;
-      el.style.color=s===c.porComprar?'var(--verde)':'var(--rojo)';};
-    ov.querySelectorAll('.rep-inp').forEach(i=>i.oninput=actualizar);actualizar();
-    ov.querySelector('#rep-ok').onclick=()=>{
-      if(suma()!==c.porComprar){toast(`El reparto debe sumar exactamente ${num(c.porComprar)}.`);return}
-      const r={};ov.querySelectorAll('.rep-inp').forEach(i=>{r[i.dataset.b]=+i.value||0});
+    const inps=[...ov.querySelectorAll('.cmp-inp')];
+    const suma=()=>inps.reduce((a,i)=>a+(+i.value||0),0);
+    const refrescar=()=>{
+      const s=suma(),queda=c.porComprar-s,el=ov.querySelector('#cmp-res');
+      if(s<=0){el.textContent='Ingresa una cantidad mayor que cero.';el.style.color='var(--rojo)';return}
+      if(s>c.porComprar){el.textContent=`Te pasaste: el pendiente es ${num(c.porComprar)}.`;el.style.color='var(--rojo)';return}
+      el.textContent=queda>0?`Entran ${num(s)} al inventario · quedan ${num(queda)} pendientes de compra`
+                            :`Entran ${num(s)} al inventario · queda todo comprado`;
+      el.style.color=queda>0?'var(--ambar)':'var(--verde)';
+    };
+    inps.forEach(i=>{i.oninput=refrescar});refrescar();
+    setTimeout(()=>{inps[0]&&inps[0].select()},50);
+    ov.querySelector('#cmp-ok').onclick=()=>{
+      const s=suma();
+      if(s<=0){toast('Ingresa la cantidad comprada.');return}
+      if(s>c.porComprar){toast(`No puedes registrar más de ${num(c.porComprar)}.`);return}
+      const r={};inps.forEach(i=>{const q=+i.value||0;if(q>0)r[i.dataset.b]=q});
       ov.remove();res(r);};
-    ov.querySelector('#rep-cancel').onclick=()=>{ov.remove();res(null)};
+    ov.querySelector('#cmp-cancel').onclick=()=>{ov.remove();res(null)};
   });
 }
 async function aplicarCompra(c,reparto){
   velo(true,'Marcando compra…');
   try{
     const fecha=hoyISO();
-    let tocaOC=false,tocaPsap=false;
-    c.lineas.filter(l=>l.porComprar>0).forEach(l=>{
-      l.ref.cantidad_comprada=(+l.ref.cantidad_comprada||0)+l.porComprar;
-      if(l.origen==='oc')tocaOC=true;else tocaPsap=true;
+    let tocaOC=false,tocaPsap=false,total=0;
+    // Lo comprado se imputa dentro de cada bodega, línea por línea, empezando por la OC más
+    // antigua. Lo que no alcanza a cubrirse queda pendiente y vuelve a aparecer en el Panel.
+    Object.entries(reparto).forEach(([bod,cant])=>{
+      let queda=+cant||0;
+      c.lineas.filter(l=>l.bodega===bod&&l.porComprar>0)
+        .sort((a,b)=>String(a.oc).localeCompare(String(b.oc),'es',{numeric:true}))
+        .forEach(l=>{
+          if(queda<=0)return;
+          const usa=Math.min(queda,l.porComprar);
+          l.ref.cantidad_comprada=(+l.ref.cantidad_comprada||0)+usa;
+          queda-=usa;total+=usa;
+          if(l.origen==='oc')tocaOC=true;else tocaPsap=true;
+        });
     });
+    if(total<=0){velo(false);toast('No se registró ninguna cantidad.');return}
     // Ingreso al inventario por el TOTAL (un código, stock global)
     const inv=DB[ARCH.inv].data;
     let m=c.codigo?DB[ARCH.prod].data.productos.find(p=>p.codigo===c.codigo):prodMaestro(c.producto);
     if(!m)m=crearProdMaestro(c.producto,'UN');
     let p=inv.productos.find(x=>x.codigo===m.codigo);
     if(!p){p={codigo:m.codigo,nombre:m.nombre,cantidad:0,unidad:m.unidad};inv.productos.push(p)}
-    p.cantidad+=c.porComprar;
+    p.cantidad+=total;
     const repTxt=Object.entries(reparto).map(([b,q])=>`${b} ${num(q)}`).join(', ');
-    inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:c.porComprar,referencia:`Compra marcada (Panel)${repTxt?' · reparto: '+repTxt:''}`});
+    inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:total,referencia:`Compra marcada (Panel)${repTxt?' · reparto: '+repTxt:''}`});
     await guardarMaestroSiNuevo();
     if(tocaOC)await guardarArchivo(ARCH.oc,`Compra marcada: ${m.nombre}`);
     if(tocaPsap)await guardarArchivo(ARCH.psap,`Compra marcada (Pendientes SAP): ${m.nombre}`);
-    await guardarArchivo(ARCH.inv,`Inventario: ingreso por compra marcada (${m.nombre} +${c.porComprar})`);
-    toast(`Compra marcada: ${m.nombre} (+${num(c.porComprar)} al inventario)`);
+    await guardarArchivo(ARCH.inv,`Inventario: ingreso por compra marcada (${m.nombre} +${total})`);
+    const resta=c.porComprar-total;
+    toast(`Compra registrada: ${m.nombre} +${num(total)} al inventario${resta>0?` · quedan ${num(resta)} pendientes`:''}`);
     render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
