@@ -1459,18 +1459,30 @@ function rGuias(){
   ${(()=>{
     const gs=DB[ARCH.guias].data.guias;
     if(!gs.length)return '<div class="card vacio">Aún no hay guías registradas.</div>';
-    // Agrupar por bodega y, dentro, por fecha (ambas ordenadas)
+    /* La fecha que agrupa es la FECHA DE ENVÍO de la hoja de ruta (el día que salió el camión),
+       no la fecha propia de la guía: dos guías con fechas distintas pueden haber viajado juntas.
+       Las que todavía no están en ninguna hoja de ruta van aparte, al inicio. */
+    const hojas=DB[ARCH.hr].data.hojas;
+    const fechaEnvio=g=>{
+      const h=hojas.find(x=>String(x.numero)===String(g.hoja_ruta));
+      return h?(h.fecha_envio||h.fecha||null):null;
+    };
+    const SINENV='__sin__';
     const porBod={};
-    gs.forEach(g=>{const b=normBodega(g.destino||'Sin destino');(porBod[b]=porBod[b]||{}).x=1;
-      (porBod[b][g.fecha]=porBod[b][g.fecha]||[]).push(g)});
-    const orden=BODEGAS_ORDEN.filter(b=>porBod[b]).concat(Object.keys(porBod).filter(b=>!BODEGAS_ORDEN.includes(b)&&b!=='x').sort((a,b)=>a.localeCompare(b,'es')));
+    gs.forEach(g=>{const b=normBodega(g.destino||'Sin destino');
+      const f=fechaEnvio(g)||SINENV;
+      (porBod[b]=porBod[b]||{})[f]=(porBod[b][f]||[]).concat(g)});
+    const orden=BODEGAS_ORDEN.filter(b=>porBod[b]).concat(Object.keys(porBod).filter(b=>!BODEGAS_ORDEN.includes(b)).sort((a,b)=>a.localeCompare(b,'es')));
     return orden.map(b=>{
-      const fechas=Object.keys(porBod[b]).filter(k=>k!=='x').sort((a,b)=>b.localeCompare(a));
-      const totalG=fechas.reduce((s,f)=>s+porBod[b][f].length,0);
+      const claves=Object.keys(porBod[b]);
+      const fechas=claves.filter(k=>k!==SINENV).sort((a,b)=>b.localeCompare(a));
+      if(claves.includes(SINENV))fechas.unshift(SINENV);
+      const totalG=claves.reduce((s,f)=>s+porBod[b][f].length,0);
       return `<div class="acc-bodega">
         <div class="bodega-lbl"><i class="fa-solid fa-warehouse" style="font-size:14px;color:var(--muted)"></i> ${esc(b)} <span class="muted">· ${totalG} guía(s)</span></div>
-        ${fechas.map(f=>{const dia=porBod[b][f];
-          return `<details class="acc-fecha"><summary>${fFecha(f)}<span class="cnt">${dia.length} guía(s)</span></summary><div class="cuerpo">
+        ${fechas.map(f=>{const dia=porBod[b][f];const sin=f===SINENV;
+          const hoja=sin?null:hojas.find(x=>String(x.numero)===String(dia[0].hoja_ruta));
+          return `<details class="acc-fecha"${sin?' open':''}><summary>${sin?'<span class="chip ambar">Pendientes de envío</span>':`Envío ${fFecha(f)}${hoja?` <span class="chip">Hoja de ruta N°${esc(String(hoja.numero))}</span>`:''}`}<span class="cnt">${dia.length} guía(s)</span></summary><div class="cuerpo">
             ${dia.map(tarjetaGuia).join('')}
           </div></details>`;}).join('')}
       </div>`;
@@ -1493,8 +1505,9 @@ function tarjetaGuia(g){
   return `<div class="card">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <span class="mono" style="font-weight:700;font-size:var(--fs-lg)">Guía N° ${esc(g.numero)}</span>
+      <span class="chip" title="Fecha de la guía">${fFecha(g.fecha)}</span>
       <span class="chip ink">OC ${esc(g.oc||g.folio_oc)}</span>
-      ${g.hoja_ruta?`<span class="chip verde">Hoja de ruta N°${g.hoja_ruta}</span>`:'<span class="chip ambar">Sin hoja de ruta</span>'}
+      ${g.hoja_ruta?'':'<span class="chip ambar">Sin hoja de ruta</span>'}
       <button class="btn mini peligro" style="margin-left:auto" onclick="borrarGuia('${esc(g.numero)}')">Eliminar</button>
     </div>
     <table class="tprod" style="margin-top:12px;min-width:520px"><colgroup><col><col><col style="width:11ch"></colgroup>
