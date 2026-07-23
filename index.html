@@ -161,6 +161,17 @@ td.num,th.num{text-align:right;font-family:var(--mono);letter-spacing:-.01em}
 .modal .cand{display:block;width:100%;text-align:left;border:1px solid var(--line);background:var(--campo);border-radius:8px;padding:11px 13px;margin-top:8px;cursor:pointer;font-family:var(--sans);font-size:var(--fs-sm);line-height:1.4}
 .modal .cand:hover{border-color:var(--texto);background:var(--hover)}
 .modal .cand.nuevo{border-style:dashed;color:var(--muted);margin-top:14px}
+/* Ventana de ingreso de montos: reemplaza a prompt() del navegador. */
+.monto-ctx{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px}
+.monto-ctx div{background:var(--sub-bg);border:1px solid var(--line);border-radius:8px;padding:7px 11px;flex:1;min-width:96px}
+.monto-ctx .et{font-size:var(--fs-xs);color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.monto-ctx .va{font-family:var(--mono);font-size:var(--fs-lg);font-weight:600;line-height:1.25}
+.monto-campo{display:flex;align-items:stretch;gap:8px;margin-top:4px}
+.monto-campo input{font-size:26px;font-weight:600;text-align:right;padding:12px 14px;letter-spacing:-.01em}
+.monto-campo .uni{display:flex;align-items:center;color:var(--muted);font-family:var(--mono);font-size:var(--fs-sm);white-space:nowrap}
+.monto-aviso{font-size:var(--fs-sm);margin-top:9px;min-height:1.3em;line-height:1.35}
+.monto-aviso.mal{color:var(--rojo);font-weight:600}
+.monto-aviso.bien{color:var(--muted)}
 .dropzone{border:2px dashed var(--line);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;background:var(--campo);transition:all .15s}
 .dropzone.hover{border-color:var(--texto);background:var(--hover)}
 .dropzone .dz-icono{font-size:26px;color:var(--muted);margin-bottom:6px}
@@ -800,6 +811,62 @@ function alternarNombres(btn){
                      :'<i class="fa-solid fa-arrows-up-down-left-right"></i> Desplegar nombres';
 }
 
+/* ===== Ingreso de cantidades =====
+   Ventana propia de la app. Sustituye a prompt() del navegador, que no valida mientras se
+   escribe, no respeta el tema, puede abrir teclado alfabético en el teléfono, solo admite un
+   campo y el navegador permite bloquearlo (Jefe, 22-07-2026).
+   Devuelve {valor, extra} o null si se cancela. */
+function pedirMonto(o){
+  return new Promise(res=>{
+    const min=o.min??0, max=(o.max===undefined||o.max===null)?Infinity:o.max;
+    const ov=document.createElement('div');ov.className='modal-ov';
+    ov.innerHTML=`<div class="modal">
+      <b>${esc(o.titulo)}</b>
+      ${o.producto?`<p class="small muted" style="margin-top:4px">${esc(o.producto)}</p>`:''}
+      ${(o.contexto||[]).length?`<div class="monto-ctx">${o.contexto.map(c=>`<div><div class="et">${esc(c.et)}</div><div class="va">${esc(String(c.va))}</div></div>`).join('')}</div>`:''}
+      <label style="margin-top:12px">${esc(o.etiqueta||'Cantidad')}</label>
+      <div class="monto-campo">
+        <input id="mo-val" type="text" inputmode="decimal" autocomplete="off" value="${o.valor??''}">
+        ${o.unidad?`<span class="uni">${esc(o.unidad)}</span>`:''}
+        ${isFinite(max)?`<button class="btn mini sec" type="button" id="mo-max" title="Usar el máximo">Todo</button>`:''}
+      </div>
+      <div class="monto-aviso bien" id="mo-aviso"></div>
+      ${o.extra?`<label>${esc(o.extra.etiqueta)}</label>
+        <input id="mo-extra" placeholder="${esc(o.extra.placeholder||'')}" value="${esc(o.extra.valor||'')}">`:''}
+      <div class="acciones">
+        <button class="btn mini" id="mo-ok">${esc(o.confirmar||'Confirmar')}</button>
+        <button class="btn mini sec" id="mo-cancel">Cancelar</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    const inp=ov.querySelector('#mo-val'), aviso=ov.querySelector('#mo-aviso'), ok=ov.querySelector('#mo-ok');
+    const leer=()=>{const t=inp.value.trim().replace(',','.');return t===''?NaN:Number(t)};
+    const revisar=()=>{
+      const v=leer();
+      let mal='';
+      if(isNaN(v))mal='Escribe una cantidad.';
+      else if(v<min)mal=`No puede ser menor que ${num(min)}.`;
+      else if(v>max)mal=`El máximo es ${num(max)}.`;
+      aviso.className='monto-aviso '+(mal?'mal':'bien');
+      aviso.textContent=mal||(o.resultado&&!isNaN(v)?o.resultado(v):'');
+      ok.disabled=!!mal;ok.style.opacity=mal?.45:1;ok.style.cursor=mal?'not-allowed':'pointer';
+      return !mal;
+    };
+    inp.addEventListener('input',revisar);
+    const cerrar=r=>{document.removeEventListener('keydown',tecla);ov.remove();res(r)};
+    const aceptar=()=>{if(revisar())cerrar({valor:leer(),extra:(ov.querySelector('#mo-extra')||{}).value?.trim()||''})};
+    const tecla=e=>{if(e.key==='Escape')cerrar(null);else if(e.key==='Enter'&&document.activeElement!==ov.querySelector('#mo-cancel'))aceptar()};
+    document.addEventListener('keydown',tecla);
+    ok.onclick=aceptar;
+    ov.querySelector('#mo-cancel').onclick=()=>cerrar(null);
+    ov.onclick=e=>{if(e.target===ov)cerrar(null)};
+    const bmax=ov.querySelector('#mo-max');
+    if(bmax)bmax.onclick=()=>{inp.value=max;revisar();inp.focus()};
+    revisar();
+    setTimeout(()=>{inp.focus();inp.select()},30);
+  });
+}
+
 /* Revertir una compra ingresada por error. Solo es revertible lo COMPRADO QUE AÚN NO SE HA
    DESPACHADO: lo que ya salió en una guía se compró de verdad, y descontarlo dejaría el stock
    en negativo por partida doble. El movimiento original nunca se borra; se agrega un ajuste. */
@@ -817,11 +884,15 @@ async function revertirCompra(ke){
   if(!c)return;
   const max=revertible(c);
   if(max<=0){toast('No hay compras revertibles: lo comprado ya fue despachado.');return}
-  const v=prompt(`Revertir compra de "${c.producto}"\n\nRevertible: ${num(max)} (lo comprado que aún no se despacha)\nSe descontará del inventario y volverá a quedar por comprar.\n\n¿Cuántas unidades revertir?`,String(max));
-  if(v===null||v==='')return;
-  const cant=+v;
-  if(!cant||isNaN(cant)||cant<=0){toast('Indica una cantidad válida.');return}
-  if(cant>max){toast(`Como máximo puedes revertir ${num(max)}.`);return}
+  const stock=stockDeCodigo(c.codigo,c.producto);
+  const r=await pedirMonto({
+    titulo:'Revertir compra ingresada por error',producto:c.producto,
+    contexto:[{et:'Revertible',va:num(max)},{et:'Stock actual',va:num(stock)}],
+    etiqueta:'Unidades a revertir',valor:max,min:1,max,confirmar:'Revertir compra',
+    resultado:v=>`Volverán a quedar por comprar ${num(v)} · el stock quedará en ${num(Math.max(0,stock-v))}.`
+  });
+  if(!r)return;
+  const cant=r.valor;
   velo(true,'Revirtiendo compra…');
   try{
     // repartir el reverso entre las líneas, hasta agotarlo
@@ -1942,8 +2013,17 @@ async function borrarProd(nombre){
 async function ajusteInv(nombre){
   const inv=DB[ARCH.inv].data;
   const p=inv.productos.find(x=>x.nombre===nombre);if(!p)return;
-  const nv=prompt(`Nueva cantidad para "${nombre}" (actual: ${p.cantidad}):`,p.cantidad);
-  if(nv===null||nv==='')return;
+  const r=await pedirMonto({
+    titulo:'Ajustar cantidad en inventario',producto:nombre,
+    contexto:[{et:'Stock actual',va:num(p.cantidad)}],
+    etiqueta:'Cantidad exacta que hay en bodega',valor:p.cantidad,min:0,unidad:p.unidad||'',
+    confirmar:'Ajustar',
+    resultado:v=>{const d=v-(+p.cantidad||0);
+      return d===0?'Sin cambios respecto al stock actual.'
+        :`${d>0?'Se sumarán':'Se descontarán'} ${num(Math.abs(d))} · el stock quedará en ${num(v)}.`}
+  });
+  if(!r)return;
+  const nv=r.valor;
   const dif=+nv-p.cantidad;p.cantidad=+nv;
   inv.movimientos.push({fecha:hoyISO(),tipo:'ajuste',producto:nombre,cantidad:dif,referencia:'Ajuste manual'});
   velo(true);
@@ -1956,12 +2036,15 @@ async function ajusteInv(nombre){
 async function agregarInv(nombre){
   const inv=DB[ARCH.inv].data;
   const p=inv.productos.find(x=>x.nombre===nombre);if(!p)return;
-  const v=prompt(`¿Cuántas unidades agregar a "${nombre}"?\n\nStock actual: ${num(p.cantidad)}`,'');
-  if(v===null||v==='')return;
-  const cant=+v;
-  if(!cant||isNaN(cant)){toast('Indica una cantidad válida.');return}
-  if(cant<0){toast('Para descontar usa Ajustar.');return}
-  const ref=prompt('Referencia del ingreso (opcional):','')||'Ingreso directo';
+  const r=await pedirMonto({
+    titulo:'Agregar stock',producto:nombre,
+    contexto:[{et:'Stock actual',va:num(p.cantidad)}],
+    etiqueta:'Unidades a agregar',valor:'',min:1,unidad:p.unidad||'',confirmar:'Agregar',
+    resultado:v=>`El stock quedará en ${num((+p.cantidad||0)+v)}.`,
+    extra:{etiqueta:'Referencia (opcional)',placeholder:'ej: compra en ferretería'}
+  });
+  if(!r)return;
+  const cant=r.valor, ref=r.extra||'Ingreso directo';
   p.cantidad=(+p.cantidad||0)+cant;
   inv.movimientos.push({fecha:hoyISO(),tipo:'ingreso',codigo:p.codigo,producto:nombre,cantidad:cant,referencia:ref});
   velo(true);
