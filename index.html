@@ -716,14 +716,17 @@ function rPanel(){
   const zonaResumen=`
   <h2>Resumen consolidado <span class="muted">· confirmado: OC + Pendientes SAP${psapMeta.actualizado?` (reporte del ${fFecha(psapMeta.actualizado)})`:''}</span></h2>
   ${cons.length?`<div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:540px">
-    <colgroup><col><col style="width:8ch"><col style="width:8ch"><col style="width:7ch"><col style="width:11ch"></colgroup>
+    <colgroup><col><col style="width:8ch"><col style="width:8ch"><col style="width:7ch"><col style="width:14ch"></colgroup>
     <tr><th>Producto</th><th class="num">Total a despachar</th><th class="num">Pendiente</th><th class="num">Stock</th><th class="num">Compra</th></tr>
     ${cons.map(c=>`<tr>
       <td class="trunc" title="${esc(c.producto)} — ${esc([...c.bodegas].join(', '))}">${medidaPendiente(c.codigo)?'<i class="fa-solid fa-ruler aviso-medida" title="El documento no especifica la medida o la talla: confirmar antes de despachar"></i>':''}${esc(c.producto)}<span class="small muted sep">${esc([...c.bodegas].join(' · '))}</span></td>
       <td class="num">${num(c.cantidad)}</td>
       <td class="num" style="font-weight:600">${num(c.pendiente)}</td>
       <td class="num" style="${c.stock<c.pendiente?'color:var(--rojo);font-weight:600':''}">${num(c.stock)}</td>
-      <td class="num">${c.porComprar>0?`<button class="btn mini sec" style="white-space:nowrap" onclick="marcarCompra('${encodeURIComponent(c.k)}')" title="Marcar la compra de ${num(c.porComprar)}"><i class="fa-solid fa-cart-plus"></i> ${num(c.porComprar)}</button>`:`<button class="btn mini" style="white-space:nowrap" onclick="ocultarDelResumen('${encodeURIComponent(c.k)}')" title="Comprada · pulsa para quitarla del resumen"><i class="fa-solid fa-check"></i></button>`}</td>
+      <td class="num" style="white-space:nowrap">${c.porComprar>0
+        ?`<button class="btn mini sec" onclick="marcarCompra('${encodeURIComponent(c.k)}')" title="Marcar la compra de ${num(c.porComprar)}"><i class="fa-solid fa-cart-plus"></i> ${num(c.porComprar)}</button>`
+        :`<button class="btn mini" onclick="ocultarDelResumen('${encodeURIComponent(c.k)}')" title="Comprada · pulsa para quitarla del resumen"><i class="fa-solid fa-check"></i></button>`}${revertible(c)>0?`
+        <button class="btn mini sec" onclick="revertirCompra('${encodeURIComponent(c.k)}')" title="Revertir una compra ingresada por error (hasta ${num(revertible(c))})"><i class="fa-solid fa-rotate-left"></i></button>`:''}</td>
     </tr>`).join('')}
   </table></div>`:`<div class="card vacio">${nOcultos?'Todo lo confirmado está comprado y oculto del resumen.':'No hay pendientes confirmados (OC ni Pendientes SAP).'}</div>`}
   ${nOcultos?`<p class="small muted" style="margin:-6px 0 14px">${nOcultos} producto(s) comprados ocultos del resumen · <a href="#" onclick="event.preventDefault();mostrarOcultos()">volver a mostrarlos</a></p>`:''}`;
@@ -795,6 +798,65 @@ function alternarNombres(btn){
   celdas.forEach(c=>c.classList.toggle('abierto',abrir));
   btn.innerHTML=abrir?'<i class="fa-solid fa-compress"></i> Contraer nombres'
                      :'<i class="fa-solid fa-arrows-up-down-left-right"></i> Desplegar nombres';
+}
+
+/* Revertir una compra ingresada por error. Solo es revertible lo COMPRADO QUE AÚN NO SE HA
+   DESPACHADO: lo que ya salió en una guía se compró de verdad, y descontarlo dejaría el stock
+   en negativo por partida doble. El movimiento original nunca se borra; se agrega un ajuste. */
+function revertible(c){
+  return c.lineas.reduce((s,l)=>{
+    const comp=+l.ref.cantidad_comprada||0;
+    const desp=l.origen==='oc'?(+l.ref.cantidad_despachada||0)
+                              :Math.max((+l.ref.cantidad||0)-(+l.ref.por_entregar||0),0);
+    return s+Math.max(comp-desp,0);
+  },0);
+}
+async function revertirCompra(ke){
+  const k=decodeURIComponent(ke);
+  const c=consolidadoConfirmado(lineasConfirmadas()).find(x=>x.k===k);
+  if(!c)return;
+  const max=revertible(c);
+  if(max<=0){toast('No hay compras revertibles: lo comprado ya fue despachado.');return}
+  const v=prompt(`Revertir compra de "${c.producto}"\n\nRevertible: ${num(max)} (lo comprado que aún no se despacha)\nSe descontará del inventario y volverá a quedar por comprar.\n\n¿Cuántas unidades revertir?`,String(max));
+  if(v===null||v==='')return;
+  const cant=+v;
+  if(!cant||isNaN(cant)||cant<=0){toast('Indica una cantidad válida.');return}
+  if(cant>max){toast(`Como máximo puedes revertir ${num(max)}.`);return}
+  velo(true,'Revirtiendo compra…');
+  try{
+    // repartir el reverso entre las líneas, hasta agotarlo
+    let resta=cant;
+    const tocado={oc:false,sap:false};
+    for(const l of c.lineas){
+      if(resta<=0)break;
+      const comp=+l.ref.cantidad_comprada||0;
+      const desp=l.origen==='oc'?(+l.ref.cantidad_despachada||0)
+                                :Math.max((+l.ref.cantidad||0)-(+l.ref.por_entregar||0),0);
+      const puede=Math.min(Math.max(comp-desp,0),resta);
+      if(puede<=0)continue;
+      l.ref.cantidad_comprada=comp-puede;
+      resta-=puede;
+      tocado[l.origen]=true;
+    }
+    const inv=DB[ARCH.inv].data;
+    const p=c.codigo?inv.productos.find(x=>x.codigo===c.codigo):invProdDe(c.producto,null,false);
+    if(p){
+      p.cantidad=Math.max(0,(+p.cantidad||0)-cant);
+      inv.movimientos.push({fecha:hoyISO(),tipo:'ajuste',codigo:p.codigo,producto:p.nombre,
+        cantidad:-cant,referencia:`Reverso de compra marcada (ingreso erróneo)`});
+    }
+    // si estaba oculto del resumen, vuelve a la vista porque otra vez hay algo que comprar
+    const conf=DB[ARCH.conf].data;
+    if((conf.resumen_ocultos||[]).includes(k)){
+      conf.resumen_ocultos=conf.resumen_ocultos.filter(x=>x!==k);
+      await guardarArchivo(ARCH.conf,`Resumen: ${c.producto} vuelve a la vista`);
+    }
+    if(tocado.oc)await guardarArchivo(ARCH.oc,`Reverso de compra: ${c.producto} -${cant}`);
+    if(tocado.sap)await guardarArchivo(ARCH.psap,`Reverso de compra: ${c.producto} -${cant}`);
+    if(p)await guardarArchivo(ARCH.inv,`Inventario: reverso de compra ${c.producto} -${cant}`);
+    toast(`Compra revertida: ${c.producto} -${num(cant)}`);render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
 }
 
 /* Ocultar del resumen consolidado: el resumen es la vista de COMPRAS, así que un producto ya
