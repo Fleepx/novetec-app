@@ -1649,17 +1649,31 @@ function observacionesPrecio(){
   Object.values(obs).forEach(a=>a.sort((x,y)=>(y.fecha||'').localeCompare(x.fecha||'')||y.precio-x.precio));
   return obs;
 }
+/* Último precio COTIZADO por producto: referencia para comparar oferta contra adjudicado.
+   No entra en las 4 observaciones de OC ni en el cálculo de variación. */
+function ultimaCotizacion(){
+  const m={};
+  [...DB[ARCH.cot].data.cotizaciones]
+    .sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')))
+    .forEach(c=>c.items.forEach(i=>{
+      const p=+i.precio_unitario||0;if(!p)return;
+      const cod=codigoDeItem(i.producto,i.codigo)||('N:'+normProd(i.producto));
+      m[cod]={precio:p,fecha:c.fecha||'',folio:String(c.folio||'')};
+    }));
+  return m;
+}
 function rPrecios(){
   const obs=observacionesPrecio();
+  const cots=ultimaCotizacion();
   const prods=DB[ARCH.prod].data.productos;
   let filas=prods.map(p=>({codigo:p.codigo,nombre:p.nombre,unidad:p.unidad||'UN',
-                           precios:(obs[p.codigo]||[]).slice(0,4)}));
+                           precios:(obs[p.codigo]||[]).slice(0,4),cot:cots[p.codigo]||null}));
   // productos con precio que no estén en el maestro (por si acaso)
   Object.keys(obs).filter(k=>k.startsWith('N:')).forEach(k=>{
-    filas.push({codigo:null,nombre:obs[k][0].producto||k.slice(2),unidad:'UN',precios:obs[k].slice(0,4)});
+    filas.push({codigo:null,nombre:obs[k][0].producto||k.slice(2),unidad:'UN',precios:obs[k].slice(0,4),cot:cots[k]||null});
   });
   const conPrecio=filas.filter(f=>f.precios.length).length;
-  if(preSoloCon)filas=filas.filter(f=>f.precios.length);
+  if(preSoloCon)filas=filas.filter(f=>f.precios.length||f.cot);
   if(preFiltro){const q=preFiltro.toLowerCase();
     filas=filas.filter(f=>f.nombre.toLowerCase().includes(q)||String(f.codigo||'').toLowerCase().includes(q));}
   filas.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
@@ -1679,9 +1693,9 @@ function rPrecios(){
     <button class="btn mini sec" onclick="alternarNombres(this)"><i class="fa-solid fa-arrows-up-down-left-right"></i> Desplegar nombres</button>
     <span class="small muted">${filas.length} artículo(s) en pantalla</span>
   </div>
-  ${filas.length?`<div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:660px">
-    <colgroup><col><col style="width:11ch"><col style="width:8ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"></colgroup>
-    <tr><th>Producto</th><th class="num">Último precio</th><th class="num">Var.</th><th class="num">Anterior</th><th class="num">2 atrás</th><th class="num">3 atrás</th></tr>
+  ${filas.length?`<div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:760px">
+    <colgroup><col><col style="width:11ch"><col style="width:8ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"></colgroup>
+    <tr><th>Producto</th><th class="num">Último precio</th><th class="num">Var.</th><th class="num">Anterior</th><th class="num">2 atrás</th><th class="num">3 atrás</th><th class="num">Cotizado</th></tr>
     ${filas.map(f=>{const ps=f.precios;
       return `<tr>
         <td class="trunc" title="${esc(f.nombre)}${f.codigo?' — '+esc(f.codigo):''}">${esc(f.nombre)}</td>
@@ -1690,9 +1704,10 @@ function rPrecios(){
         <td class="num muted">${ps[1]?celda(ps[1]):''}</td>
         <td class="num muted">${ps[2]?celda(ps[2]):''}</td>
         <td class="num muted">${ps[3]?celda(ps[3]):''}</td>
+        <td class="num">${f.cot?`<span class="mono" style="color:var(--muted)" title="COT ${esc(f.cot.folio)} · ${fFecha(f.cot.fecha)}${ps[0]?' · adjudicada en '+clp(ps[0].precio):''}">${clp(f.cot.precio)}</span>`:''}</td>
       </tr>`}).join('')}
   </table></div>
-  <p class="small muted">Precios netos tomados del listado de OC (órdenes cargadas y reporte de pendientes SAP), del más reciente al más antiguo. Pasa el cursor sobre un precio para ver su OC y su fecha. Los precios de cotización no se incluyen.</p>`
+  <p class="small muted">Precios netos del listado de OC (órdenes cargadas y reporte de pendientes SAP), del más reciente al más antiguo. La columna <b>Cotizado</b> es el último precio que ofertamos, solo como referencia: no cuenta para la variación. Pasa el cursor sobre cualquier precio para ver su documento y su fecha.</p>`
   :'<div class="card vacio">No hay artículos que coincidan con la búsqueda.</div>'}`;
 }
 
@@ -1713,7 +1728,7 @@ function rInv(){
   <h2>Stock actual (${prods.length} productos)</h2>
   <div class="card">${prods.length?`<table class="tprod" style="min-width:460px"><colgroup><col style="width:11ch"><col><col style="width:9ch"><col style="width:10ch"></colgroup><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
     ${prods.map(p=>`<tr><td class="mono small">${esc(p.codigo||'—')}</td><td class="trunc" title="${esc(p.nombre)}">${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
-    <td class="num"><button class="btn mini sec" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-pen"></i></button> <button class="btn mini peligro" onclick="borrarProd('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-trash"></i></button></td></tr>`).join('')}</table>`
+    <td class="num"><button class="btn mini sec" title="Ajustar: fijar la cantidad exacta" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-pen"></i></button> <button class="btn mini sec" title="Agregar: sumar unidades al stock" onclick="agregarInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-plus"></i></button></td></tr>`).join('')}</table>`
     :'<div class="vacio">Bodega sin productos registrados. Usa "Registrar ingreso" para la carga inicial.</div>'}</div>
   <h2>Últimos movimientos</h2>
   <div class="card">${movs.length?`<table class="tprod" style="min-width:720px"><colgroup><col style="width:11ch"><col style="width:11ch"><col style="width:9ch"><col><col style="width:8ch"><col style="width:20ch"></colgroup><tr><th>Fecha</th><th>Código</th><th>Tipo</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
@@ -1737,6 +1752,10 @@ async function ingresoInv(){
   catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
+/* ELIMINAR PRODUCTO DEL INVENTARIO — DESACTIVADO por orden de Jefe (22-07-2026): la lista de
+   stock ya no muestra el botón de eliminar (lo reemplazó "Agregar"). La función se conserva
+   intacta; para reactivarla basta con volver a poner en la fila de stock un botón que llame a
+   borrarProd(nombre). */
 async function borrarProd(nombre){
   const inv=DB[ARCH.inv].data;
   const p=inv.productos.find(x=>x.nombre===nombre);if(!p)return;
@@ -1759,6 +1778,25 @@ async function ajusteInv(nombre){
   inv.movimientos.push({fecha:hoyISO(),tipo:'ajuste',producto:nombre,cantidad:dif,referencia:'Ajuste manual'});
   velo(true);
   try{await guardarArchivo(ARCH.inv,`Inventario: ajuste ${nombre} a ${nv}`);toast('Ajuste guardado');render()}
+  catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+
+/* Agregar: SUMA unidades al stock existente (a diferencia de Ajustar, que fija la cantidad). */
+async function agregarInv(nombre){
+  const inv=DB[ARCH.inv].data;
+  const p=inv.productos.find(x=>x.nombre===nombre);if(!p)return;
+  const v=prompt(`¿Cuántas unidades agregar a "${nombre}"?\n\nStock actual: ${num(p.cantidad)}`,'');
+  if(v===null||v==='')return;
+  const cant=+v;
+  if(!cant||isNaN(cant)){toast('Indica una cantidad válida.');return}
+  if(cant<0){toast('Para descontar usa Ajustar.');return}
+  const ref=prompt('Referencia del ingreso (opcional):','')||'Ingreso directo';
+  p.cantidad=(+p.cantidad||0)+cant;
+  inv.movimientos.push({fecha:hoyISO(),tipo:'ingreso',codigo:p.codigo,producto:nombre,cantidad:cant,referencia:ref});
+  velo(true);
+  try{await guardarArchivo(ARCH.inv,`Inventario: ingreso ${nombre} +${cant}`);
+    toast(`${nombre}: +${num(cant)} · stock ${num(p.cantidad)}`);render()}
   catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
