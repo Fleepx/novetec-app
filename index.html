@@ -1147,6 +1147,28 @@ function rCot(){
       <div id="ec-${esc(c.id)}"></div>
     </div>`}).join(''):'<div class="card vacio">Aún no hay cotizaciones registradas.</div>'}`;
 }
+async function borrarCot(id){
+  const arr=DB[ARCH.cot].data.cotizaciones;const c=arr.find(x=>x.id===id);if(!c)return;
+  if(c.estado==='convertida'){toast('Tiene una OC asociada: da de baja la OC primero.');return}
+  if(!confirm(`¿Eliminar la cotización ${c.folio}? Esta acción no se puede deshacer.`))return;
+  velo(true,'Eliminando…');
+  try{
+    arr.splice(arr.indexOf(c),1);
+    await guardarArchivo(ARCH.cot,`Cotización ${c.folio} eliminada`);
+    if(c.archivo)await borrarArchivoRepo(c.archivo,`Borrado documento de cotización ${c.folio}`);
+    toast('Cotización eliminada');render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+async function rechazarCot(id){
+  const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id);if(!c)return;
+  c.estado='rechazada';velo(true);
+  try{await guardarArchivo(ARCH.cot,`Cotización ${c.folio} rechazada`);render()}catch(e){}
+  velo(false);
+}
+
+/* ================= Órdenes de compra ================= */
+let ocFiltro='';
 function rOC(){
   const ocs=[...DB[ARCH.oc].data.ordenes];
   const cots=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='enviada');
@@ -1204,7 +1226,8 @@ function rOC(){
       <td class="num">${clp(r.precio_neto)}</td>
       <td class="num">${num(r.cantidad_comprada||0)}</td>
     </tr>`).join('')}</table>
-    ${psapD.archivo_origen?`<p class="small" style="margin-top:8px"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(psapD.archivo_origen)}')">Descargar reporte original</a></p>`:''}
+    ${(()=>{const ar=[].concat(psapD.archivo_origen||[]).filter(Boolean);
+      return ar.length?`<p class="small" style="margin-top:8px">Archivos de origen: ${ar.map(a=>`<a href="#" onclick="event.preventDefault();descargarArchivo('${esc(a)}')">${esc(a.split('/').pop())}</a>`).join(' · ')}</p>`:'';})()}
   </div></details>`:''}
   ${listaPend(['ordenes_compra','pendientes_sap'])}
   <div class="filtro"><input placeholder="Filtrar por folio o estado…" value="${esc(ocFiltro)}" oninput="ocFiltro=this.value.toLowerCase();render();this.focus()"></div>
@@ -1226,7 +1249,7 @@ function rOC(){
       ${o.archivo?`<p class="small"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(o.archivo)}')">Descargar documento</a></p>`:''}
       <div class="acciones">
         ${ocComp(o)<ocTot(o)?`<button class="btn mini sec" onclick="toggleCompra('${encodeURIComponent(o.folio)}')">Registrar compra</button>`:''}
-        ${e!=='despachada'?`<button class="btn mini" onclick="tab='guias';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='guias'));render();document.getElementById('g-oc').value='${esc(o.folio)}';document.getElementById('g-oc').dispatchEvent(new Event('change'))">Despachar</button>`:''}
+        ${e!=='despachada'?`<button class="btn mini" onclick="irASubir('guias')" title="Sube la guía de despacho de esta OC"><i class="fa-solid fa-cloud-arrow-up"></i> Despachar</button>`:''}
         <button class="btn mini sec" onclick="editOC('${encodeURIComponent(o.folio)}')"><i class="fa-solid fa-pen"></i> Modificar</button>
         <button class="btn mini peligro" onclick="borrarOC('${encodeURIComponent(o.folio)}')">Dar de baja</button>
       </div>
@@ -1496,13 +1519,17 @@ async function guardarCompraFaltante(numero){
    manual. Estas funciones sirven para CORREGIR una cotización o una OC cuya extracción salió
    con un error. Las guías NO se editan: si quedó mal, se elimina y se vuelve a ingresar
    (orden de Jefe, 22-07-2026). */
-function irASubirOC(){
-  tab='oc';
-  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='oc'));
+function irASubir(t){
+  tab=t;
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
   render();
-  setTimeout(()=>{const d=document.querySelector('#vista details.form');
+  setTimeout(()=>{
+    // abrir la zona de carga de archivos (la que tiene dropzone), no el primer details cualquiera
+    const ds=[...document.querySelectorAll('#vista details.form')];
+    const d=ds.find(x=>x.querySelector('.dropzone'))||ds[0];
     if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'center'})}},60);
 }
+function irASubirOC(){irASubir('oc')}
 function filaEdit(i,ix){
   return `<tr data-ix="${ix}">
     <td><input class="ed-prod" list="dl-prod" value="${esc(i.producto||'')}"></td>
