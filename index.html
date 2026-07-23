@@ -240,7 +240,7 @@ const ESTRUCTURAS_BASE={'data/cotizaciones.json':{cotizaciones:[]},'data/ordenes
  'data/productos.json':{productos:[],correlativo:0},
  'data/pendientes_sap.json':{registros:[],actualizado:null,archivo_origen:null},
  'data/archivos.json':{archivos:[]},
- 'data/config.json':{empresa:'Novetec SPA',semaforo:{rojo_dias:5,amarillo_dias:10},proxima_hoja_ruta:1}};
+ 'data/config.json':{empresa:'Novetec SPA',semaforo:{rojo_dias:5,amarillo_dias:10},proxima_hoja_ruta:1,resumen_ocultos:[]}};
 async function cargarArchivo(p){
   try{
     const j=await gh(`contents/${p}?t=${Date.now()}`);
@@ -704,8 +704,13 @@ function semStripHTML(){
 function rPanel(){
   const cotP=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='enviada');
   const lineas=lineasConfirmadas();
-  const cons=consolidadoConfirmado(lineas);
+  const consTodo=consolidadoConfirmado(lineas);
   const psapMeta=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{};
+  // Ocultos del resumen: solo se respetan mientras no haya nada por comprar. Si vuelve a
+  // aparecer algo por comprar (una OC nueva), el producto reaparece solo.
+  const ocultos=DB[ARCH.conf].data.resumen_ocultos||[];
+  const cons=consTodo.filter(c=>!(c.porComprar<=0&&ocultos.includes(c.k)));
+  const nOcultos=consTodo.length-cons.length;
 
   /* ZONA SUPERIOR: resumen consolidado solo de confirmado (OC + Pendientes SAP) */
   const zonaResumen=`
@@ -718,9 +723,10 @@ function rPanel(){
       <td class="num">${num(c.cantidad)}</td>
       <td class="num" style="font-weight:600">${num(c.pendiente)}</td>
       <td class="num" style="${c.stock<c.pendiente?'color:var(--rojo);font-weight:600':''}">${num(c.stock)}</td>
-      <td class="num">${c.porComprar>0?`<button class="btn mini sec" style="white-space:nowrap" onclick="marcarCompra('${encodeURIComponent(c.k)}')" title="Marcar la compra de ${num(c.porComprar)}"><i class="fa-solid fa-cart-plus"></i> ${num(c.porComprar)}</button>`:'<span class="chip ink" title="Comprada"><i class="fa-solid fa-check"></i></span>'}</td>
+      <td class="num">${c.porComprar>0?`<button class="btn mini sec" style="white-space:nowrap" onclick="marcarCompra('${encodeURIComponent(c.k)}')" title="Marcar la compra de ${num(c.porComprar)}"><i class="fa-solid fa-cart-plus"></i> ${num(c.porComprar)}</button>`:`<button class="btn mini" style="white-space:nowrap" onclick="ocultarDelResumen('${encodeURIComponent(c.k)}')" title="Comprada · pulsa para quitarla del resumen"><i class="fa-solid fa-check"></i></button>`}</td>
     </tr>`).join('')}
-  </table></div>`:'<div class="card vacio">No hay pendientes confirmados (OC ni Pendientes SAP).</div>'}`;
+  </table></div>`:`<div class="card vacio">${nOcultos?'Todo lo confirmado está comprado y oculto del resumen.':'No hay pendientes confirmados (OC ni Pendientes SAP).'}</div>`}
+  ${nOcultos?`<p class="small muted" style="margin:-6px 0 14px">${nOcultos} producto(s) comprados ocultos del resumen · <a href="#" onclick="event.preventDefault();mostrarOcultos()">volver a mostrarlos</a></p>`:''}`;
 
   /* ZONA INFERIOR: detalle por bodega, orden fijo Rancagua → San Francisco Mostazal → El Peumo → Longovilo.
      Se muestran SIEMPRE Total y Pendiente, aunque no haya stock. */
@@ -789,6 +795,35 @@ function alternarNombres(btn){
   celdas.forEach(c=>c.classList.toggle('abierto',abrir));
   btn.innerHTML=abrir?'<i class="fa-solid fa-compress"></i> Contraer nombres'
                      :'<i class="fa-solid fa-arrows-up-down-left-right"></i> Desplegar nombres';
+}
+
+/* Ocultar del resumen consolidado: el resumen es la vista de COMPRAS, así que un producto ya
+   comprado puede salir de ahí para ir limpiando la pantalla. Solo se puede ocultar lo que tiene
+   0 por comprar, y si más adelante vuelve a haber algo que comprar, reaparece solo. */
+async function ocultarDelResumen(ke){
+  const k=decodeURIComponent(ke);
+  const c=consolidadoConfirmado(lineasConfirmadas()).find(x=>x.k===k);
+  if(!c)return;
+  if(c.porComprar>0){toast('Todavía hay unidades por comprar: no se puede ocultar.');return}
+  const conf=DB[ARCH.conf].data;
+  conf.resumen_ocultos=conf.resumen_ocultos||[];
+  if(conf.resumen_ocultos.includes(k)){render();return}
+  conf.resumen_ocultos.push(k);
+  velo(true);
+  try{await guardarArchivo(ARCH.conf,`Resumen: oculto ${c.producto}`);
+    toast(`${c.producto} fuera del resumen`);render()}
+  catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+async function mostrarOcultos(){
+  const conf=DB[ARCH.conf].data;
+  if(!(conf.resumen_ocultos||[]).length)return;
+  conf.resumen_ocultos=[];
+  velo(true);
+  try{await guardarArchivo(ARCH.conf,'Resumen: se vuelven a mostrar los productos ocultos');
+    toast('Resumen completo');render()}
+  catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
 }
 
 /* ===== Marcado de compras desde el Panel =====
