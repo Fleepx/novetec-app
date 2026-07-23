@@ -125,11 +125,13 @@ table.tprod td:last-child,table.tprod th:last-child{padding-right:2px}
 .alerta-cifra{color:var(--rojo);margin-left:5px;cursor:help}
 /* Acordeón de guías: bodega -> fecha -> guías de ese día */
 .acc-bodega{margin-bottom:12px}
-.acc-fecha>summary{list-style:none;cursor:pointer;padding:11px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);display:flex;align-items:center;gap:10px;margin-top:8px;font-weight:600}
+.acc-fecha>summary{list-style:none;cursor:pointer;padding:11px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin-top:8px;font-weight:600}
+.acc-fecha>summary .btn{flex:none}
 .acc-fecha>summary::-webkit-details-marker{display:none}
 .acc-fecha>summary::before{content:'\f105';font-family:'Font Awesome 6 Free';font-weight:900;color:var(--muted);transition:transform .15s}
 .acc-fecha[open]>summary::before{transform:rotate(90deg)}
 .acc-fecha>summary .cnt{margin-left:auto;font-family:var(--mono);font-size:var(--fs-xs);color:var(--muted);font-weight:400}
+.acc-fecha>summary .chip{font-weight:400}
 .acc-fecha .cuerpo{padding:6px 0 4px 6px}
 td.trunc:hover{background:var(--hover)}
 td.trunc.abierto{white-space:normal;overflow:visible;text-overflow:clip;background:var(--hover)}
@@ -1362,20 +1364,11 @@ function rGuias(){
   return `
   ${formPendiente('guias_despacho','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${listaPend('guias_despacho')}
-  <h2>Hojas de ruta</h2>
-  ${hrs.length?hrs.map(h=>`<div class="card">
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <span class="mono" style="font-weight:700;font-size:var(--fs-lg)">Hoja de Ruta N°${esc(String(h.numero??'—'))}</span>
-      <span class="chip">${fFecha(h.fecha_envio||h.fecha)}</span>
-      <span class="chip ${h.estado==='cerrada'?'ink':'ambar'}">${esc(h.estado||'borrador')}</span>
-      ${h.archivo?`<button class="btn mini" style="margin-left:auto" onclick="descargarArchivo('${esc(h.archivo)}','Guia_de_Ruta_N${esc(String(h.numero))}_${esc(fFecha(h.fecha_envio||h.fecha))}.docx')"><i class="fa-solid fa-download"></i> Descargar</button>`
-        :'<span class="chip ambar" style="margin-left:auto">sin archivo generado</span>'}
-    </div>
-    <div class="small muted" style="margin-top:6px">
-      ${(h.destinos||[]).map(esc).join(' · ')}${(h.destinos||[]).length?' · ':''}guías <span class="mono">${(h.guias||[]).map(esc).join(', ')}</span>
-    </div>
-    ${h.estado!=='cerrada'?'<div class="small muted" style="margin-top:4px">Si llega otra guía con esta fecha de envío, se agrega y la hoja se regenera con el mismo número.</div>':''}
-  </div>`).join(''):'<div class="card vacio">Aún no hay hojas de ruta generadas.</div>'}
+  ${(()=>{ // Hojas de ruta que quedaron SIN guías (p. ej. tras eliminar todas): no aparecerían
+     // en ningún grupo de abajo, así que se avisan aquí para no perderlas de vista.
+     const huerfanas=hrs.filter(h=>!(h.guias||[]).length);
+     return huerfanas.length?`<div class="card" style="border-color:var(--ambar)"><i class="fa-solid fa-triangle-exclamation" style="color:var(--ambar)"></i> ${huerfanas.map(h=>`Hoja de Ruta N°${esc(String(h.numero))} (envío ${fFecha(h.fecha_envio||h.fecha)}) quedó sin guías.`).join(' ')} Reingresa una guía con esa fecha de envío para reincorporarla.</div>`:'';
+   })()}
   <h2>Guías registradas</h2>
   ${(()=>{
     const gs=DB[ARCH.guias].data.guias;
@@ -1403,7 +1396,10 @@ function rGuias(){
         <div class="bodega-lbl"><i class="fa-solid fa-warehouse" style="font-size:14px;color:var(--muted)"></i> ${esc(b)} <span class="muted">· ${totalG} guía(s)</span></div>
         ${fechas.map(f=>{const dia=porBod[b][f];const sin=f===SINENV;
           const hoja=sin?null:hojas.find(x=>String(x.numero)===String(dia[0].hoja_ruta));
-          return `<details class="acc-fecha"${sin?' open':''}><summary>${sin?'<span class="chip ambar">Pendientes de envío</span>':`Envío ${fFecha(f)}${hoja?` <span class="chip">Hoja de ruta N°${esc(String(hoja.numero))}</span>`:''}`}<span class="cnt">${dia.length} guía(s)</span></summary><div class="cuerpo">
+          const desc=hoja?(hoja.archivo
+            ?`<button class="btn mini" title="Descargar la hoja de ruta N°${esc(String(hoja.numero))}" onclick="event.preventDefault();event.stopPropagation();descargarArchivo('${esc(hoja.archivo)}','Guia_de_Ruta_N${esc(String(hoja.numero))}_${esc(fFecha(hoja.fecha_envio||hoja.fecha))}.docx')"><i class="fa-solid fa-download"></i> Hoja de ruta</button>`
+            :'<span class="chip ambar" title="La hoja de ruta aún no se ha generado">sin archivo</span>'):'';
+          return `<details class="acc-fecha"${sin?' open':''}><summary>${sin?'<span class="chip ambar">Pendientes de envío</span>':`Envío ${fFecha(f)}${hoja?` <span class="chip">Hoja de ruta N°${esc(String(hoja.numero))}</span>`:''}`}<span class="cnt">${dia.length} guía(s)</span>${desc}</summary><div class="cuerpo">
             ${dia.map(tarjetaGuia).join('')}
           </div></details>`;}).join('')}
       </div>`;
