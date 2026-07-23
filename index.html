@@ -984,13 +984,13 @@ function modalCompra(c,porBod){
     ov.innerHTML=`<div class="modal">
       <b>¿Cuánto se compró?</b>
       <p class="small muted">${esc(c.producto)} · pendiente de compra: <b class="mono">${num(c.porComprar)}</b>.
-      No hace falta comprar el total: lo que no ingreses queda pendiente y sigue apareciendo en el Panel.</p>
+      Lo que no ingreses queda pendiente. Si compraste de más por buen precio, ingrésalo igual: el excedente entra a bodega como stock libre.</p>
       ${varias
         ? `<p class="small muted">Este producto va a ${bods.length} bodegas. Indica cuánto compraste para cada una.</p>`+
           bods.map(b=>`<label>${esc(b)} <span class="muted" style="text-transform:none;font-weight:400">· pendiente ${num(porBod[b])}</span></label>
-            <input type="number" class="cmp-inp" data-b="${esc(b)}" min="0" max="${porBod[b]}" step="any" value="${porBod[b]}">`).join('')
-        : `<label>Cantidad comprada <span class="muted" style="text-transform:none;font-weight:400">· máximo ${num(c.porComprar)}</span></label>
-           <input type="number" class="cmp-inp" data-b="${esc(bods[0]||'')}" min="0" max="${c.porComprar}" step="any" value="${c.porComprar}">`}
+            <input type="number" class="cmp-inp" data-b="${esc(b)}" min="0" step="any" value="${porBod[b]}">`).join('')
+        : `<label>Cantidad comprada <span class="muted" style="text-transform:none;font-weight:400">· pendiente ${num(c.porComprar)}</span></label>
+           <input type="number" class="cmp-inp" data-b="${esc(bods[0]||'')}" min="0" step="any" value="${c.porComprar}">`}
       <p class="small mono" id="cmp-res" style="margin-top:12px"></p>
       <div class="acciones"><button class="btn mini" id="cmp-ok">Registrar compra</button><button class="btn mini sec" id="cmp-cancel">Cancelar</button></div>
     </div>`;
@@ -1000,7 +1000,8 @@ function modalCompra(c,porBod){
     const refrescar=()=>{
       const s=suma(),queda=c.porComprar-s,el=ov.querySelector('#cmp-res');
       if(s<=0){el.textContent='Ingresa una cantidad mayor que cero.';el.style.color='var(--rojo)';return}
-      if(s>c.porComprar){el.textContent=`Te pasaste: el pendiente es ${num(c.porComprar)}.`;el.style.color='var(--rojo)';return}
+      if(queda<0){el.textContent=`Entran ${num(s)} al inventario · ${num(-queda)} de más quedan como stock libre en bodega`;
+        el.style.color='var(--verde)';return}
       el.textContent=queda>0?`Entran ${num(s)} al inventario · quedan ${num(queda)} pendientes de compra`
                             :`Entran ${num(s)} al inventario · queda todo comprado`;
       el.style.color=queda>0?'var(--ambar)':'var(--verde)';
@@ -1010,7 +1011,6 @@ function modalCompra(c,porBod){
     ov.querySelector('#cmp-ok').onclick=()=>{
       const s=suma();
       if(s<=0){toast('Ingresa la cantidad comprada.');return}
-      if(s>c.porComprar){toast(`No puedes registrar más de ${num(c.porComprar)}.`);return}
       const r={};inps.forEach(i=>{const q=+i.value||0;if(q>0)r[i.dataset.b]=q});
       ov.remove();res(r);};
     ov.querySelector('#cmp-cancel').onclick=()=>{ov.remove();res(null)};
@@ -1035,22 +1035,29 @@ async function aplicarCompra(c,reparto){
           if(l.origen==='oc')tocaOC=true;else tocaPsap=true;
         });
     });
-    if(total<=0){velo(false);toast('No se registró ninguna cantidad.');return}
-    // Ingreso al inventario por el TOTAL (un código, stock global)
+    // Se puede comprar MÁS de lo pedido para aprovechar un buen precio: lo que excede el
+    // pendiente NO se imputa a la OC (el cliente no lo pidió) y entra como stock libre.
+    const ingresado=Object.values(reparto).reduce((a,q)=>a+(+q||0),0);
+    const sobrante=Math.max(ingresado-total,0);
+    if(ingresado<=0){velo(false);toast('No se registró ninguna cantidad.');return}
+    // Ingreso al inventario por TODO lo comprado (un código, stock global)
     const inv=DB[ARCH.inv].data;
     let m=c.codigo?DB[ARCH.prod].data.productos.find(p=>p.codigo===c.codigo):prodMaestro(c.producto);
     if(!m)m=crearProdMaestro(c.producto,'UN');
     let p=inv.productos.find(x=>x.codigo===m.codigo);
     if(!p){p={codigo:m.codigo,nombre:m.nombre,cantidad:0,unidad:m.unidad};inv.productos.push(p)}
-    p.cantidad+=total;
+    p.cantidad+=ingresado;
     const repTxt=Object.entries(reparto).map(([b,q])=>`${b} ${num(q)}`).join(', ');
-    inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:total,referencia:`Compra marcada (Panel)${repTxt?' · reparto: '+repTxt:''}`});
+    if(total>0)inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:total,referencia:`Compra marcada (Panel)${repTxt?' · reparto: '+repTxt:''}`});
+    if(sobrante>0)inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:sobrante,referencia:'Sobrestock (compra sobre lo pedido)'});
     await guardarMaestroSiNuevo();
     if(tocaOC)await guardarArchivo(ARCH.oc,`Compra marcada: ${m.nombre}`);
     if(tocaPsap)await guardarArchivo(ARCH.psap,`Compra marcada (Pendientes SAP): ${m.nombre}`);
-    await guardarArchivo(ARCH.inv,`Inventario: ingreso por compra marcada (${m.nombre} +${total})`);
+    await guardarArchivo(ARCH.inv,`Inventario: ingreso por compra marcada (${m.nombre} +${ingresado})`);
     const resta=c.porComprar-total;
-    toast(`Compra registrada: ${m.nombre} +${num(total)} al inventario${resta>0?` · quedan ${num(resta)} pendientes`:''}`);
+    toast(`Compra registrada: ${m.nombre} +${num(ingresado)} al inventario`
+      +(sobrante>0?` · ${num(sobrante)} como stock libre`:'')
+      +(resta>0?` · quedan ${num(resta)} pendientes`:''));
     render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
@@ -1558,8 +1565,9 @@ function toggleCompra(fe){
       <div><label>Fecha de compra</label><input id="pc-fecha-${fe}" type="date" value="${hoyISO()}"></div>
       <div><label>Bodega</label><label style="text-transform:none;font-weight:400;letter-spacing:0;display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink)"><input type="checkbox" id="pc-bod-${fe}" checked style="width:auto"> Ingresar a inventario</label></div>
     </div>
+    <p class="small muted" style="margin-top:8px">Si compraste de más para dejar stock, ingrésalo igual: a la OC se imputa solo lo que pidió el cliente y el excedente entra a bodega como stock libre.</p>
     <table class="tprod" style="margin-top:8px;min-width:440px"><colgroup><col><col style="width:10ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Por comprar</th><th>Comprado ahora</th></tr>
-    ${pend.map(i=>`<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.porComprar)}</td><td><input type="number" data-ix="${i.ix}" min="0" max="${i.porComprar}" step="any" placeholder="0"></td></tr>`).join('')}</table>
+    ${pend.map(i=>`<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.porComprar)}</td><td><input type="number" data-ix="${i.ix}" min="0" step="any" placeholder="0"></td></tr>`).join('')}</table>
     <div class="acciones"><button class="btn mini" onclick="guardarCompra('${fe}')">Guardar compra</button><button class="btn mini sec" onclick="toggleCompra('${fe}')">Cancelar</button></div>
   </div>`;
 }
@@ -1572,13 +1580,19 @@ async function guardarCompra(fe){
   const aBodega=document.getElementById('pc-bod-'+fe).checked;
   const filas=[...box.querySelectorAll('input[type=number]')].map(inp=>({ix:+inp.dataset.ix,cant:+inp.value||0})).filter(f=>f.cant>0);
   if(!filas.length){toast('Indica al menos una cantidad comprada.');return}
-  for(const f of filas){const it=o.items[f.ix];const pc=(+it.cantidad||0)-(+it.cantidad_comprada||0);
-    if(f.cant>pc){toast(`"${it.producto}": lo pendiente de compra es ${num(pc)}.`);return}}
   velo(true,'Registrando compra…');
   try{
     const itemsC=filas.map(f=>({producto:o.items[f.ix].producto,cantidad:f.cant}));
-    // `ref` apunta al objeto donde vive el dato: el ítem de la OC o el registro del reporte SAP
-    filas.forEach(f=>{const r=o.items[f.ix].ref;r.cantidad_comprada=(+r.cantidad_comprada||0)+f.cant});
+    // Se puede comprar MÁS de lo pedido (buen precio): a la OC se imputa solo hasta el
+    // pendiente; el excedente entra al inventario como stock libre, sin inflar la OC.
+    let sobra=0;
+    filas.forEach(f=>{
+      const it=o.items[f.ix], r=it.ref;
+      const pend=Math.max((+it.cantidad||0)-(+r.cantidad_comprada||0),0);
+      const imputa=Math.min(f.cant,pend);
+      r.cantidad_comprada=(+r.cantidad_comprada||0)+imputa;
+      sobra+=f.cant-imputa;
+    });
     if(o.origen==='oc'){o.ref.compras=o.ref.compras||[];
       o.ref.compras.push({fecha,proveedor:prov,ingreso_bodega:aBodega,items:itemsC})}
     if(aBodega){
@@ -1586,13 +1600,13 @@ async function guardarCompra(fe){
       itemsC.forEach(it=>{
         const p=invProdDe(it.producto);
         p.cantidad+=it.cantidad;
-        inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:it.cantidad,referencia:`Compra OC ${folio}${prov?' · '+prov:''}`});
+        inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:it.cantidad,referencia:`Compra OC ${folio}${prov?' · '+prov:''}${sobra>0?' (incluye sobrestock)':''}`});
       });
       await guardarMaestroSiNuevo();
     }
     await guardarArchivo(o.origen==='oc'?ARCH.oc:ARCH.psap,`OC ${folio}: compra registrada${prov?' ('+prov+')':''}`);
     if(aBodega)await guardarArchivo(ARCH.inv,`Inventario: ingreso por compra OC ${folio}`);
-    toast('Compra registrada');render();
+    toast('Compra registrada'+(sobra>0?` · ${num(sobra)} sobre lo pedido quedan como stock libre`:''));render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
@@ -1701,7 +1715,7 @@ function compraFaltante(numero,btn){
     </div>
     <label style="text-transform:none;font-weight:400;letter-spacing:0;display:flex;gap:8px;align-items:center;margin-top:10px;color:var(--texto)"><input type="checkbox" id="cf-bod-${numero}" checked style="width:auto"> Ingresar al inventario</label>
     <table class="tprod" style="margin-top:10px;min-width:440px"><colgroup><col><col style="width:10ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Falta comprar</th><th>Comprado ahora</th></tr>
-    ${faltas.map(f=>`<tr><td class="trunc" title="${esc(f.producto)}">${esc(f.producto)}</td><td class="num" style="color:var(--rojo);font-weight:600">${num(f.falta)}</td><td><input type="number" data-ix="${f.ix}" min="0" max="${f.falta}" step="any" value="${f.falta}"></td></tr>`).join('')}</table>
+    ${faltas.map(f=>`<tr><td class="trunc" title="${esc(f.producto)}">${esc(f.producto)}</td><td class="num" style="color:var(--rojo);font-weight:600">${num(f.falta)}</td><td><input type="number" data-ix="${f.ix}" min="0" step="any" value="${f.falta}"></td></tr>`).join('')}</table>
     <div class="acciones"><button class="btn mini" onclick="guardarCompraFaltante('${numero}')">Guardar compra</button><button class="btn mini sec" onclick="compraFaltante('${numero}',this)">Cancelar</button></div>
   </div>`;
 }
@@ -1718,7 +1732,13 @@ async function guardarCompraFaltante(numero){
   velo(true,'Registrando compra…');
   try{
     const itemsC=filas.map(f=>({producto:oc.items[f.ix].producto,cantidad:f.cant}));
-    filas.forEach(f=>{oc.items[f.ix].cantidad_comprada=(+oc.items[f.ix].cantidad_comprada||0)+f.cant});
+    // También aquí se puede comprar de más: a la OC solo lo pedido, el resto como stock libre.
+    let sobra=0;
+    filas.forEach(f=>{const it=oc.items[f.ix];
+      const pend=Math.max((+it.cantidad||0)-(+it.cantidad_comprada||0),0);
+      const imputa=Math.min(f.cant,pend);
+      it.cantidad_comprada=(+it.cantidad_comprada||0)+imputa;
+      sobra+=f.cant-imputa;});
     oc.compras=oc.compras||[];oc.compras.push({fecha,proveedor:prov,ingreso_bodega:aBodega,items:itemsC,posterior_guia:numero});
     if(aBodega){
       const inv=DB[ARCH.inv].data;
@@ -1728,7 +1748,7 @@ async function guardarCompraFaltante(numero){
     }
     await guardarArchivo(ARCH.oc,`OC ${folio}: compra posterior a guía N°${numero}`);
     if(aBodega)await guardarArchivo(ARCH.inv,`Inventario: ingreso por compra posterior a guía N°${numero}`);
-    toast('Compra registrada');render();
+    toast('Compra registrada'+(sobra>0?` · ${num(sobra)} sobre lo pedido quedan como stock libre`:''));render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
