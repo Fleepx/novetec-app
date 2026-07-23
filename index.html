@@ -593,7 +593,6 @@ document.getElementById('tabs').addEventListener('click',e=>{
 function render(){
   const m=document.getElementById('vista');
   m.innerHTML={panel:rPanel,cot:rCot,oc:rOC,guias:rGuias,inv:rInv}[tab]();
-  if(tab==='guias')prepFormGuia();
 }
 
 /* ================= Panel ================= */
@@ -1104,18 +1103,6 @@ function rCot(){
   const cs=[...DB[ARCH.cot].data.cotizaciones].reverse();
   return `${dlProd()}
   ${formPendiente('cotizaciones','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
-  <details class="form"><summary>Ingresar cotización manualmente</summary><div class="inner">
-    <div class="grid3">
-      <div><label>Folio / N°</label><input id="c-folio"></div>
-      <div><label>Fecha</label><input id="c-fecha" type="date" value="${hoyISO()}"></div>
-      <div><label>Cliente</label><input id="c-cliente" value="${esc(DB[ARCH.conf].data.cliente_principal||'')}"></div>
-    </div>
-    <label>Ítems cotizados</label>
-    <div id="c-items">${filaItem()}</div>
-    <button class="btn mini sec" type="button" onclick="document.getElementById('c-items').insertAdjacentHTML('beforeend',filaItem())">+ ítem</button>
-    <label>Notas</label><textarea id="c-notas" rows="2"></textarea>
-    <div class="acciones"><button class="btn" onclick="crearCot()">Guardar cotización</button></div>
-  </div></details>
   ${listaPend('cotizaciones')}
   ${cs.length?cs.map(c=>{
     const est={enviada:'chip ambar',convertida:'chip verde',rechazada:'chip rojo'}[c.estado]||'chip';
@@ -1149,45 +1136,14 @@ function rCot(){
       ${c.archivo?`<p class="small" style="margin-top:8px"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(c.archivo)}')"><i class="fa-solid fa-download" style="font-size:12px"></i> Descargar documento</a></p>`:''}
       <div class="acciones">
       ${c.estado==='enviada'?`
-        <button class="btn mini" onclick="tab='oc';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='oc'));render();prefillOC('${esc(c.id)}')">El cliente envió la OC · registrarla</button>
+        <button class="btn mini" onclick="irASubirOC()"><i class="fa-solid fa-cloud-arrow-up"></i> El cliente envió la OC · subir documento</button>
         <button class="btn mini peligro" onclick="rechazarCot('${esc(c.id)}')">Cliente la rechazó</button>`:''}
+      <button class="btn mini sec" onclick="editCot('${esc(c.id)}')"><i class="fa-solid fa-pen"></i> Modificar</button>
       ${c.estado!=='convertida'?`<button class="btn mini peligro" onclick="borrarCot('${esc(c.id)}')">Eliminar</button>`:'<span class="small muted">Para eliminarla, da de baja primero su OC.</span>'}
       </div>
+      <div id="ec-${esc(c.id)}"></div>
     </div>`}).join(''):'<div class="card vacio">Aún no hay cotizaciones registradas.</div>'}`;
 }
-async function crearCot(){
-  const items=leerItems('c-items');
-  if(!v('c-folio').trim()||!items.length){toast('Falta el folio o los ítems.');return}
-  velo(true,'Guardando cotización…');
-  try{
-    DB[ARCH.cot].data.cotizaciones.push({id:'COT-'+Date.now(),folio:v('c-folio').trim(),fecha:v('c-fecha'),cliente:v('c-cliente').trim(),estado:'enviada',oc_asociada:null,items,archivo:null,notas:v('c-notas').trim()});
-    await guardarArchivo(ARCH.cot,`Cotización ${v('c-folio').trim()} registrada`);
-    toast('Cotización guardada');render();
-  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
-  velo(false);
-}
-async function borrarCot(id){
-  const arr=DB[ARCH.cot].data.cotizaciones;const c=arr.find(x=>x.id===id);if(!c)return;
-  if(c.estado==='convertida'){toast('Tiene una OC asociada: da de baja la OC primero.');return}
-  if(!confirm(`¿Eliminar la cotización ${c.folio}? Esta acción no se puede deshacer.`))return;
-  velo(true,'Eliminando…');
-  try{
-    arr.splice(arr.indexOf(c),1);
-    await guardarArchivo(ARCH.cot,`Cotización ${c.folio} eliminada`);
-    if(c.archivo)await borrarArchivoRepo(c.archivo,`Borrado documento de cotización ${c.folio}`);
-    toast('Cotización eliminada');render();
-  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
-  velo(false);
-}
-async function rechazarCot(id){
-  const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id);if(!c)return;
-  c.estado='rechazada';velo(true);
-  try{await guardarArchivo(ARCH.cot,`Cotización ${c.folio} rechazada`);render()}catch(e){}
-  velo(false);
-}
-
-/* ================= Órdenes de compra ================= */
-let ocFiltro='';
 function rOC(){
   const ocs=[...DB[ARCH.oc].data.ordenes];
   const cots=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='enviada');
@@ -1247,21 +1203,6 @@ function rOC(){
     </tr>`).join('')}</table>
     ${psapD.archivo_origen?`<p class="small" style="margin-top:8px"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(psapD.archivo_origen)}')">Descargar reporte original</a></p>`:''}
   </div></details>`:''}
-  <details class="form" id="f-oc"><summary>Ingresar OC manualmente</summary><div class="inner">
-    <div class="grid3">
-      <div><label>Folio OC</label><input id="o-folio"></div>
-      <div><label>Cotización enviada (origen)</label><select id="o-cot"><option value="">— seleccionar —</option>${cots.map(c=>`<option value="${esc(c.id)}">COT ${esc(c.folio)} · ${fFecha(c.fecha)}</option>`).join('')}</select></div>
-      <div><label>Destino</label><input id="o-dest" list="dl-dest" placeholder="ej: Rancagua"><datalist id="dl-dest"><option value="Rancagua"><option value="Lo Miranda"></datalist></div>
-    </div>
-    <div class="grid2">
-      <div><label>Fecha emisión</label><input id="o-femi" type="date" value="${hoyISO()}"></div>
-      <div><label>Fecha de entrega</label><input id="o-fent" type="date"></div>
-    </div>
-    <label>Ítems <span class="muted" style="text-transform:none;font-weight:400">(al elegir cotización se copian solos; puedes editarlos)</span></label>
-    <div id="o-items">${filaItem()}</div>
-    <button class="btn mini sec" type="button" onclick="document.getElementById('o-items').insertAdjacentHTML('beforeend',filaItem())">+ ítem</button>
-    <div class="acciones"><button class="btn" onclick="crearOC()">Guardar OC</button></div>
-  </div></details>
   ${listaPend(['ordenes_compra','pendientes_sap'])}
   <div class="filtro"><input placeholder="Filtrar por folio o estado…" value="${esc(ocFiltro)}" oninput="ocFiltro=this.value.toLowerCase();render();this.focus()"></div>
   ${lista.length?lista.map(o=>{
@@ -1283,39 +1224,13 @@ function rOC(){
       <div class="acciones">
         ${ocComp(o)<ocTot(o)?`<button class="btn mini sec" onclick="toggleCompra('${encodeURIComponent(o.folio)}')">Registrar compra</button>`:''}
         ${e!=='despachada'?`<button class="btn mini" onclick="tab='guias';document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='guias'));render();document.getElementById('g-oc').value='${esc(o.folio)}';document.getElementById('g-oc').dispatchEvent(new Event('change'))">Despachar</button>`:''}
+        <button class="btn mini sec" onclick="editOC('${encodeURIComponent(o.folio)}')"><i class="fa-solid fa-pen"></i> Modificar</button>
         <button class="btn mini peligro" onclick="borrarOC('${encodeURIComponent(o.folio)}')">Dar de baja</button>
       </div>
       <div id="fc-${encodeURIComponent(o.folio)}"></div>
+      <div id="eo-${encodeURIComponent(o.folio)}"></div>
     </div></div>`}).join(''):(foliosSap.length?'':'<div class="card vacio">No hay órdenes de compra.</div>')}
   ${foliosSap.length?`<h2>Órdenes conocidas por el reporte SAP (${foliosSap.length})</h2>${foliosSap.map(tarjetaSap).join('')}`:''}`;
-}
-function prefillOC(cotId){
-  const d=document.getElementById('f-oc');d.open=true;
-  document.getElementById('o-cot').value=cotId;
-  document.getElementById('o-cot').dispatchEvent(new Event('change'));
-  d.scrollIntoView({behavior:'smooth'});
-}
-document.addEventListener('change',e=>{
-  if(e.target.id==='o-cot'){
-    const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===e.target.value);
-    if(c)document.getElementById('o-items').innerHTML=c.items.map(filaItem).join('');
-  }
-});
-async function crearOC(){
-  const folio=v('o-folio').trim(),cotId=v('o-cot'),items=leerItems('o-items');
-  if(!folio||!items.length||!v('o-fent')){toast('Faltan folio, ítems o fecha de entrega.');return}
-  if(!cotId){toast('Selecciona la cotización de origen.');return}
-  if(DB[ARCH.oc].data.ordenes.some(o=>o.folio===folio)){toast('Ya existe una OC con ese folio.');return}
-  velo(true,'Guardando OC…');
-  try{
-    DB[ARCH.oc].data.ordenes.push({folio,cotizacion_id:cotId,fecha_emision:v('o-femi'),fecha_entrega:v('o-fent'),destino:v('o-dest').trim(),cliente:DB[ARCH.conf].data.cliente_principal,items:items.map(i=>({...i,cantidad_comprada:0,cantidad_despachada:0})),compras:[],guias:[],archivo:null,notas:''});
-    const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===cotId);
-    if(c){c.estado='convertida';c.oc_asociada=folio}
-    await guardarArchivo(ARCH.oc,`OC ${folio} registrada`);
-    await guardarArchivo(ARCH.cot,`Cotización ${c?c.folio:''} convertida en OC ${folio}`);
-    toast('OC guardada');render();
-  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
-  velo(false);
 }
 async function borrarOC(fe){
   const folio=decodeURIComponent(fe);
@@ -1347,8 +1262,13 @@ async function borrarOC(fe){
 }
 async function borrarGuia(numero){
   const arr=DB[ARCH.guias].data.guias;const g=arr.find(x=>x.numero===numero);if(!g)return;
+  const hoja=DB[ARCH.hr].data.hojas.find(x=>String(x.numero)===String(g.hoja_ruta));
   let msg=`¿Eliminar la guía N°${numero}?\n\nSe devolverán sus cantidades al inventario y al pendiente de la OC ${g.folio_oc}.`;
-  if(g.hoja_ruta)msg+=`\n\nAtención: esta guía ya está incluida en la Hoja de Ruta N°${g.hoja_ruta}.`;
+  if(hoja){
+    const quedan=(hoja.guias||[]).filter(n=>String(n)!==String(numero)).length;
+    msg+=`\n\nSe quitará de la Hoja de Ruta N°${hoja.numero} (envío ${fFecha(hoja.fecha_envio||hoja.fecha)}), que quedará con ${quedan} guía(s).`;
+    msg+=`\nSi la vuelves a ingresar con esa misma fecha de envío, se reincorpora a la misma hoja y conserva el N°${hoja.numero}.`;
+  }
   if(!confirm(msg))return;
   velo(true,'Eliminando guía…');
   try{
@@ -1366,10 +1286,21 @@ async function borrarGuia(numero){
       p.cantidad+=it.cantidad;
       inv.movimientos.push({fecha:hoyISO(),tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:it.cantidad,referencia:`Reverso por eliminación de guía N°${numero}`});
     });
+    // Desenganchar de la hoja de ruta: la hoja conserva su número y fecha de envío,
+    // de modo que al reingresar la guía con esa misma fecha vuelve a esta misma hoja.
+    if(hoja){
+      hoja.guias=(hoja.guias||[]).filter(n=>String(n)!==String(numero));
+      const dest=new Set();
+      hoja.guias.forEach(n=>{const gg=arr.find(x=>String(x.numero)===String(n));if(gg&&gg.destino)dest.add(normBodega(gg.destino))});
+      hoja.destinos=[...dest];
+      hoja.estado='borrador';
+      hoja.archivo=null;
+    }
     arr.splice(arr.indexOf(g),1);
     await guardarArchivo(ARCH.guias,`Guía N°${numero} eliminada`);
     if(o)await guardarArchivo(ARCH.oc,`OC ${g.folio_oc}: reverso de guía N°${numero}`);
     await guardarArchivo(ARCH.inv,`Inventario: reverso de guía N°${numero}`);
+    if(hoja)await guardarArchivo(ARCH.hr,`Hoja de Ruta N°${hoja.numero}: quitada la guía N°${numero}, pendiente de regenerar`);
     toast(`Guía N°${numero} eliminada y cantidades devueltas`);render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
@@ -1444,17 +1375,6 @@ function rGuias(){
     </div>
     ${h.estado!=='cerrada'?'<div class="small muted" style="margin-top:4px">Si llega otra guía con esta fecha de envío, se agrega y la hoja se regenera con el mismo número.</div>':''}
   </div>`).join(''):'<div class="card vacio">Aún no hay hojas de ruta generadas.</div>'}
-  <details class="form"><summary>Registrar guía de despacho manualmente</summary><div class="inner">
-    <div class="grid3">
-      <div><label>N° de guía</label><input id="g-num"></div>
-      <div><label>Fecha</label><input id="g-fecha" type="date" value="${hoyISO()}"></div>
-      <div><label>OC asociada</label><select id="g-oc"><option value="">— seleccionar —</option>${ocsAct.map(o=>`<option value="${esc(o.folio)}">OC ${esc(o.folio)} · entrega ${fFecha(o.fecha_entrega)}</option>`).join('')}</select></div>
-    </div>
-    <div class="grid2"><div><label>Destino</label><input id="g-dest"></div><div></div></div>
-    <div id="g-items-box"></div>
-    <div class="acciones"><button class="btn" onclick="crearGuia()">Registrar despacho</button></div>
-    <p class="small muted">Al registrar: se descuenta el inventario, se actualiza el avance de la OC y la guía queda lista para la próxima hoja de ruta.</p>
-  </div></details>
   <h2>Guías registradas</h2>
   ${(()=>{
     const gs=DB[ARCH.guias].data.guias;
@@ -1574,58 +1494,133 @@ async function guardarCompraFaltante(numero){
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
-function prepFormGuia(){
-  const sel=document.getElementById('g-oc');
-  sel.addEventListener('change',()=>{
-    const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===sel.value);
-    const box=document.getElementById('g-items-box');
-    if(!o){box.innerHTML='';return}
-    document.getElementById('g-dest').value=o.destino||'';
-    const pend=o.items.map((i,ix)=>({...i,ix,pendiente:(+i.cantidad||0)-(+i.cantidad_despachada||0)})).filter(i=>i.pendiente>0);
-    box.innerHTML=`<label>Cantidades a despachar</label>
-      <table class="tprod" style="min-width:440px"><colgroup><col><col style="width:9ch"><col style="width:15ch"></colgroup><tr><th>Producto</th><th class="num">Pendiente</th><th>Despachar</th></tr>
-      ${pend.map(i=>`<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.pendiente)}</td>
-        <td><input type="number" class="g-cant" data-ix="${i.ix}" min="0" max="${i.pendiente}" step="any" value="${i.pendiente}"></td></tr>`).join('')}</table>`;
-  });
+/* ================= Edición de documentos ya cargados =================
+   Los tres tipos (cotización, OC, guía) se cargan como ARCHIVO por la cola: no hay ingreso
+   manual. Estas funciones sirven para CORREGIR una cotización o una OC cuya extracción salió
+   con un error. Las guías NO se editan: si quedó mal, se elimina y se vuelve a ingresar
+   (orden de Jefe, 22-07-2026). */
+function irASubirOC(){
+  tab='oc';
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='oc'));
+  render();
+  setTimeout(()=>{const d=document.querySelector('#vista details.form');
+    if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'center'})}},60);
 }
-async function crearGuia(){
-  const numero=v('g-num').trim(),folioOC=v('g-oc'),fecha=v('g-fecha'),destino=v('g-dest').trim();
-  if(!numero||!folioOC){toast('Falta el N° de guía o la OC.');return}
-  if(DB[ARCH.guias].data.guias.some(g=>g.numero===numero)){toast('Ya existe una guía con ese número.');return}
-  const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===folioOC);
-  const filas=[...document.querySelectorAll('.g-cant')].map(inp=>({ix:+inp.dataset.ix,cant:+inp.value||0})).filter(f=>f.cant>0);
-  if(!filas.length){toast('Indica al menos una cantidad a despachar.');return}
-  for(const f of filas){const it=o.items[f.ix];const pend=(+it.cantidad||0)-(+it.cantidad_despachada||0);
-    if(f.cant>pend){toast(`"${it.producto}": no puedes despachar más de ${num(pend)}.`);return}}
-  velo(true,'Registrando despacho…');
+function filaEdit(i,ix){
+  return `<tr data-ix="${ix}">
+    <td><input class="ed-prod" list="dl-prod" value="${esc(i.producto||'')}"></td>
+    <td><input class="ed-cant" type="number" min="0" step="any" value="${i.cantidad??''}"></td>
+    <td><input class="ed-prec" type="number" min="0" step="any" value="${i.precio_unitario??''}"></td>
+    <td class="num"><button class="btn mini sec" type="button" title="Quitar ítem" onclick="this.closest('tr').remove()">×</button></td>
+  </tr>`;
+}
+const COLS_EDIT='<colgroup><col><col style="width:11ch"><col style="width:13ch"><col style="width:6ch"></colgroup><tr><th>Producto</th><th>Cantidad</th><th>Precio unit.</th><th></th></tr>';
+function leerEdit(contId,originales){
+  return [...document.querySelectorAll('#'+contId+' tr')].map(r=>{
+    const ix=+r.dataset.ix;
+    const base=ix>=0&&originales[ix]?{...originales[ix]}:{};
+    return {...base,
+      producto:r.querySelector('.ed-prod').value.trim(),
+      cantidad:+r.querySelector('.ed-cant').value||0,
+      precio_unitario:+r.querySelector('.ed-prec').value||0,
+      _ix:ix};
+  }).filter(i=>i.producto&&i.cantidad>0);
+}
+/* ----- Cotización ----- */
+function editCot(id){
+  const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id);if(!c)return;
+  const box=document.getElementById('ec-'+id);
+  if(box.innerHTML){box.innerHTML='';return}
+  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:8px">
+    ${c.estado==='convertida'?'<p class="small" style="color:var(--ambar)">Esta cotización ya tiene OC asociada, y la OC es el documento que manda. Corrige aquí solo si el error viene de la cotización.</p>':''}
+    <div class="grid3">
+      <div><label>Folio</label><input id="ec-folio-${id}" value="${esc(c.folio)}"></div>
+      <div><label>Fecha</label><input id="ec-fecha-${id}" type="date" value="${esc(c.fecha||'')}"></div>
+      <div><label>Cliente</label><input id="ec-cli-${id}" value="${esc(c.cliente||'')}"></div>
+    </div>
+    <label>Ítems</label>
+    <table class="tprod" style="min-width:470px">${COLS_EDIT}<tbody id="ec-items-${id}">${c.items.map(filaEdit).join('')}</tbody></table>
+    <button class="btn mini sec" type="button" onclick="document.getElementById('ec-items-${id}').insertAdjacentHTML('beforeend',filaEdit({},-1))">+ ítem</button>
+    <label>Notas</label><textarea id="ec-notas-${id}" rows="2">${esc(c.notas||'')}</textarea>
+    <div class="acciones"><button class="btn mini" onclick="guardarEditCot('${id}')">Guardar cambios</button><button class="btn mini sec" onclick="editCot('${id}')">Cancelar</button></div>
+  </div>`;
+}
+async function guardarEditCot(id){
+  const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id);if(!c)return;
+  const folio=document.getElementById('ec-folio-'+id).value.trim();
+  if(!folio){toast('El folio no puede quedar vacío.');return}
+  if(DB[ARCH.cot].data.cotizaciones.some(x=>x.id!==id&&String(x.folio)===folio)){toast('Ya existe otra cotización con ese folio.');return}
+  const items=leerEdit('ec-items-'+id,c.items);
+  if(!items.length){toast('La cotización debe tener al menos un ítem.');return}
+  velo(true,'Guardando cambios…');
   try{
-    const itemsGuia=filas.map(f=>({producto:o.items[f.ix].producto,codigo:o.items[f.ix].codigo||null,cantidad:f.cant}));
-    // 1. Guía
-    DB[ARCH.guias].data.guias.push({numero,fecha,destino,folio_oc:folioOC,items:itemsGuia,hoja_ruta:null});
-    // 2. Avance OC
-    filas.forEach(f=>{o.items[f.ix].cantidad_despachada=(+o.items[f.ix].cantidad_despachada||0)+f.cant});
-    o.guias=o.guias||[];o.guias.push(numero);
-    // 3. Inventario
-    const inv=DB[ARCH.inv].data;let negativos=[];
-    itemsGuia.forEach(it=>{
-      // Candado: si el ítem trae código NOV (heredado de la OC), descontar SIEMPRE por código
-      let p;
-      if(it.codigo){
-        p=inv.productos.find(x=>x.codigo===it.codigo);
-        if(!p){const m=DB[ARCH.prod].data.productos.find(x=>x.codigo===it.codigo);
-          p={codigo:it.codigo,nombre:m?m.nombre:it.producto,cantidad:0,unidad:m?m.unidad:'UN'};inv.productos.push(p)}
-      } else {
-        p=invProdDe(it.producto);
-      }
-      p.cantidad-=it.cantidad;if(p.cantidad<0)negativos.push(p.nombre);
-      inv.movimientos.push({fecha,tipo:'salida',codigo:p.codigo,producto:p.nombre,cantidad:it.cantidad,referencia:`Guía N°${numero} · OC ${folioOC}`});
-    });
-    await guardarMaestroSiNuevo();
-    await guardarArchivo(ARCH.guias,`Guía N°${numero} registrada (OC ${folioOC})`);
-    await guardarArchivo(ARCH.oc,`OC ${folioOC}: despacho guía N°${numero}`);
-    await guardarArchivo(ARCH.inv,`Inventario: salida por guía N°${numero}`);
-    toast('Despacho registrado'+(negativos.length?` · Atención, stock negativo: ${negativos.join(', ')}`:''));
-    render();
+    c.folio=folio;
+    c.fecha=document.getElementById('ec-fecha-'+id).value||c.fecha;
+    c.cliente=document.getElementById('ec-cli-'+id).value.trim();
+    c.notas=document.getElementById('ec-notas-'+id).value.trim();
+    c.items=items.map(({_ix,...r})=>r);
+    await guardarArchivo(ARCH.cot,`Cotización ${folio} modificada`);
+    toast('Cotización actualizada');render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+/* ----- Orden de compra ----- */
+function editOC(fe){
+  const folio=decodeURIComponent(fe);
+  const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===folio);if(!o)return;
+  const box=document.getElementById('eo-'+fe);
+  if(box.innerHTML){box.innerHTML='';return}
+  const conMov=o.items.some(i=>(+i.cantidad_despachada||0)>0||(+i.cantidad_comprada||0)>0);
+  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:8px">
+    ${conMov?'<p class="small muted">Esta OC ya tiene compras o despachos registrados: no puedes dejar una cantidad por debajo de lo ya despachado, ni quitar un ítem con movimiento.</p>':''}
+    <div class="grid3">
+      <div><label>Folio OC</label><input id="eo-folio-${fe}" value="${esc(o.folio)}"></div>
+      <div><label>Fecha emisión</label><input id="eo-femi-${fe}" type="date" value="${esc(o.fecha_emision||'')}"></div>
+      <div><label>Fecha de entrega</label><input id="eo-fent-${fe}" type="date" value="${esc(o.fecha_entrega||'')}"></div>
+    </div>
+    <div class="grid2"><div><label>Destino</label><input id="eo-dest-${fe}" list="dl-dest" value="${esc(o.destino||'')}"><datalist id="dl-dest"><option value="Rancagua"><option value="San Francisco de Mostazal"><option value="El Peumo"><option value="Longovilo"></datalist></div><div></div></div>
+    <label>Ítems</label>
+    <table class="tprod" style="min-width:470px">${COLS_EDIT}<tbody id="eo-items-${fe}">${o.items.map(filaEdit).join('')}</tbody></table>
+    <button class="btn mini sec" type="button" onclick="document.getElementById('eo-items-${fe}').insertAdjacentHTML('beforeend',filaEdit({},-1))">+ ítem</button>
+    <div class="acciones"><button class="btn mini" onclick="guardarEditOC('${fe}')">Guardar cambios</button><button class="btn mini sec" onclick="editOC('${fe}')">Cancelar</button></div>
+  </div>`;
+}
+async function guardarEditOC(fe){
+  const folio=decodeURIComponent(fe);
+  const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===folio);if(!o)return;
+  const nuevoFolio=document.getElementById('eo-folio-'+fe).value.trim();
+  if(!nuevoFolio){toast('El folio no puede quedar vacío.');return}
+  if(nuevoFolio!==folio&&DB[ARCH.oc].data.ordenes.some(x=>x.folio===nuevoFolio)){toast('Ya existe otra OC con ese folio.');return}
+  const items=leerEdit('eo-items-'+fe,o.items);
+  if(!items.length){toast('La OC debe tener al menos un ítem.');return}
+  // No permitir dejar una cantidad por debajo de lo ya despachado
+  for(const i of items){
+    const desp=+i.cantidad_despachada||0;
+    if(i.cantidad<desp){toast(`"${i.producto}": ya hay ${num(desp)} despachados, la cantidad no puede ser menor.`);return}
+  }
+  // No permitir quitar ítems con movimiento
+  const quedan=new Set(items.map(i=>i._ix));
+  const quitadoConMov=o.items.find((i,ix)=>!quedan.has(ix)&&((+i.cantidad_despachada||0)>0||(+i.cantidad_comprada||0)>0));
+  if(quitadoConMov){toast(`No puedes quitar "${quitadoConMov.producto}": tiene compras o despachos registrados.`);return}
+  velo(true,'Guardando cambios…');
+  try{
+    o.fecha_emision=document.getElementById('eo-femi-'+fe).value||o.fecha_emision;
+    o.fecha_entrega=document.getElementById('eo-fent-'+fe).value||o.fecha_entrega;
+    o.destino=document.getElementById('eo-dest-'+fe).value.trim();
+    o.items=items.map(({_ix,...r})=>({cantidad_comprada:0,cantidad_despachada:0,...r}));
+    let tocaGuias=false;
+    if(nuevoFolio!==folio){
+      o.folio=nuevoFolio;
+      DB[ARCH.guias].data.guias.forEach(g=>{
+        if(String(g.folio_oc)===folio){g.folio_oc=nuevoFolio;tocaGuias=true}
+        if(String(g.oc)===folio){g.oc=nuevoFolio;tocaGuias=true}
+      });
+      const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.oc_asociada===folio);
+      if(c){c.oc_asociada=nuevoFolio;await guardarArchivo(ARCH.cot,`Cotización ${c.folio}: OC renumerada a ${nuevoFolio}`)}
+    }
+    await guardarArchivo(ARCH.oc,`OC ${nuevoFolio} modificada`);
+    if(tocaGuias)await guardarArchivo(ARCH.guias,`Guías actualizadas: OC ${folio} renumerada a ${nuevoFolio}`);
+    toast('OC actualizada');render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
