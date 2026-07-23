@@ -95,6 +95,15 @@ label{display:block;font-size:var(--fs-xs);font-weight:700;letter-spacing:.06em;
 .tag .bar.vencida{background:var(--vencida)}.tag .bar.gris{background:#AEB9C2}
 .tag .body{flex:1;padding:12px 14px;min-width:0}
 .tag .top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+/* Fichas plegables de documento (cotizaciones y OC): el encabezado es el resumen y el
+   detalle queda oculto hasta desplegarlo, para poder recorrer el listado de folios. */
+details.doc>summary{list-style:none;cursor:pointer;align-items:center}
+details.doc>summary::-webkit-details-marker{display:none}
+details.doc>summary::before{content:'\f105';font-family:'Font Awesome 6 Free';font-weight:900;color:var(--muted);transition:transform .15s;flex:none;width:9px}
+details.doc[open]>summary::before{transform:rotate(90deg)}
+details.doc>summary:hover{opacity:.85}
+details.doc .resumen{margin-left:auto;font-family:var(--mono);font-size:var(--fs-xs);color:var(--muted)}
+details.doc[open] .resumen{display:none}
 .tag .folio{font-family:var(--mono);font-weight:700;font-size:var(--fs-lg);letter-spacing:-.01em}
 .chip{display:inline-block;font-family:var(--mono);font-size:var(--fs-xs);font-weight:600;padding:3px 10px;border-radius:20px;background:var(--gris-bg);color:var(--muted);white-space:nowrap}
 .chip.rojo{background:var(--rojo-bg);color:var(--rojo)}
@@ -751,6 +760,28 @@ function rPanel(){
   <h2>Cotizaciones sin responder (${cotP.length})</h2>
   ${cotP.length?cotP.map(c=>`<div class="tag"><div class="bar gris"></div><div class="body"><div class="top"><span class="folio">COT ${esc(c.folio)}</span><span class="chip">${fFecha(c.fecha)}</span><span class="muted small">${esc(c.cliente)}</span></div></div></div>`).join(''):'<div class="card vacio">Sin cotizaciones pendientes.</div>'}`;
 }
+/* Fichas plegables de documento: se recuerda cuáles quedaron abiertas para que un render
+   (tras guardar una compra, editar, etc.) no las vuelva a cerrar todas. */
+const fichasAbiertas=new Set();
+function fichaAbierta(k){return fichasAbiertas.has(k)}
+function recordarFicha(el){
+  const k=el.dataset.k;if(!k)return;
+  el.open?fichasAbiertas.add(k):fichasAbiertas.delete(k);
+}
+function alternarFichas(btn){
+  const ds=[...document.querySelectorAll('#vista details.doc, #vista details.acc-fecha')];
+  if(!ds.length)return;
+  const abrir=ds.some(d=>!d.open);
+  ds.forEach(d=>{d.open=abrir;recordarFicha(d)});
+  btn.innerHTML=abrir?'<i class="fa-solid fa-chevron-up"></i> Contraer todas'
+                     :'<i class="fa-solid fa-chevron-down"></i> Desplegar todas';
+}
+function barraFichas(){
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
+    <button class="btn mini sec" onclick="alternarFichas(this)"><i class="fa-solid fa-chevron-down"></i> Desplegar todas</button>
+    <button class="btn mini sec" onclick="alternarNombres(this)"><i class="fa-solid fa-arrows-up-down-left-right"></i> Desplegar nombres</button>
+  </div>`;
+}
 /* Despliega o contrae de una vez todos los nombres cortados de la vista (util en celular) */
 function alternarNombres(btn){
   const celdas=[...document.querySelectorAll('#vista td.trunc')];
@@ -1107,16 +1138,20 @@ function rCot(){
   return `${dlProd()}
   ${formPendiente('cotizaciones','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${listaPend('cotizaciones')}
+  ${cs.length?barraFichas():''}
   ${cs.length?cs.map(c=>{
     const est={enviada:'chip ambar',convertida:'chip verde',rechazada:'chip rojo'}[c.estado]||'chip';
+    const neto=c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0);
     return `<div class="card">
-      <div class="top" style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:2px">
+      <details class="doc" data-k="cot:${esc(c.id)}"${fichaAbierta('cot:'+c.id)?' open':''} ontoggle="recordarFicha(this)">
+      <summary class="top" style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:2px">
         <span class="folio mono" style="font-weight:700;margin-right:2px">COT ${esc(c.folio)}</span>
         <span class="${est}">${c.estado}</span>
         <span class="chip">${fFecha(c.fecha)}</span>
         <span class="muted small">${esc(c.cliente)}</span>
         ${c.oc_asociada?`<span class="chip ink">OC ${esc(c.oc_asociada)}</span>`:''}
-      </div>
+        <span class="resumen">${c.items.length} ítem(s) · ${clp(neto)}</span>
+      </summary>
       ${(()=>{
         const bodegas=[...new Set(c.items.map(i=>i.bodega).filter(Boolean))];
         const conBodega=bodegas.length>0;
@@ -1145,6 +1180,7 @@ function rCot(){
       ${c.estado!=='convertida'?`<button class="btn mini peligro" onclick="borrarCot('${esc(c.id)}')">Eliminar</button>`:'<span class="small muted">Para eliminarla, da de baja primero su OC.</span>'}
       </div>
       <div id="ec-${esc(c.id)}"></div>
+      </details>
     </div>`}).join(''):'<div class="card vacio">Aún no hay cotizaciones registradas.</div>'}`;
 }
 async function borrarCot(id){
@@ -1189,11 +1225,13 @@ function rOC(){
     const bod=[...new Set(rs.map(r=>r.bodega))].join(' · ');
     const pend=rs.reduce((s,r)=>s+(+r.por_entregar||0)*(+r.precio_neto||0),0);
     return `<div class="tag"><div class="bar gris"></div><div class="body">
-      <div class="top">
+      <details class="doc" data-k="sap:${esc(f)}"${fichaAbierta('sap:'+f)?' open':''} ontoggle="recordarFicha(this)">
+      <summary class="top">
         <span class="folio">OC ${esc(f)}</span>
         <span class="chip">Pendientes SAP</span>
         <span class="muted small">${fFecha(rs[0].fecha_doc)} · ${esc(bod)} · por entregar <b class="mono">${clp(pend)}</b></span>
-      </div>
+        <span class="resumen">${rs.length} ítem(s)</span>
+      </summary>
       <table class="tprod" style="margin-top:12px;min-width:460px"><colgroup><col><col style="width:8ch"><col style="width:10ch"><col style="width:11ch"></colgroup>
         <tr><th>Producto</th><th class="num">Pedido</th><th class="num">Por entregar</th><th class="num">Prc. neto</th></tr>
         ${rs.map(r=>`<tr><td class="trunc" title="${esc(r.producto)}">${esc(r.producto)}</td>
@@ -1202,6 +1240,7 @@ function rOC(){
           <td class="num">${clp(r.precio_neto)}</td></tr>`).join('')}
       </table>
       <p class="small muted" style="margin-top:8px">Conocida por el reporte SAP del cliente. Su documento de OC aún no se ha cargado, por eso no tiene acciones de compra ni despacho.</p>
+      </details>
     </div></div>`;};
   const psapD=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{registros:[]};
   const psapReg=psapD.registros||[];
@@ -1231,16 +1270,20 @@ function rOC(){
   </div></details>`:''}
   ${listaPend(['ordenes_compra','pendientes_sap'])}
   <div class="filtro"><input placeholder="Filtrar por folio o estado…" value="${esc(ocFiltro)}" oninput="ocFiltro=this.value.toLowerCase();render();this.focus()"></div>
+  ${(lista.length||foliosSap.length)?barraFichas():''}
   ${lista.length?lista.map(o=>{
     const s=semaforo(o),e=ocEstado(o);
+    const pendD=o.items.reduce((a,i)=>a+((+i.cantidad||0)-(+i.cantidad_despachada||0)),0);
     return `<div class="tag"><div class="bar ${s.c}"></div><div class="body">
-      <div class="top">
+      <details class="doc" data-k="oc:${esc(o.folio)}"${fichaAbierta('oc:'+o.folio)?' open':''} ontoggle="recordarFicha(this)">
+      <summary class="top">
         <span class="folio">OC ${esc(o.folio)}</span>
         <span class="chip ${s.c}">${s.txt}</span>
         <span class="chip">${ESTADO_LBL[e]}</span>
         ${chipCompra(o)}
         <span class="muted small">Emisión ${fFecha(o.fecha_emision)} · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b> · ${esc(o.destino||'—')}</span>
-      </div>
+        <span class="resumen">${o.items.length} ítem(s) · ${num(pendD)} por despachar</span>
+      </summary>
       <table class="tprod" style="margin-top:12px;min-width:520px"><colgroup><col><col style="width:8ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th></tr>
       ${o.items.map(i=>{const comp=+i.cantidad_comprada||0;
         return `<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num" style="${comp<i.cantidad?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(i.cantidad-(i.cantidad_despachada||0))}</td></tr>`}).join('')}</table>
@@ -1255,6 +1298,7 @@ function rOC(){
       </div>
       <div id="fc-${encodeURIComponent(o.folio)}"></div>
       <div id="eo-${encodeURIComponent(o.folio)}"></div>
+      </details>
     </div></div>`}).join(''):(foliosSap.length?'':'<div class="card vacio">No hay órdenes de compra.</div>')}
   ${foliosSap.length?`<h2>Órdenes conocidas por el reporte SAP (${foliosSap.length})</h2>${foliosSap.map(tarjetaSap).join('')}`:''}`;
 }
@@ -1393,6 +1437,7 @@ function rGuias(){
      return huerfanas.length?`<div class="card" style="border-color:var(--ambar)"><i class="fa-solid fa-triangle-exclamation" style="color:var(--ambar)"></i> ${huerfanas.map(h=>`Hoja de Ruta N°${esc(String(h.numero))} (envío ${fFecha(h.fecha_envio||h.fecha)}) quedó sin guías.`).join(' ')} Reingresa una guía con esa fecha de envío para reincorporarla.</div>`:'';
    })()}
   <h2>Guías registradas</h2>
+  ${DB[ARCH.guias].data.guias.length?barraFichas():''}
   ${(()=>{
     const gs=DB[ARCH.guias].data.guias;
     if(!gs.length)return '<div class="card vacio">Aún no hay guías registradas.</div>';
