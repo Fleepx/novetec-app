@@ -197,6 +197,7 @@ a{color:var(--texto)}
   <button data-t="cot">Cotizaciones</button>
   <button data-t="oc">Órdenes de compra</button>
   <button data-t="guias">Guías de despacho</button>
+  <button data-t="precios">Lista de precios</button>
   <button data-t="inv">Inventario</button>
 </nav>
 <main id="vista"></main>
@@ -592,7 +593,7 @@ document.getElementById('tabs').addEventListener('click',e=>{
 });
 function render(){
   const m=document.getElementById('vista');
-  m.innerHTML={panel:rPanel,cot:rCot,oc:rOC,guias:rGuias,inv:rInv}[tab]();
+  m.innerHTML={panel:rPanel,cot:rCot,oc:rOC,guias:rGuias,precios:rPrecios,inv:rInv}[tab]();
 }
 
 /* ================= Panel ================= */
@@ -1623,6 +1624,76 @@ async function guardarEditOC(fe){
     toast('OC actualizada');render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
+}
+
+/* ================= Lista de precios =================
+   Vista DERIVADA: no tiene archivo propio. Reúne los precios de las OC cargadas y del reporte
+   de Pendientes SAP (que también es listado de OC del cliente). Los precios de cotización NO
+   entran: son oferta, no adjudicado. */
+let preFiltro='',preSoloCon=false;
+function observacionesPrecio(){
+  const obs={}; // codigo NOV -> [{fecha, oc, precio}]
+  const push=(cod,nombre,o)=>{
+    if(!cod)cod='N:'+normProd(nombre);
+    (obs[cod]=obs[cod]||[]).push(o);
+  };
+  DB[ARCH.oc].data.ordenes.forEach(o=>o.items.forEach(i=>{
+    const p=+i.precio_unitario||0;if(!p)return;
+    push(codigoDeItem(i.producto,i.codigo),i.producto,{fecha:o.fecha_emision||'',oc:String(o.folio),precio:p});
+  }));
+  ((DB[ARCH.psap]&&DB[ARCH.psap].data.registros)||[]).forEach(r=>{
+    const p=+r.precio_neto||0;if(!p)return;
+    push(r.codigo||codigoDeItem(r.producto,null),r.producto,{fecha:r.fecha_doc||'',oc:String(r.doc_compras||''),precio:p});
+  });
+  // más reciente primero; a igual fecha, el precio más alto primero (suele ser el formato mayor)
+  Object.values(obs).forEach(a=>a.sort((x,y)=>(y.fecha||'').localeCompare(x.fecha||'')||y.precio-x.precio));
+  return obs;
+}
+function rPrecios(){
+  const obs=observacionesPrecio();
+  const prods=DB[ARCH.prod].data.productos;
+  let filas=prods.map(p=>({codigo:p.codigo,nombre:p.nombre,unidad:p.unidad||'UN',
+                           precios:(obs[p.codigo]||[]).slice(0,4)}));
+  // productos con precio que no estén en el maestro (por si acaso)
+  Object.keys(obs).filter(k=>k.startsWith('N:')).forEach(k=>{
+    filas.push({codigo:null,nombre:obs[k][0].producto||k.slice(2),unidad:'UN',precios:obs[k].slice(0,4)});
+  });
+  const conPrecio=filas.filter(f=>f.precios.length).length;
+  if(preSoloCon)filas=filas.filter(f=>f.precios.length);
+  if(preFiltro){const q=preFiltro.toLowerCase();
+    filas=filas.filter(f=>f.nombre.toLowerCase().includes(q)||String(f.codigo||'').toLowerCase().includes(q));}
+  filas.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
+  const celda=o=>`<span class="mono" title="OC ${esc(o.oc)} · ${fFecha(o.fecha)}">${clp(o.precio)}</span>`;
+  const variacion=ps=>{
+    if(ps.length<2)return '';
+    const d=ps[0].precio-ps[1].precio;
+    if(!d)return '<span class="muted" title="Sin cambio respecto al precio anterior">=</span>';
+    const pct=Math.round(Math.abs(d)/ps[1].precio*100);
+    return `<span style="color:var(--${d>0?'rojo':'verde'})" title="${d>0?'Subió':'Bajó'} ${clp(Math.abs(d))} respecto al precio anterior"><i class="fa-solid fa-arrow-${d>0?'up':'down'}" style="font-size:11px"></i> ${pct}%</span>`;
+  };
+  return `
+  <h2>Lista de precios <span class="muted">· ${conPrecio} de ${prods.length} artículos con precio de OC</span></h2>
+  <div class="filtro"><input placeholder="Buscar producto o código…" value="${esc(preFiltro)}" oninput="preFiltro=this.value;render();const i=document.querySelector('.filtro input');i.focus();i.setSelectionRange(i.value.length,i.value.length)"></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
+    <button class="btn mini ${preSoloCon?'':'sec'}" onclick="preSoloCon=!preSoloCon;render()"><i class="fa-solid fa-${preSoloCon?'check':'filter'}"></i> Solo con precio</button>
+    <button class="btn mini sec" onclick="alternarNombres(this)"><i class="fa-solid fa-arrows-up-down-left-right"></i> Desplegar nombres</button>
+    <span class="small muted">${filas.length} artículo(s) en pantalla</span>
+  </div>
+  ${filas.length?`<div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:660px">
+    <colgroup><col><col style="width:11ch"><col style="width:8ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"></colgroup>
+    <tr><th>Producto</th><th class="num">Último precio</th><th class="num">Var.</th><th class="num">Anterior</th><th class="num">2 atrás</th><th class="num">3 atrás</th></tr>
+    ${filas.map(f=>{const ps=f.precios;
+      return `<tr>
+        <td class="trunc" title="${esc(f.nombre)}${f.codigo?' — '+esc(f.codigo):''}">${esc(f.nombre)}</td>
+        <td class="num" style="font-weight:700">${ps[0]?celda(ps[0]):'<span class="muted">—</span>'}</td>
+        <td class="num small">${variacion(ps)}</td>
+        <td class="num muted">${ps[1]?celda(ps[1]):''}</td>
+        <td class="num muted">${ps[2]?celda(ps[2]):''}</td>
+        <td class="num muted">${ps[3]?celda(ps[3]):''}</td>
+      </tr>`}).join('')}
+  </table></div>
+  <p class="small muted">Precios netos tomados del listado de OC (órdenes cargadas y reporte de pendientes SAP), del más reciente al más antiguo. Pasa el cursor sobre un precio para ver su OC y su fecha. Los precios de cotización no se incluyen.</p>`
+  :'<div class="card vacio">No hay artículos que coincidan con la búsqueda.</div>'}`;
 }
 
 /* ================= Inventario ================= */
