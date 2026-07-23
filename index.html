@@ -121,6 +121,16 @@ table.tprod td,table.tprod th{padding-left:8px;padding-right:8px}
 table.tprod td:first-child,table.tprod th:first-child{padding-left:2px}
 table.tprod td:last-child,table.tprod th:last-child{padding-right:2px}
 .aviso-medida{color:var(--ambar);margin-right:5px;cursor:help}
+/* Alerta roja junto a una cifra (ej: se despachó más de lo comprado) */
+.alerta-cifra{color:var(--rojo);margin-left:5px;cursor:help}
+/* Acordeón de guías: bodega -> fecha -> guías de ese día */
+.acc-bodega{margin-bottom:12px}
+.acc-fecha>summary{list-style:none;cursor:pointer;padding:11px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);display:flex;align-items:center;gap:10px;margin-top:8px;font-weight:600}
+.acc-fecha>summary::-webkit-details-marker{display:none}
+.acc-fecha>summary::before{content:'\f105';font-family:'Font Awesome 6 Free';font-weight:900;color:var(--muted);transition:transform .15s}
+.acc-fecha[open]>summary::before{transform:rotate(90deg)}
+.acc-fecha>summary .cnt{margin-left:auto;font-family:var(--mono);font-size:var(--fs-xs);color:var(--muted);font-weight:400}
+.acc-fecha .cuerpo{padding:6px 0 4px 6px}
 td.trunc:hover{background:var(--hover)}
 td.trunc.abierto{white-space:normal;overflow:visible;text-overflow:clip;background:var(--hover)}
 td.num,th.num{text-align:right;font-family:var(--mono);letter-spacing:-.01em}
@@ -1415,7 +1425,6 @@ async function guardarCompra(fe){
 
 /* ================= Guías de despacho ================= */
 function rGuias(){
-  const gs=[...DB[ARCH.guias].data.guias].reverse();
   const hrs=[...DB[ARCH.hr].data.hojas].reverse();
   const ocsAct=DB[ARCH.oc].data.ordenes.filter(o=>ocEstado(o)!=='despachada');
   return `
@@ -1447,33 +1456,110 @@ function rGuias(){
     <p class="small muted">Al registrar: se descuenta el inventario, se actualiza el avance de la OC y la guía queda lista para la próxima hoja de ruta.</p>
   </div></details>
   <h2>Guías registradas</h2>
-  ${gs.length?gs.map(g=>{
-    const ds=g.discrepancias||[];
-    const oc=DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===String(g.oc||g.folio_oc));
-    const nomOC=cod=>{const i=oc&&oc.items.find(x=>x.codigo===cod);return i?i.producto:null};
-    return `<div class="card"${ds.length?' style="border-color:var(--ambar)"':''}>
+  ${(()=>{
+    const gs=DB[ARCH.guias].data.guias;
+    if(!gs.length)return '<div class="card vacio">Aún no hay guías registradas.</div>';
+    // Agrupar por bodega y, dentro, por fecha (ambas ordenadas)
+    const porBod={};
+    gs.forEach(g=>{const b=normBodega(g.destino||'Sin destino');(porBod[b]=porBod[b]||{}).x=1;
+      (porBod[b][g.fecha]=porBod[b][g.fecha]||[]).push(g)});
+    const orden=BODEGAS_ORDEN.filter(b=>porBod[b]).concat(Object.keys(porBod).filter(b=>!BODEGAS_ORDEN.includes(b)&&b!=='x').sort((a,b)=>a.localeCompare(b,'es')));
+    return orden.map(b=>{
+      const fechas=Object.keys(porBod[b]).filter(k=>k!=='x').sort((a,b)=>b.localeCompare(a));
+      const totalG=fechas.reduce((s,f)=>s+porBod[b][f].length,0);
+      return `<div class="acc-bodega">
+        <div class="bodega-lbl"><i class="fa-solid fa-warehouse" style="font-size:14px;color:var(--muted)"></i> ${esc(b)} <span class="muted">· ${totalG} guía(s)</span></div>
+        ${fechas.map(f=>{const dia=porBod[b][f];
+          return `<details class="acc-fecha"><summary>${fFecha(f)}<span class="cnt">${dia.length} guía(s)</span></summary><div class="cuerpo">
+            ${dia.map(tarjetaGuia).join('')}
+          </div></details>`;}).join('')}
+      </div>`;
+    }).join('');
+  })()}`;
+}
+/* Tarjeta de una guía. Las diferencias de NOMBRE ya se ven en la tabla (columna en ámbar).
+   Las diferencias de COMPRA (se despachó más de lo comprado) se muestran como icono rojo
+   junto a la cantidad; al pasar el mouse explica el problema y ofrece ingresar la compra. */
+function tarjetaGuia(g){
+  const oc=DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===String(g.oc||g.folio_oc));
+  const nomOC=cod=>{const i=oc&&oc.items.find(x=>x.codigo===cod);return i?i.producto:null};
+  const faltaCompra=it=>{ // devuelve cuánto falta comprar para cubrir lo despachado
+    if(!oc)return 0;
+    const i=oc.items.find(x=>x.codigo===it.codigo)||oc.items.find(x=>x.producto.trim().toUpperCase()===it.producto.trim().toUpperCase());
+    if(!i)return 0;
+    return Math.max((+i.cantidad_despachada||0)-(+i.cantidad_comprada||0),0);
+  };
+  const hayFalta=g.items.some(i=>faltaCompra(i)>0);
+  return `<div class="card">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <span class="mono" style="font-weight:700;font-size:var(--fs-lg)">Guía N° ${esc(g.numero)}</span>
-      <span class="chip">${fFecha(g.fecha)}</span>
       <span class="chip ink">OC ${esc(g.oc||g.folio_oc)}</span>
-      <span class="muted small">${esc(g.destino||'')}</span>
       ${g.hoja_ruta?`<span class="chip verde">Hoja de ruta N°${g.hoja_ruta}</span>`:'<span class="chip ambar">Sin hoja de ruta</span>'}
-      ${ds.length?`<span class="chip ambar"><i class="fa-solid fa-triangle-exclamation"></i> ${ds.length} alerta(s)</span>`:'<span class="chip verde">concilia con la OC</span>'}
       <button class="btn mini peligro" style="margin-left:auto" onclick="borrarGuia('${esc(g.numero)}')">Eliminar</button>
     </div>
-    <table class="tprod" style="margin-top:12px;min-width:520px"><colgroup><col><col><col style="width:10ch"></colgroup>
-      <tr><th>Producto según la OC (manda)</th><th>Nombre en la guía</th><th class="num">Cantidad</th></tr>
+    <table class="tprod" style="margin-top:12px;min-width:520px"><colgroup><col><col><col style="width:11ch"></colgroup>
+      <tr><th>Producto según la OC</th><th>Nombre en la guía</th><th class="num">Cantidad</th></tr>
     ${g.items.map(i=>{const no=nomOC(i.codigo);const dif=no&&no.trim().toUpperCase()!==i.producto.trim().toUpperCase();
+      const falta=faltaCompra(i);
       return `<tr>
         <td class="trunc" title="${esc(no||i.producto)}">${esc(no||i.producto)}</td>
         <td class="trunc" title="${esc(i.producto)}" style="${dif?'color:var(--ambar)':'color:var(--muted)'}">${dif?esc(i.producto):'igual'}</td>
-        <td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}</td></tr>`}).join('')}</table>
-    ${ds.length?`<div class="card" style="border-color:var(--ambar);margin:12px 0 0">
-      <b>Diferencias con la orden de compra</b>
-      <ul style="margin:8px 0 0 18px">${ds.map(x=>`<li class="small"><b>${esc(x.tipo)}</b>: ${esc(x.detalle)}</li>`).join('')}</ul>
-      <p class="small muted" style="margin-top:8px">La orden de compra es el documento que manda: define nombre, precio y monto.</p>
-    </div>`:''}
-  </div>`}).join(''):'<div class="card vacio">Aún no hay guías registradas.</div>'}`;
+        <td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}${falta>0?` <i class="fa-solid fa-circle-exclamation alerta-cifra" title="Se despacharon ${num(i.cantidad)} pero faltan ${num(falta)} por registrar como comprados. Ingresa la compra para cuadrar el inventario."></i>`:''}</td></tr>`}).join('')}</table>
+    ${hayFalta?`<div style="margin-top:10px"><button class="btn mini" style="background:none;border:1.5px solid var(--rojo);color:var(--rojo)" onclick="compraFaltante('${esc(g.numero)}',this)"><i class="fa-solid fa-cart-plus"></i> Ingresar compra faltante</button>
+      <div id="cf-${esc(g.numero)}"></div></div>`:''}
+  </div>`;
+}
+/* Ingreso de compra DESPUÉS de la guía (via de excepción, no el flujo normal).
+   Registra la compra en la OC y, si se marca, ingresa al inventario. */
+function compraFaltante(numero,btn){
+  const g=DB[ARCH.guias].data.guias.find(x=>String(x.numero)===String(numero));
+  const oc=g&&DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===String(g.oc||g.folio_oc));
+  const box=document.getElementById('cf-'+numero);
+  if(box.innerHTML){box.innerHTML='';return}
+  const faltas=g.items.map(it=>{
+    const i=oc&&(oc.items.find(x=>x.codigo===it.codigo)||oc.items.find(x=>x.producto.trim().toUpperCase()===it.producto.trim().toUpperCase()));
+    if(!i)return null;
+    const falta=Math.max((+i.cantidad_despachada||0)-(+i.cantidad_comprada||0),0);
+    return falta>0?{ix:oc.items.indexOf(i),producto:i.producto,falta}:null;
+  }).filter(Boolean);
+  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:8px">
+    <p class="small muted">Vía de excepción: normalmente la compra se ingresa antes de la guía. Registra aquí lo comprado para cuadrar la OC y el inventario.</p>
+    <div class="grid2">
+      <div><label>Proveedor</label><input id="cf-prov-${numero}" placeholder="ej: Ferretería El Volcán"></div>
+      <div><label>Fecha de compra</label><input id="cf-fecha-${numero}" type="date" value="${hoyISO()}"></div>
+    </div>
+    <label style="text-transform:none;font-weight:400;letter-spacing:0;display:flex;gap:8px;align-items:center;margin-top:10px;color:var(--texto)"><input type="checkbox" id="cf-bod-${numero}" checked style="width:auto"> Ingresar al inventario</label>
+    <table class="tprod" style="margin-top:10px;min-width:440px"><colgroup><col><col style="width:10ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Falta comprar</th><th>Comprado ahora</th></tr>
+    ${faltas.map(f=>`<tr><td class="trunc" title="${esc(f.producto)}">${esc(f.producto)}</td><td class="num" style="color:var(--rojo);font-weight:600">${num(f.falta)}</td><td><input type="number" data-ix="${f.ix}" min="0" max="${f.falta}" step="any" value="${f.falta}"></td></tr>`).join('')}</table>
+    <div class="acciones"><button class="btn mini" onclick="guardarCompraFaltante('${numero}')">Guardar compra</button><button class="btn mini sec" onclick="compraFaltante('${numero}',this)">Cancelar</button></div>
+  </div>`;
+}
+async function guardarCompraFaltante(numero){
+  const g=DB[ARCH.guias].data.guias.find(x=>String(x.numero)===String(numero));
+  const folio=g.oc||g.folio_oc;
+  const oc=DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===String(folio));if(!oc)return;
+  const box=document.getElementById('cf-'+numero);
+  const prov=document.getElementById('cf-prov-'+numero).value.trim();
+  const fecha=document.getElementById('cf-fecha-'+numero).value||hoyISO();
+  const aBodega=document.getElementById('cf-bod-'+numero).checked;
+  const filas=[...box.querySelectorAll('input[type=number]')].map(inp=>({ix:+inp.dataset.ix,cant:+inp.value||0})).filter(f=>f.cant>0);
+  if(!filas.length){toast('Indica al menos una cantidad comprada.');return}
+  velo(true,'Registrando compra…');
+  try{
+    const itemsC=filas.map(f=>({producto:oc.items[f.ix].producto,cantidad:f.cant}));
+    filas.forEach(f=>{oc.items[f.ix].cantidad_comprada=(+oc.items[f.ix].cantidad_comprada||0)+f.cant});
+    oc.compras=oc.compras||[];oc.compras.push({fecha,proveedor:prov,ingreso_bodega:aBodega,items:itemsC,posterior_guia:numero});
+    if(aBodega){
+      const inv=DB[ARCH.inv].data;
+      itemsC.forEach(it=>{const p=invProdDe(it.producto);p.cantidad+=it.cantidad;
+        inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:it.cantidad,referencia:`Compra OC ${folio} (posterior a guía N°${numero})${prov?' · '+prov:''}`})});
+      await guardarMaestroSiNuevo();
+    }
+    await guardarArchivo(ARCH.oc,`OC ${folio}: compra posterior a guía N°${numero}`);
+    if(aBodega)await guardarArchivo(ARCH.inv,`Inventario: ingreso por compra posterior a guía N°${numero}`);
+    toast('Compra registrada');render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
 }
 function prepFormGuia(){
   const sel=document.getElementById('g-oc');
