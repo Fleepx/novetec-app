@@ -1205,43 +1205,45 @@ async function rechazarCot(id){
 
 /* ================= Órdenes de compra ================= */
 let ocFiltro='';
-function rOC(){
-  const ocs=[...DB[ARCH.oc].data.ordenes];
-  const cots=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='enviada');
-  // Orden por FOLIO de OC, nada mas (Jefe, 22-07-2026)
-  ocs.sort((a,b)=>String(a.folio).localeCompare(String(b.folio),'es',{numeric:true}));
-  const lista=ocs.filter(o=>!ocFiltro||o.folio.toLowerCase().includes(ocFiltro)||ocEstado(o).includes(ocFiltro));
-  // OC que solo conocemos por el reporte de pendientes SAP (aun sin su documento cargado)
-  const folios=new Set(ocs.map(o=>String(o.folio)));
-  const soloSap={};
+/* TODAS las órdenes de compra en una sola lista y con la misma forma, vengan de un documento
+   cargado o del reporte SAP del cliente: la fuente del archivo no cambia cómo se trata una OC
+   (Jefe, 22-07-2026). Cada ítem lleva `ref`, el objeto donde se escriben las compras, para que
+   registrar una compra funcione igual en ambos casos. */
+function ordenesUnificadas(){
+  const reales=DB[ARCH.oc].data.ordenes.map(o=>{
+    o.items.forEach(i=>{i.ref=i});
+    return Object.assign(Object.create(null),o,{origen:'oc',ref:o});
+  });
+  const folios=new Set(reales.map(o=>String(o.folio)));
+  const porFolio={};
   ((DB[ARCH.psap]&&DB[ARCH.psap].data.registros)||[]).forEach(r=>{
     const f=String(r.doc_compras||'');
-    if(!f||folios.has(f))return;
-    (soloSap[f]=soloSap[f]||[]).push(r);
+    if(!f||folios.has(f))return;              // si ya está su documento, manda el documento
+    (porFolio[f]=porFolio[f]||[]).push(r);
   });
-  const foliosSap=Object.keys(soloSap).sort((a,b)=>a.localeCompare(b,'es',{numeric:true}))
-    .filter(f=>!ocFiltro||f.toLowerCase().includes(ocFiltro));
-  const tarjetaSap=f=>{const rs=soloSap[f];
-    const bod=[...new Set(rs.map(r=>r.bodega))].join(' · ');
-    const pend=rs.reduce((s,r)=>s+(+r.por_entregar||0)*(+r.precio_neto||0),0);
-    return `<div class="tag"><div class="bar gris"></div><div class="body">
-      <details class="doc" data-k="sap:${esc(f)}"${fichaAbierta('sap:'+f)?' open':''} ontoggle="recordarFicha(this)">
-      <summary class="top">
-        <span class="folio">OC ${esc(f)}</span>
-        <span class="chip">Pendientes SAP</span>
-        <span class="muted small">${fFecha(rs[0].fecha_doc)} · ${esc(bod)} · por entregar <b class="mono">${clp(pend)}</b></span>
-        <span class="resumen">${rs.length} ítem(s)</span>
-      </summary>
-      <table class="tprod" style="margin-top:12px;min-width:460px"><colgroup><col><col style="width:8ch"><col style="width:10ch"><col style="width:11ch"></colgroup>
-        <tr><th>Producto</th><th class="num">Pedido</th><th class="num">Por entregar</th><th class="num">Prc. neto</th></tr>
-        ${rs.map(r=>`<tr><td class="trunc" title="${esc(r.producto)}">${esc(r.producto)}</td>
-          <td class="num">${num(r.cantidad)}</td>
-          <td class="num" style="font-weight:600">${num(r.por_entregar)}</td>
-          <td class="num">${clp(r.precio_neto)}</td></tr>`).join('')}
-      </table>
-      <p class="small muted" style="margin-top:8px">Conocida por el reporte SAP del cliente. Su documento de OC aún no se ha cargado, por eso no tiene acciones de compra ni despacho.</p>
-      </details>
-    </div></div>`;};
+  const delReporte=Object.keys(porFolio).map(folio=>{
+    const rs=porFolio[folio];
+    return {folio,origen:'sap',sin_documento:true,
+      fecha_emision:rs[0].fecha_doc,fecha_entrega:null,
+      destino:[...new Set(rs.map(r=>r.bodega).filter(Boolean))].join(' · '),
+      items:rs.map(r=>({producto:r.producto,codigo:r.codigo,
+        cantidad:+r.cantidad||0,
+        cantidad_comprada:+r.cantidad_comprada||0,
+        // el cliente dice cuánto le queda por entregar: la diferencia es lo ya despachado
+        cantidad_despachada:Math.max((+r.cantidad||0)-(+r.por_entregar||0),0),
+        precio_unitario:+r.precio_neto||0,ref:r})),
+      ref:rs};
+  });
+  return [...reales,...delReporte]
+    .sort((a,b)=>String(a.folio).localeCompare(String(b.folio),'es',{numeric:true}));
+}
+function ordenPorFolio(folio){return ordenesUnificadas().find(o=>String(o.folio)===String(folio))}
+function rOC(){
+  const cots=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='enviada');
+  // Una sola lista, ordenada por FOLIO (Jefe, 22-07-2026)
+  const lista=ordenesUnificadas().filter(o=>!ocFiltro
+    ||String(o.folio).toLowerCase().includes(ocFiltro)
+    ||ocEstado(o).includes(ocFiltro));
   const psapD=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{registros:[]};
   const psapReg=psapD.registros||[];
   return `${dlProd()}
@@ -1252,8 +1254,8 @@ function rOC(){
     <div class="acciones"><button class="btn" onclick="leerOCpdf()"><i class="fa-solid fa-file-import"></i> Leer el PDF</button></div>
   </div></details>`}
   ${formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
-  ${psapReg.length?`<details class="form"><summary>Pendientes SAP cargados (${psapReg.length})${psapD.actualizado?` · reporte del ${fFecha(psapD.actualizado)}`:''}</summary><div class="inner" style="overflow-x:auto">
-    <p class="small muted" style="margin-top:10px">Registros del último reporte SAP de adjudicados. Si un Doc. compras ya está cargado como OC, en el Panel manda la OC y el registro se omite.</p>
+  ${psapReg.length?`<details class="form"><summary>Ver el reporte de pendientes SAP tal como llegó (${psapReg.length} líneas)${psapD.actualizado?` · cargado el ${fFecha(psapD.actualizado)}`:''}</summary><div class="inner" style="overflow-x:auto">
+    <p class="small muted" style="margin-top:10px">Contenido crudo del último reporte del cliente, solo como respaldo: sus órdenes ya están en la lista de arriba junto a las demás. Si después se carga el documento de una de esas OC, manda el documento.</p>
     <table class="tprod" style="min-width:820px"><colgroup><col style="width:10ch"><col style="width:12ch"><col><col style="width:8ch"><col style="width:12ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"></colgroup><tr><th>Fecha doc</th><th>Doc. compras</th><th>Producto</th><th class="num">Cantidad</th><th>Bodega</th><th class="num">Por entregar</th><th class="num">Prc. neto</th><th class="num">Comprado</th></tr>
     ${psapReg.map(r=>`<tr>
       <td class="mono small">${fFecha(r.fecha_doc)}</td>
@@ -1270,7 +1272,7 @@ function rOC(){
   </div></details>`:''}
   ${listaPend(['ordenes_compra','pendientes_sap'])}
   <div class="filtro"><input placeholder="Filtrar por folio o estado…" value="${esc(ocFiltro)}" oninput="ocFiltro=this.value.toLowerCase();render();this.focus()"></div>
-  ${(lista.length||foliosSap.length)?barraFichas():''}
+  ${lista.length?barraFichas():''}
   ${lista.length?lista.map(o=>{
     const s=semaforo(o),e=ocEstado(o);
     const pendD=o.items.reduce((a,i)=>a+((+i.cantidad||0)-(+i.cantidad_despachada||0)),0);
@@ -1281,7 +1283,8 @@ function rOC(){
         <span class="chip ${s.c}">${s.txt}</span>
         <span class="chip">${ESTADO_LBL[e]}</span>
         ${chipCompra(o)}
-        <span class="muted small">Emisión ${fFecha(o.fecha_emision)} · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b> · ${esc(o.destino||'—')}</span>
+        ${o.sin_documento?'<span class="chip ambar" title="Esta OC la conocemos por el reporte del cliente; su documento aún no se ha cargado">sin documento</span>':''}
+        <span class="muted small">Emisión ${fFecha(o.fecha_emision)}${o.fecha_entrega?` · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b>`:''} · ${esc(o.destino||'—')}</span>
         <span class="resumen">${o.items.length} ítem(s) · ${num(pendD)} por despachar</span>
       </summary>
       <table class="tprod" style="margin-top:12px;min-width:520px"><colgroup><col><col style="width:8ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th></tr>
@@ -1293,14 +1296,14 @@ function rOC(){
       <div class="acciones">
         ${ocComp(o)<ocTot(o)?`<button class="btn mini sec" onclick="toggleCompra('${encodeURIComponent(o.folio)}')">Registrar compra</button>`:''}
         ${e!=='despachada'?`<button class="btn mini" onclick="irASubir('guias')" title="Sube la guía de despacho de esta OC"><i class="fa-solid fa-cloud-arrow-up"></i> Despachar</button>`:''}
-        <button class="btn mini sec" onclick="editOC('${encodeURIComponent(o.folio)}')"><i class="fa-solid fa-pen"></i> Modificar</button>
-        <button class="btn mini peligro" onclick="borrarOC('${encodeURIComponent(o.folio)}')">Dar de baja</button>
+        ${o.sin_documento?`<button class="btn mini sec" onclick="irASubirOC()" title="Sube el documento de esta OC para poder editarla y darla de baja"><i class="fa-solid fa-cloud-arrow-up"></i> Subir su documento</button>`
+          :`<button class="btn mini sec" onclick="editOC('${encodeURIComponent(o.folio)}')"><i class="fa-solid fa-pen"></i> Modificar</button>
+        <button class="btn mini peligro" onclick="borrarOC('${encodeURIComponent(o.folio)}')">Dar de baja</button>`}
       </div>
       <div id="fc-${encodeURIComponent(o.folio)}"></div>
       <div id="eo-${encodeURIComponent(o.folio)}"></div>
       </details>
-    </div></div>`}).join(''):(foliosSap.length?'':'<div class="card vacio">No hay órdenes de compra.</div>')}
-  ${foliosSap.length?`<h2>Órdenes conocidas por el reporte SAP (${foliosSap.length})</h2>${foliosSap.map(tarjetaSap).join('')}`:''}`;
+    </div></div>`}).join(''):'<div class="card vacio">No hay órdenes de compra.</div>'}`;
 }
 async function borrarOC(fe){
   const folio=decodeURIComponent(fe);
@@ -1377,7 +1380,7 @@ async function borrarGuia(numero){
 }
 function toggleCompra(fe){
   const folio=decodeURIComponent(fe);
-  const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===folio);if(!o)return;
+  const o=ordenPorFolio(folio);if(!o)return;
   const box=document.getElementById('fc-'+fe);
   if(box.innerHTML){box.innerHTML='';return}
   const pend=o.items.map((i,ix)=>({...i,ix,porComprar:(+i.cantidad||0)-(+i.cantidad_comprada||0)})).filter(i=>i.porComprar>0);
@@ -1394,7 +1397,7 @@ function toggleCompra(fe){
 }
 async function guardarCompra(fe){
   const folio=decodeURIComponent(fe);
-  const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===folio);if(!o)return;
+  const o=ordenPorFolio(folio);if(!o)return;
   const box=document.getElementById('fc-'+fe);
   const prov=document.getElementById('pc-prov-'+fe).value.trim();
   const fecha=document.getElementById('pc-fecha-'+fe).value||hoyISO();
@@ -1406,8 +1409,10 @@ async function guardarCompra(fe){
   velo(true,'Registrando compra…');
   try{
     const itemsC=filas.map(f=>({producto:o.items[f.ix].producto,cantidad:f.cant}));
-    filas.forEach(f=>{o.items[f.ix].cantidad_comprada=(+o.items[f.ix].cantidad_comprada||0)+f.cant});
-    o.compras=o.compras||[];o.compras.push({fecha,proveedor:prov,ingreso_bodega:aBodega,items:itemsC});
+    // `ref` apunta al objeto donde vive el dato: el ítem de la OC o el registro del reporte SAP
+    filas.forEach(f=>{const r=o.items[f.ix].ref;r.cantidad_comprada=(+r.cantidad_comprada||0)+f.cant});
+    if(o.origen==='oc'){o.ref.compras=o.ref.compras||[];
+      o.ref.compras.push({fecha,proveedor:prov,ingreso_bodega:aBodega,items:itemsC})}
     if(aBodega){
       const inv=DB[ARCH.inv].data;
       itemsC.forEach(it=>{
@@ -1417,7 +1422,7 @@ async function guardarCompra(fe){
       });
       await guardarMaestroSiNuevo();
     }
-    await guardarArchivo(ARCH.oc,`OC ${folio}: compra registrada${prov?' ('+prov+')':''}`);
+    await guardarArchivo(o.origen==='oc'?ARCH.oc:ARCH.psap,`OC ${folio}: compra registrada${prov?' ('+prov+')':''}`);
     if(aBodega)await guardarArchivo(ARCH.inv,`Inventario: ingreso por compra OC ${folio}`);
     toast('Compra registrada');render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
