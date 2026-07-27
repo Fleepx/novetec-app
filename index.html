@@ -1309,7 +1309,11 @@ function leerItems(cont,conPrecio=true){
 }
 
 function rCot(){
-  const cs=[...DB[ARCH.cot].data.cotizaciones].reverse();
+  // Más reciente primero (Jefe, 24-07-2026): por fecha desc; a igual fecha, se respeta el orden de carga.
+  const cs=[...DB[ARCH.cot].data.cotizaciones]
+    .map((c,i)=>[c,i])
+    .sort((a,b)=>String(b[0].fecha||'').localeCompare(String(a[0].fecha||''))||b[1]-a[1])
+    .map(x=>x[0]);
   return `${dlProd()}
   ${formPendiente('cotizaciones','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${listaPend('cotizaciones')}
@@ -1410,7 +1414,9 @@ function ordenesUnificadas(){
       ref:rs};
   });
   return [...reales,...delReporte]
-    .sort((a,b)=>String(a.folio).localeCompare(String(b.folio),'es',{numeric:true}));
+    // Más reciente primero (Jefe, 24-07-2026): por fecha de emisión desc; a igual fecha, folio mayor.
+    .sort((a,b)=>String(b.fecha_emision||'').localeCompare(String(a.fecha_emision||''))
+              ||String(b.folio).localeCompare(String(a.folio),'es',{numeric:true}));
 }
 function ordenPorFolio(folio){return ordenesUnificadas().find(o=>String(o.folio)===String(folio))}
 function rOC(){
