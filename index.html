@@ -1712,13 +1712,16 @@ function tarjetaGuia(g){
       ${g.hoja_ruta?'':'<span class="chip ambar">Sin hoja de ruta</span>'}
       <button class="btn mini peligro" style="margin-left:auto" onclick="borrarGuia('${esc(g.numero)}')">Eliminar</button>
     </div>
-    <table class="tprod" style="margin-top:12px;min-width:520px"><colgroup><col><col><col style="width:11ch"></colgroup>
-      <tr><th>Producto según la OC</th><th>Nombre en la guía</th><th class="num">Cantidad</th></tr>
-    ${g.items.map(i=>{const no=nomOC(i.codigo);const dif=no&&no.trim().toUpperCase()!==i.producto.trim().toUpperCase();
+    <table class="tprod" style="margin-top:12px;min-width:380px"><colgroup><col><col style="width:11ch"></colgroup>
+      <tr><th>Producto</th><th class="num">Cantidad</th></tr>
+    ${g.items.map(i=>{const no=nomOC(i.codigo);
+      // El nombre que manda es el de la OC. Si la guía usó otro, se anota al costado; si es el
+      // mismo no se dice nada (Jefe, 24-07-2026: "igual" no aporta y roba espacio al nombre).
+      const otro=i.nombre_guia||i.producto;
+      const dif=no&&String(otro).trim().toUpperCase()!==no.trim().toUpperCase();
       const falta=faltaCompra(i);
       return `<tr>
-        <td class="trunc" title="${esc(no||i.producto)}">${esc(no||i.producto)}</td>
-        <td class="trunc" title="${esc(i.producto)}" style="${dif?'color:var(--ambar)':'color:var(--muted)'}">${dif?esc(i.producto):'igual'}</td>
+        <td class="trunc" title="${esc(no||i.producto)}${dif?' — en la guía: '+esc(otro):''}">${esc(no||i.producto)}${dif?`<span class="small muted sep" title="Nombre con que salió en la guía">${esc(otro)}</span>`:''}</td>
         <td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}${falta>0?` <i class="fa-solid fa-circle-exclamation alerta-cifra" title="Se despacharon ${num(i.cantidad)} pero faltan ${num(falta)} por registrar como comprados. Ingresa la compra para cuadrar el inventario."></i>`:''}</td></tr>`}).join('')}</table>
     ${hayFalta?`<div style="margin-top:10px"><button class="btn mini" style="background:none;border:1.5px solid var(--rojo);color:var(--rojo)" onclick="compraFaltante('${esc(g.numero)}',this)"><i class="fa-solid fa-cart-plus"></i> Ingresar compra faltante</button>
       <div id="cf-${esc(g.numero)}"></div></div>`:''}
