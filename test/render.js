@@ -43,7 +43,7 @@ global.setTimeout = () => 0;
 let ctx;
 try {
   ctx = (0, eval)('(function(){' + js +
-    '\nreturn {DB,ARCH,rPanel,rCot,rOC,rGuias,rPrecios,rInv,' +
+    '\nreturn {DB,ARCH,normalizarDatos,rPanel,rCot,rOC,rGuias,rPrecios,rInv,' +
     'existe:function(n){try{return eval("typeof "+n)!=="undefined"}catch(e){return false}}};})')();
 } catch (e) {
   console.error('FALLA: el script no carga ->', e.message);
@@ -56,7 +56,8 @@ const ARCHIVOS = { cot: 'cotizaciones', oc: 'ordenes_compra', guias: 'guias_desp
 for (const k in ARCHIVOS) {
   const f = path.join(DATOS, ARCHIVOS[k] + '.json');
   if (!fs.existsSync(f)) { console.error('FALTA el archivo de datos:', f); process.exit(1); }
-  ctx.DB[ctx.ARCH[k]] = { data: JSON.parse(fs.readFileSync(f, 'utf8')), sha: 'prueba' };
+  // Igual que la app: normalizar al cargar
+  ctx.DB[ctx.ARCH[k]] = { data: ctx.normalizarDatos(ctx.ARCH[k], JSON.parse(fs.readFileSync(f, 'utf8'))), sha: 'prueba' };
 }
 
 const VISTAS = { Panel: ctx.rPanel, Cotizaciones: ctx.rCot, 'Órdenes de compra': ctx.rOC,
@@ -92,6 +93,25 @@ const idsRotos = [...idsPedidos].filter(i => !idsPresentes.has(i) && !idsEstatic
 console.log('\n  Funciones invocadas desde el HTML que no existen:', sinDefinir.length ? sinDefinir : 'ninguna');
 console.log('  IDs pedidos por getElementById que no existen:   ', idsRotos.length ? idsRotos : 'ninguno');
 
-const total = fallos + sinDefinir.length + idsRotos.length;
+// Prueba de resistencia: las vistas deben sobrevivir a registros incompletos (sin items,
+// sin folio_oc, etc.), que es exactamente lo que tumbó la pestaña de guías el 24-07-2026.
+let fallosRotos = 0;
+const rotos = {
+  guias: { guias: [{ numero: 'X1', fecha: '2026-01-01', destino: 'Rancagua' }] },
+  oc: { ordenes: [{ folio: '4500900000' }] },
+  cot: { cotizaciones: [{ id: 'CX', folio: 'X', estado: 'enviada' }] },
+  hr: { hojas: [{ numero: 99 }] },
+};
+for (const [k, data] of Object.entries(rotos)) {
+  const respaldo = ctx.DB[ctx.ARCH[k]].data;
+  ctx.DB[ctx.ARCH[k]] = { data: ctx.normalizarDatos(ctx.ARCH[k], JSON.parse(JSON.stringify(data))), sha: 'x' };
+  for (const [nombre, fn] of Object.entries(VISTAS)) {
+    try { fn(); } catch (e) { fallosRotos++; console.log(`  FRAGIL ${nombre} con ${k} incompleto -> ${e.message}`); }
+  }
+  ctx.DB[ctx.ARCH[k]] = { data: respaldo, sha: 'prueba' };
+}
+console.log('  Resistencia a registros incompletos:', fallosRotos ? fallosRotos + ' vista(s) caen' : 'todas las vistas sobreviven');
+
+const total = fallos + sinDefinir.length + idsRotos.length + fallosRotos;
 console.log(total ? `\n${total} problema(s) detectado(s).` : '\nTodo correcto.');
 process.exit(total ? 1 : 0);

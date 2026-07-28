@@ -252,10 +252,32 @@ const ESTRUCTURAS_BASE={'data/cotizaciones.json':{cotizaciones:[]},'data/ordenes
  'data/pendientes_sap.json':{registros:[],actualizado:null,archivo_origen:null},
  'data/archivos.json':{archivos:[]},
  'data/config.json':{empresa:'Novetec SPA',semaforo:{rojo_dias:5,amarillo_dias:10},proxima_hoja_ruta:1,resumen_ocultos:[]}};
+/* Normalización defensiva: garantiza la estructura mínima de cada documento apenas se carga,
+   para que un registro incompleto (cargado a mano o por una versión vieja) NUNCA tumbe una
+   vista. Motivo real: el 24-07-2026 la pestaña de guías se cayó porque tres guías se cargaron
+   por datos sin el campo `items`. Las vistas pueden asumir que estos campos existen. */
+function normalizarDatos(p,d){
+  if(!d||typeof d!=='object')return d;
+  const arr=k=>{if(!Array.isArray(d[k]))d[k]=[]};
+  if(p===ARCH.oc){arr('ordenes');d.ordenes.forEach(o=>{o.items=o.items||[];o.guias=o.guias||[];
+    o.items.forEach(i=>{i.producto=i.producto||'';i.cantidad=+i.cantidad||0;
+      i.cantidad_comprada=+i.cantidad_comprada||0;i.cantidad_despachada=+i.cantidad_despachada||0})})}
+  if(p===ARCH.cot){arr('cotizaciones');d.cotizaciones.forEach(c=>{c.items=c.items||[];
+    c.items.forEach(i=>{i.producto=i.producto||'';i.cantidad=+i.cantidad||0;i.precio_unitario=+i.precio_unitario||0})})}
+  if(p===ARCH.guias){arr('guias');d.guias.forEach(g=>{g.items=g.items||[];
+    g.oc=g.oc||g.folio_oc||'';g.folio_oc=g.folio_oc||g.oc||'';g.discrepancias=g.discrepancias||[];
+    g.items.forEach(i=>{i.producto=i.producto||'';i.cantidad=+i.cantidad||0})})}
+  if(p===ARCH.hr){arr('hojas');d.hojas.forEach(h=>{h.guias=h.guias||[];h.destinos=h.destinos||[]})}
+  if(p===ARCH.inv){arr('productos');arr('movimientos')}
+  if(p===ARCH.prod){arr('productos');d.productos.forEach(x=>{x.alias=x.alias||[];x.codigos_cliente=x.codigos_cliente||{}})}
+  if(p===ARCH.psap){arr('registros')}
+  if(p===ARCH.pend){arr('pendientes')}
+  return d;
+}
 async function cargarArchivo(p){
   try{
     const j=await gh(`contents/${p}?t=${Date.now()}`);
-    DB[p]={data:JSON.parse(b64dec(j.content)),sha:j.sha};
+    DB[p]={data:normalizarDatos(p,JSON.parse(b64dec(j.content))),sha:j.sha};
   }catch(e){
     // Auto-recuperación: si el archivo no existe, la app lo crea con estructura vacía
     if(e.message.startsWith('404')&&ESTRUCTURAS_BASE[p]){
