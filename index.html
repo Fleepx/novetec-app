@@ -130,9 +130,11 @@ table.tprod td,table.tprod th{padding-left:8px;padding-right:8px}
 table.tprod td:first-child,table.tprod th:first-child{padding-left:2px}
 table.tprod td:last-child,table.tprod th:last-child{padding-right:2px}
 .aviso-medida{color:var(--ambar);margin-right:5px;cursor:help}
+/* Línea de una OC que aún tiene unidades por despachar: amarillo suave (Jefe, 24-07-2026) */
+tr.fila-pend>td{background:var(--ambar-bg)}
 /* Alerta roja junto a una cifra (ej: se despachó más de lo comprado) */
 .alerta-cifra{color:var(--rojo);margin-left:5px;cursor:help}
-/* Acordeón de guías: bodega -> fecha -> guías de ese día */
+/* Acordeón de guías: hoja de ruta -> guías de ese viaje */
 .acc-bodega{margin-bottom:12px}
 .acc-fecha>summary{list-style:none;cursor:pointer;padding:11px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin-top:8px;font-weight:600}
 .acc-fecha>summary .btn{flex:none}
@@ -450,7 +452,11 @@ function semaforo(oc){
   if(dd<=s.amarillo_dias)return {c:'ambar',txt:`${dd} días`};
   return {c:'verde',txt:`${dd} días`};
 }
-const ESTADO_LBL={pendiente:'Pendiente',parcial:'Despacho parcial',despachada:'Despachada'};
+/* Los TRES estados de una OC (Jefe, 24-07-2026), con su color:
+   pendiente = gris · parcial = ámbar · despachada = verde.
+   El color se aplica al chip Y a la pestaña lateral de la tarjeta. */
+const ESTADO_LBL={pendiente:'Pendiente',parcial:'Parcial',despachada:'Despachada'};
+const ESTADO_COLOR={pendiente:'gris',parcial:'ambar',despachada:'verde'};
 
 /* Cola de documentos por procesar con Claude */
 const TIPO_LBL={cotizaciones:'Cotización',ordenes_compra:'OC',guias_despacho:'Guía de despacho',pendientes_sap:'Pendientes SAP'};
@@ -735,7 +741,6 @@ function semStripHTML(){
   </div>`;
 }
 function rPanel(){
-  const cotP=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='enviada');
   const lineas=lineasConfirmadas();
   const consTodo=consolidadoConfirmado(lineas);
   const psapMeta=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{};
@@ -798,9 +803,7 @@ function rPanel(){
   </div>
   ${zonaResumen}
   ${DB[ARCH.pend].data.pendientes.length?`<div class="card" style="border-color:var(--ambar)"><i class="fa-solid fa-file-lines"></i> <b>${DB[ARCH.pend].data.pendientes.length}</b> documento(s) en cola esperando ser procesados por el administrador.</div>`:''}
-  ${destOrden.length?destOrden.map(dst=>tablaGrupo(dst,grupos[dst])).join(''):'<div class="card vacio">No hay ítems pendientes de despacho.</div>'}
-  <h2>Cotizaciones sin responder (${cotP.length})</h2>
-  ${cotP.length?cotP.map(c=>`<div class="tag"><div class="bar gris"></div><div class="body"><div class="top"><span class="folio">COT ${esc(c.folio)}</span><span class="chip">${fFecha(c.fecha)}</span><span class="muted small">${esc(c.cliente)}</span></div></div></div>`).join(''):'<div class="card vacio">Sin cotizaciones pendientes.</div>'}`;
+  ${destOrden.length?destOrden.map(dst=>tablaGrupo(dst,grupos[dst])).join(''):'<div class="card vacio">No hay ítems pendientes de despacho.</div>'}`;
 }
 /* Fichas plegables de documento: se recuerda cuáles quedaron abiertas para que un render
    (tras guardar una compra, editar, etc.) no las vuelva a cerrar todas. */
@@ -1479,12 +1482,12 @@ function rOC(){
   ${lista.length?lista.map(o=>{
     const s=semaforo(o),e=ocEstado(o);
     const pendD=o.items.reduce((a,i)=>a+((+i.cantidad||0)-(+i.cantidad_despachada||0)),0);
-    return `<div class="tag"><div class="bar ${s.c}"></div><div class="body">
+    return `<div class="tag"><div class="bar ${ESTADO_COLOR[e]}"></div><div class="body">
       <details class="doc" data-k="oc:${esc(o.folio)}"${fichaAbierta('oc:'+o.folio)?' open':''} ontoggle="recordarFicha(this)">
       <summary class="top">
         <span class="folio">OC ${esc(o.folio)}</span>
-        <span class="chip ${s.c}">${s.txt}</span>
-        <span class="chip">${ESTADO_LBL[e]}</span>
+        <span class="chip ${ESTADO_COLOR[e]}">${ESTADO_LBL[e]}</span>
+        ${e!=='despachada'&&s.c!=='gris'?`<span class="chip ${s.c}" title="Plazo de entrega">${s.txt}</span>`:''}
         ${chipCompra(o)}
         ${o.sin_documento?'<span class="chip ambar" title="Esta OC la conocemos por el reporte del cliente; su documento aún no se ha cargado">sin documento</span>':''}
         <span class="muted small">Emisión ${fFecha(o.fecha_emision)}${o.fecha_entrega?` · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b>`:''} · ${esc(o.destino||'—')}</span>
@@ -1492,7 +1495,8 @@ function rOC(){
       </summary>
       <table class="tprod" style="margin-top:12px;min-width:520px"><colgroup><col><col style="width:8ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th></tr>
       ${o.items.map(i=>{const comp=+i.cantidad_comprada||0;
-        return `<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num" style="${comp<i.cantidad?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(i.cantidad-(i.cantidad_despachada||0))}</td></tr>`}).join('')}</table>
+        const pend=(+i.cantidad||0)-(+i.cantidad_despachada||0);
+        return `<tr${pend>0?' class="fila-pend"':''}><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num" style="${comp<i.cantidad?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(pend)}</td></tr>`}).join('')}</table>
       ${o.compras?.length?`<p class="small muted" style="margin-top:6px">Compras: ${o.compras.map(c=>`<span class="mono">${fFecha(c.fecha)}</span> ${esc(c.proveedor||'s/proveedor')} (${c.items.map(i=>`${esc(i.producto)} ×${num(i.cantidad)}`).join(', ')})`).join(' · ')}</p>`:''}
       ${o.guias?.length?`<p class="small muted" style="margin-top:6px">Guías: <span class="mono">${o.guias.map(esc).join(', ')}</span></p>`:''}
       ${o.archivo?`<p class="small"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(o.archivo)}')">Descargar documento</a></p>`:''}
@@ -1656,36 +1660,33 @@ function rGuias(){
   ${(()=>{
     const gs=DB[ARCH.guias].data.guias;
     if(!gs.length)return '<div class="card vacio">Aún no hay guías registradas.</div>';
-    /* La fecha que agrupa es la FECHA DE ENVÍO de la hoja de ruta (el día que salió el camión),
-       no la fecha propia de la guía: dos guías con fechas distintas pueden haber viajado juntas.
-       Las que todavía no están en ninguna hoja de ruta van aparte, al inicio. */
+    /* Agrupadas por HOJA DE RUTA (Jefe, 24-07-2026): una hoja = un viaje, y ese es el orden
+       en que se recorre el despacho. Dentro de cada hoja, si el viaje tuvo varios destinos,
+       las guías se ordenan por bodega en el orden fijo de recorrido. Las guías que aún no
+       están en ninguna hoja van aparte, al inicio, abiertas. */
     const hojas=DB[ARCH.hr].data.hojas;
-    const fechaEnvio=g=>{
-      const h=hojas.find(x=>String(x.numero)===String(g.hoja_ruta));
-      return h?(h.fecha_envio||h.fecha||null):null;
-    };
-    const SINENV='__sin__';
-    const porBod={};
-    gs.forEach(g=>{const b=normBodega(g.destino||'Sin destino');
-      const f=fechaEnvio(g)||SINENV;
-      (porBod[b]=porBod[b]||{})[f]=(porBod[b][f]||[]).concat(g)});
-    const orden=BODEGAS_ORDEN.filter(b=>porBod[b]).concat(Object.keys(porBod).filter(b=>!BODEGAS_ORDEN.includes(b)).sort((a,b)=>a.localeCompare(b,'es')));
-    return orden.map(b=>{
-      const claves=Object.keys(porBod[b]);
-      const fechas=claves.filter(k=>k!==SINENV).sort((a,b)=>b.localeCompare(a));
-      if(claves.includes(SINENV))fechas.unshift(SINENV);
-      const totalG=claves.reduce((s,f)=>s+porBod[b][f].length,0);
-      return `<div class="acc-bodega">
-        <div class="bodega-lbl"><i class="fa-solid fa-warehouse" style="font-size:14px;color:var(--muted)"></i> ${esc(b)} <span class="muted">· ${totalG} guía(s)</span></div>
-        ${fechas.map(f=>{const dia=porBod[b][f];const sin=f===SINENV;
-          const hoja=sin?null:hojas.find(x=>String(x.numero)===String(dia[0].hoja_ruta));
-          const desc=hoja?(hoja.archivo
-            ?`<button class="btn mini" title="Descargar la hoja de ruta N°${esc(String(hoja.numero))}" onclick="event.preventDefault();event.stopPropagation();descargarArchivo('${esc(hoja.archivo)}','Guia_de_Ruta_N${esc(String(hoja.numero))}_${esc(fFecha(hoja.fecha_envio||hoja.fecha))}.docx')"><i class="fa-solid fa-download"></i> Hoja de ruta</button>`
-            :'<span class="chip ambar" title="La hoja de ruta aún no se ha generado">sin archivo</span>'):'';
-          return `<details class="acc-fecha"${sin?' open':''}><summary>${sin?'<span class="chip ambar">Pendientes de envío</span>':`Envío ${fFecha(f)}${hoja?` <span class="chip">Hoja de ruta N°${esc(String(hoja.numero))}</span>`:''}`}<span class="cnt">${dia.length} guía(s)</span>${desc}</summary><div class="cuerpo">
-            ${dia.map(tarjetaGuia).join('')}
-          </div></details>`;}).join('')}
-      </div>`;
+    const porHoja={};
+    gs.forEach(g=>{const k=g.hoja_ruta?String(g.hoja_ruta):'__sin__';
+      (porHoja[k]=porHoja[k]||[]).push(g)});
+    const nums=Object.keys(porHoja).filter(k=>k!=='__sin__')
+      .sort((a,b)=>(+b)-(+a));                       // hoja más reciente arriba
+    if(porHoja.__sin__)nums.unshift('__sin__');
+    const ordBod=g=>{const i=BODEGAS_ORDEN.indexOf(normBodega(g.destino||''));return i<0?99:i};
+    return nums.map(k=>{
+      const sin=k==='__sin__';
+      const lista=[...porHoja[k]].sort((a,b)=>ordBod(a)-ordBod(b)||String(a.numero).localeCompare(String(b.numero),'es',{numeric:true}));
+      const hoja=sin?null:hojas.find(x=>String(x.numero)===k);
+      const dests=[...new Set(lista.map(g=>normBodega(g.destino||'Sin destino')))]
+        .sort((a,b)=>BODEGAS_ORDEN.indexOf(a)-BODEGAS_ORDEN.indexOf(b));
+      const desc=hoja&&hoja.archivo
+        ?`<button class="btn mini" title="Descargar la hoja de ruta N°${esc(k)}" onclick="event.preventDefault();event.stopPropagation();descargarArchivo('${esc(hoja.archivo)}','Guia_de_Ruta_N${esc(k)}_${esc(fFecha(hoja.fecha_envio||hoja.fecha))}.docx')"><i class="fa-solid fa-download"></i> Hoja de ruta</button>`
+        :(sin?'':'<span class="chip ambar" title="La hoja de ruta aún no se ha generado">sin archivo</span>');
+      const titulo=sin
+        ?'<span class="chip ambar">Sin hoja de ruta</span>'
+        :`<b>Hoja de Ruta N°${esc(k)}</b>${hoja?` <span class="chip">Envío ${fFecha(hoja.fecha_envio||hoja.fecha)}</span>`:''}`;
+      return `<details class="acc-fecha"${sin?' open':''}><summary>${titulo}<span class="muted small">${esc(dests.join(' · '))}</span><span class="cnt">${lista.length} guía(s)</span>${desc}</summary><div class="cuerpo">
+        ${lista.map(tarjetaGuia).join('')}
+      </div></details>`;
     }).join('');
   })()}`;
 }
@@ -1705,6 +1706,7 @@ function tarjetaGuia(g){
   return `<div class="card">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <span class="mono" style="font-weight:700;font-size:var(--fs-lg)">Guía N° ${esc(g.numero)}</span>
+      <span class="chip"><i class="fa-solid fa-warehouse" style="font-size:11px"></i> ${esc(normBodega(g.destino||'Sin destino'))}</span>
       <span class="chip" title="Fecha de la guía">${fFecha(g.fecha)}</span>
       <span class="chip ink">OC ${esc(g.oc||g.folio_oc)}</span>
       ${g.hoja_ruta?'':'<span class="chip ambar">Sin hoja de ruta</span>'}
