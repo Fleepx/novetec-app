@@ -1725,7 +1725,126 @@ function tarjetaGuia(g){
         <td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}${falta>0?` <i class="fa-solid fa-circle-exclamation alerta-cifra" title="Se despacharon ${num(i.cantidad)} pero faltan ${num(falta)} por registrar como comprados. Ingresa la compra para cuadrar el inventario."></i>`:''}</td></tr>`}).join('')}</table>
     ${hayFalta?`<div style="margin-top:10px"><button class="btn mini" style="background:none;border:1.5px solid var(--rojo);color:var(--rojo)" onclick="compraFaltante('${esc(g.numero)}',this)"><i class="fa-solid fa-cart-plus"></i> Ingresar compra faltante</button>
       <div id="cf-${esc(g.numero)}"></div></div>`:''}
+    ${(g.rectificaciones||[]).length?`<div class="small" style="margin-top:10px;border-left:3px solid var(--ambar);padding-left:9px">
+      ${g.rectificaciones.map(r=>`<div><b>Rectificada ${fFecha(r.fecha)}</b> — ${r.items.map(x=>`${esc(x.producto)} <span class="mono">−${num(x.cantidad)}</span> (${x.motivo==='merma'?'perdido o roto':'quedó en bodega'})`).join(' · ')}${r.nota?` · ${esc(r.nota)}`:''}</div>`).join('')}
+    </div>`:''}
+    <div class="acciones" style="margin-top:10px">
+      ${g.conforme
+        ?`<span class="chip verde" title="Despacho confirmado sin novedades"><i class="fa-solid fa-check"></i> Conforme</span>`
+        :`<button class="btn mini" onclick="conformarGuia('${esc(g.numero)}')" title="El despacho salió tal como dice la guía"><i class="fa-solid fa-check"></i> Guía conforme</button>
+          <button class="btn mini sec" onclick="rectificarGuia('${esc(g.numero)}')" title="Hubo productos que no se pudieron despachar"><i class="fa-solid fa-rotate-left"></i> Rectificar guía</button>`}
+      ${g.conforme?`<button class="btn mini sec" onclick="rectificarGuia('${esc(g.numero)}')" title="Rectificar de todas formas"><i class="fa-solid fa-rotate-left"></i> Rectificar</button>`:''}
+    </div>
+    <div id="rg-${esc(g.numero)}"></div>
   </div>`;
+}
+/* ===== Conformidad y rectificación de una guía (logística inversa) =====
+   La guía se emite con lo que se VA a despachar. Si algo se rompe, se pierde o no alcanza a
+   subir al camión, se rectifica: esas unidades vuelven a quedar PENDIENTES en la OC y reaparecen
+   en el Panel. Qué pasa con el stock depende del motivo (Jefe, 24-07-2026):
+     · "quedó en bodega" → la mercadería sigue siendo nuestra: vuelve al inventario y NO hay que
+       volver a comprarla.
+     · "se perdió o se rompió" → la mercadería ya no existe: el stock NO vuelve y además se
+       descuenta de lo comprado, para que el Panel la muestre otra vez como POR COMPRAR. */
+async function conformarGuia(numero){
+  const g=DB[ARCH.guias].data.guias.find(x=>String(x.numero)===String(numero));
+  if(!g)return;
+  g.conforme=true;g.fecha_conforme=hoyISO();
+  velo(true,'Confirmando…');
+  try{await guardarArchivo(ARCH.guias,`Guía N°${numero} conforme`);toast(`Guía N°${numero} conforme`);render()}
+  catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+function rectificarGuia(numero){
+  const g=DB[ARCH.guias].data.guias.find(x=>String(x.numero)===String(numero));
+  if(!g)return;
+  const box=document.getElementById('rg-'+numero);
+  if(box.innerHTML){box.innerHTML='';return}
+  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:10px">
+    <b>Rectificar la guía N°${esc(numero)}</b>
+    <p class="small muted">Indica cuántas unidades NO se pudieron despachar. Volverán a quedar pendientes en la OC ${esc(g.oc||g.folio_oc)} y reaparecerán en el Panel.</p>
+    <table class="tprod" style="margin-top:8px;min-width:520px"><colgroup><col><col style="width:9ch"><col style="width:12ch"><col style="width:19ch"></colgroup>
+      <tr><th>Producto</th><th class="num">Despachado</th><th>No despachado</th><th>¿Qué pasó?</th></tr>
+      ${g.items.map((i,ix)=>`<tr>
+        <td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td>
+        <td class="num">${num(i.cantidad)}</td>
+        <td><input type="number" data-ix="${ix}" min="0" max="${i.cantidad}" step="any" value="0"></td>
+        <td><select data-motivo="${ix}">
+          <option value="bodega">Quedó en bodega</option>
+          <option value="merma">Se perdió o se rompió</option>
+        </select></td>
+      </tr>`).join('')}
+    </table>
+    <label>Nota (opcional)</label><input id="rg-nota-${esc(numero)}" placeholder="ej: se quebró al cargar el camión">
+    <div class="acciones"><button class="btn mini" onclick="guardarRectificacion('${esc(numero)}')">Guardar rectificación</button><button class="btn mini sec" onclick="rectificarGuia('${esc(numero)}')">Cancelar</button></div>
+  </div>`;
+}
+async function guardarRectificacion(numero){
+  const g=DB[ARCH.guias].data.guias.find(x=>String(x.numero)===String(numero));
+  if(!g)return;
+  const folio=g.oc||g.folio_oc;
+  const o=DB[ARCH.oc].data.ordenes.find(x=>String(x.folio)===String(folio));
+  const box=document.getElementById('rg-'+numero);
+  const filas=[...box.querySelectorAll('input[type=number]')].map(inp=>({
+    ix:+inp.dataset.ix,cant:+inp.value||0,
+    motivo:box.querySelector(`select[data-motivo="${inp.dataset.ix}"]`).value})).filter(f=>f.cant>0);
+  if(!filas.length){toast('Indica al menos una cantidad no despachada.');return}
+  for(const f of filas){
+    const it=g.items[f.ix];
+    if(f.cant>(+it.cantidad||0)){toast(`"${it.producto}": la guía despachó ${num(it.cantidad)}.`);return}
+  }
+  const nota=document.getElementById('rg-nota-'+numero).value.trim();
+  const fecha=hoyISO();
+  velo(true,'Rectificando guía…');
+  try{
+    const inv=DB[ARCH.inv].data;
+    const detalle=[];
+    for(const f of filas){
+      const it=g.items[f.ix];
+      // 1. La guía despachó menos de lo que decía
+      it.cantidad=(+it.cantidad||0)-f.cant;
+      // 2. La línea de la OC vuelve a quedar pendiente
+      if(o){
+        const oi=o.items.find(x=>x.codigo===it.codigo)
+              ||o.items.find(x=>String(x.producto).trim().toUpperCase()===String(it.producto).trim().toUpperCase());
+        if(oi){
+          oi.cantidad_despachada=Math.max(0,(+oi.cantidad_despachada||0)-f.cant);
+          // Si se perdió o rompió, además hay que volver a comprarla
+          if(f.motivo==='merma')oi.cantidad_comprada=Math.max(0,(+oi.cantidad_comprada||0)-f.cant);
+        }
+      }
+      // 3. Inventario: el despacho no ocurrió para esas unidades → vuelven…
+      // Resolver por código NOV (fiable); si no está en inventario aún, se crea la línea
+      let p=it.codigo?inv.productos.find(x=>x.codigo===it.codigo):null;
+      if(!p){
+        const m=it.codigo?DB[ARCH.prod].data.productos.find(x=>x.codigo===it.codigo):null;
+        p=m?{codigo:m.codigo,nombre:m.nombre,cantidad:0,unidad:m.unidad||'UN'}:invProdDe(it.producto,it.unidad);
+        if(m)inv.productos.push(p);
+      }
+      p.cantidad+=f.cant;
+      inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:f.cant,
+        referencia:`Rectificación guía N°${numero}: no despachado`});
+      // …y si se perdieron o rompieron, salen como merma (neto: el stock no vuelve)
+      if(f.motivo==='merma'){
+        p.cantidad=Math.max(0,p.cantidad-f.cant);
+        inv.movimientos.push({fecha,tipo:'salida',codigo:p.codigo,producto:p.nombre,cantidad:f.cant,
+          referencia:`Merma: producto perdido o roto (guía N°${numero})`});
+      }
+      detalle.push({codigo:it.codigo,producto:it.producto,cantidad:f.cant,motivo:f.motivo});
+    }
+    // 4. Ítems que quedaron en cero se sacan de la guía
+    g.items=g.items.filter(i=>(+i.cantidad||0)>0);
+    g.rectificaciones=g.rectificaciones||[];
+    g.rectificaciones.push({fecha,items:detalle,nota});
+    g.conforme=true;g.fecha_conforme=fecha;
+    await guardarArchivo(ARCH.guias,`Guía N°${numero} rectificada`);
+    if(o)await guardarArchivo(ARCH.oc,`OC ${folio}: rectificación de la guía N°${numero}`);
+    await guardarArchivo(ARCH.inv,`Inventario: rectificación de la guía N°${numero}`);
+    const merma=detalle.filter(d=>d.motivo==='merma').reduce((s,d)=>s+d.cantidad,0);
+    toast(`Guía N°${numero} rectificada`+(merma>0?` · ${num(merma)} como merma, vuelven a estar por comprar`:''));
+    render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
 }
 /* Ingreso de compra DESPUÉS de la guía (via de excepción, no el flujo normal).
    Registra la compra en la OC y, si se marca, ingresa al inventario. */
