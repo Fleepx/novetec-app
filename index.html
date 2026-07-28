@@ -670,7 +670,10 @@ function render(){
 
 /* ================= Panel ================= */
 /* Bodegas del cliente: orden fijo de presentación y mapeo de centros SAP */
-const BODEGAS_ORDEN=['Rancagua','San Francisco de Mostazal','El Peumo','Longovilo'];
+/* Cuatro bodegas principales + dos destinos EXCEPCIONALES (Jefe, 24-07-2026): San Pablo y
+   Lo Miranda son entregas puntuales, válidas, y van después de las principales. */
+const BODEGAS_ORDEN=['Rancagua','San Francisco de Mostazal','El Peumo','Longovilo','San Pablo','Lo Miranda'];
+const BODEGAS_EXCEPCION=['San Pablo','Lo Miranda'];
 const CENTRO_BODEGA={'C394':'Rancagua','C001':'Rancagua','C011':'Rancagua','C395':'San Francisco de Mostazal','097':'Longovilo','7187':'El Peumo'};
 function bodegaDeCentro(c){return CENTRO_BODEGA[String(c||'').trim().toUpperCase()]||null}
 function normBodega(b){
@@ -680,6 +683,8 @@ function normBodega(b){
   if(x.includes('mostazal')||x.includes('san francisco'))return 'San Francisco de Mostazal';
   if(x.includes('peumo')||x.includes('calera'))return 'El Peumo';
   if(x.includes('longovilo'))return 'Longovilo';
+  if(x.includes('san pablo'))return 'San Pablo';
+  if(x.includes('lo miranda'))return 'Lo Miranda';
   return s;
 }
 /* Producto cuyo documento de origen no especifica la medida o la TALLA: hay que confirmarla
