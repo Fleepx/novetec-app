@@ -1456,6 +1456,7 @@ function ordenesUnificadas(){
     const rs=porFolio[folio];
     return {folio,origen:'sap',sin_documento:true,
       fecha_emision:rs[0].fecha_doc,fecha_entrega:null,
+      fecha_carga:(DB[ARCH.psap].data.actualizado||rs[0].fecha_doc),
       destino:[...new Set(rs.map(r=>r.bodega).filter(Boolean))].join(' · '),
       items:rs.map(r=>({producto:r.producto,codigo:r.codigo,
         cantidad:+r.cantidad||0,
@@ -1466,8 +1467,9 @@ function ordenesUnificadas(){
       ref:rs};
   });
   return [...reales,...delReporte]
-    // Más reciente primero (Jefe, 24-07-2026): por fecha de emisión desc; a igual fecha, folio mayor.
-    .sort((a,b)=>String(b.fecha_emision||'').localeCompare(String(a.fecha_emision||''))
+    // Orden por FECHA DE CARGA, no de emisión (Jefe, 24-07-2026): lo último que se subió al
+    // sistema queda arriba, aunque el documento sea antiguo. Si falta, cae a la emisión.
+    .sort((a,b)=>String(b.fecha_carga||b.fecha_emision||'').localeCompare(String(a.fecha_carga||a.fecha_emision||''))
               ||String(b.folio).localeCompare(String(a.folio),'es',{numeric:true}));
 }
 function ordenPorFolio(folio){return ordenesUnificadas().find(o=>String(o.folio)===String(folio))}
@@ -1517,7 +1519,7 @@ function rOC(){
         ${e!=='despachada'&&s.c!=='gris'?`<span class="chip ${s.c}" title="Plazo de entrega">${s.txt}</span>`:''}
         ${chipCompra(o)}
         ${o.sin_documento?'<span class="chip ambar" title="Esta OC la conocemos por el reporte del cliente; su documento aún no se ha cargado">sin documento</span>':''}
-        <span class="muted small">Emisión ${fFecha(o.fecha_emision)}${o.fecha_entrega?` · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b>`:''} · ${esc(o.destino||'—')}</span>
+        <span class="muted small">Emisión ${fFecha(o.fecha_emision)}${o.fecha_carga&&o.fecha_carga!==o.fecha_emision?` · <span title="Día en que se cargó al sistema">cargada ${fFecha(o.fecha_carga)}</span>`:''}${o.fecha_entrega?` · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b>`:''} · ${esc(o.destino||'—')}</span>
         <span class="resumen">${o.items.length} ítem(s) · ${num(pendD)} por despachar</span>
       </summary>
       <table class="tprod" style="margin-top:12px;min-width:520px"><colgroup><col><col style="width:8ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th></tr>
