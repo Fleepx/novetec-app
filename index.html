@@ -93,7 +93,12 @@ label{display:block;font-size:var(--fs-xs);font-weight:700;letter-spacing:.06em;
 .tag .bar{width:7px;flex:none}
 .tag .bar.rojo{background:var(--rojo)}.tag .bar.ambar{background:var(--ambar)}.tag .bar.verde{background:var(--verde)}
 .tag .bar.vencida{background:var(--vencida)}.tag .bar.gris{background:#AEB9C2}
-.tag .body{flex:1;padding:12px 14px;min-width:0}
+/* La tarjeta recorta (overflow:hidden) para que la pestaña de color respete las esquinas
+   redondeadas, pero eso dejaba SIN DESPLAZAMIENTO a las tablas de adentro, que tienen ancho
+   mínimo mayor que un teléfono: la información quedaba cortada y no había forma de verla
+   (Jefe, 29-07-2026). El cuerpo se desplaza en horizontal. */
+.tag .body{flex:1;padding:12px 14px;min-width:0;overflow-x:auto}
+.tag .body>table,.tag .body .tprod{max-width:none}
 .tag .top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 /* Fichas plegables de documento (cotizaciones y OC): el encabezado es el resumen y el
    detalle queda oculto hasta desplegarlo, para poder recorrer el listado de folios. */
@@ -143,7 +148,7 @@ tr.fila-pend>td{background:var(--ambar-bg)}
 .acc-fecha[open]>summary::before{transform:rotate(90deg)}
 .acc-fecha>summary .cnt{margin-left:auto;font-family:var(--mono);font-size:var(--fs-xs);color:var(--muted);font-weight:400}
 .acc-fecha>summary .chip{font-weight:400}
-.acc-fecha .cuerpo{padding:6px 0 4px 6px}
+.acc-fecha .cuerpo{padding:6px 0 4px 6px;min-width:0}
 /* Pestaña de color de la hoja de ruta, igual criterio que las OC (Jefe, 24-07-2026) */
 .acc-fecha.hr-gris>summary{border-left:5px solid #AEB9C2}
 .acc-fecha.hr-ambar>summary{border-left:5px solid var(--ambar)}
