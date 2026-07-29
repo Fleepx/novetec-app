@@ -1767,10 +1767,76 @@ function tarjetaGuia(g){
     <div class="acciones" style="margin-top:10px">
       ${g.conforme?'':`<button class="btn mini" onclick="conformarGuia('${esc(g.numero)}')" title="El despacho salió tal como dice la guía"><i class="fa-solid fa-check"></i> Guía conforme</button>`}
       <button class="btn mini sec" onclick="rectificarGuia('${esc(g.numero)}')" title="Hubo productos que no se pudieron despachar"><i class="fa-solid fa-rotate-left"></i> Rectificar${g.conforme?'':' guía'}</button>
+      <button class="btn mini sec" onclick="moverGuia('${esc(g.numero)}')" title="Cambiar esta guía de viaje (hoja de ruta)"><i class="fa-solid fa-arrows-turn-to-dots"></i> Mover de hoja</button>
     </div>
+    <div id="mv-${esc(g.numero)}"></div>
     <div id="rg-${esc(g.numero)}"></div>
   </div></div>`;
 }
+/* ===== Guías modulares: mover una guía a otra hoja de ruta =====
+   Los viajes cambian (dos rutas se juntan, un viaje se parte). Al mover (Jefe, 29-07-2026):
+   la guía adopta la fecha de envío del viaje de destino; ambas hojas quedan "sin archivo"
+   porque el .docx impreso ya no refleja el viaje y debe regenerarse; si la hoja de origen
+   queda vacía se ELIMINA y, si era la de número más alto, el correlativo retrocede: ese
+   número se puede reutilizar porque ese viaje nunca existió. */
+function moverGuia(numero){
+  const g=DB[ARCH.guias].data.guias.find(x=>String(x.numero)===String(numero));
+  if(!g)return;
+  const box=document.getElementById('mv-'+numero);
+  if(box.innerHTML){box.innerHTML='';return}
+  const hojas=DB[ARCH.hr].data.hojas.filter(h=>String(h.numero)!==String(g.hoja_ruta));
+  const abiertas=hojas.filter(h=>(h.estado||'borrador')==='borrador')
+    .sort((a,b)=>(+b.numero)-(+a.numero));
+  if(!abiertas.length){toast('No hay otra hoja de ruta en borrador adonde moverla.');return}
+  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:10px">
+    <b>Mover la guía N°${esc(numero)} a otro viaje</b>
+    <p class="small muted">La guía tomará la fecha de envío del viaje de destino. Las hojas afectadas quedarán "sin archivo" hasta regenerarlas, porque el documento impreso deja de reflejar el viaje.</p>
+    <label>Viaje de destino</label>
+    <select id="mv-dest-${esc(numero)}">${abiertas.map(h=>`<option value="${esc(String(h.numero))}">Hoja de Ruta N°${esc(String(h.numero))} · envío ${fFecha(h.fecha_envio||h.fecha)} · ${(h.guias||[]).length} guía(s)</option>`).join('')}</select>
+    <div class="acciones"><button class="btn mini" onclick="guardarMoverGuia('${esc(numero)}')">Mover</button><button class="btn mini sec" onclick="moverGuia('${esc(numero)}')">Cancelar</button></div>
+  </div>`;
+}
+async function guardarMoverGuia(numero){
+  const g=DB[ARCH.guias].data.guias.find(x=>String(x.numero)===String(numero));
+  if(!g)return;
+  const destNum=document.getElementById('mv-dest-'+numero).value;
+  const hojas=DB[ARCH.hr].data.hojas;
+  const hNueva=hojas.find(h=>String(h.numero)===String(destNum));
+  if(!hNueva){toast('No se encontró la hoja de destino.');return}
+  if((hNueva.estado||'borrador')!=='borrador'){toast(`La hoja N°${destNum} está cerrada.`);return}
+  const hVieja=hojas.find(h=>String(h.numero)===String(g.hoja_ruta));
+  velo(true,'Moviendo guía…');
+  try{
+    let aviso='';
+    if(hVieja){
+      hVieja.guias=(hVieja.guias||[]).filter(n=>String(n)!==String(numero));
+      hVieja.archivo=null;
+    }
+    hNueva.guias=[...new Set([...(hNueva.guias||[]),String(numero)])].sort((a,b)=>(+a)-(+b));
+    hNueva.archivo=null;
+    g.hoja_ruta=+hNueva.numero;
+    g.fecha_envio=hNueva.fecha_envio||hNueva.fecha||g.fecha_envio;
+    const gs=DB[ARCH.guias].data.guias;
+    const dests=h=>[...new Set((h.guias||[]).map(n=>{const x=gs.find(y=>String(y.numero)===String(n));return x?normBodega(x.destino||''):null}).filter(Boolean))]
+      .sort((a,b)=>BODEGAS_ORDEN.indexOf(a)-BODEGAS_ORDEN.indexOf(b));
+    hNueva.destinos=dests(hNueva);
+    if(hVieja)hVieja.destinos=dests(hVieja);
+    if(hVieja&&!hVieja.guias.length){
+      hojas.splice(hojas.indexOf(hVieja),1);
+      const conf=DB[ARCH.conf].data;
+      const maxN=hojas.reduce((m,h)=>Math.max(m,+h.numero||0),0);
+      conf.proxima_hoja_ruta=maxN+1;
+      await guardarArchivo(ARCH.conf,`Hoja de ruta N°${hVieja.numero} eliminada por quedar vacía`);
+      aviso=` · la N°${hVieja.numero} quedó vacía y se eliminó (próxima: ${conf.proxima_hoja_ruta})`;
+    }
+    await guardarArchivo(ARCH.guias,`Guía N°${numero} movida a la hoja N°${destNum}`);
+    await guardarArchivo(ARCH.hr,`Hoja N°${destNum}: entra la guía N°${numero}`);
+    toast(`Guía N°${numero} movida al viaje N°${destNum}${aviso}. Documento de la hoja pendiente de regenerar.`);
+    render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+
 /* ===== Conformidad y rectificación de una guía (logística inversa) =====
    La guía se emite con lo que se VA a despachar. Si algo se rompe, se pierde o no alcanza a
    subir al camión, se rectifica: esas unidades vuelven a quedar PENDIENTES en la OC y reaparecen
