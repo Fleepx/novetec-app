@@ -1787,23 +1787,48 @@ function moverGuia(numero){
   const hojas=DB[ARCH.hr].data.hojas.filter(h=>String(h.numero)!==String(g.hoja_ruta));
   const abiertas=hojas.filter(h=>(h.estado||'borrador')==='borrador')
     .sort((a,b)=>(+b.numero)-(+a.numero));
-  if(!abiertas.length){toast('No hay otra hoja de ruta en borrador adonde moverla.');return}
+
   box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:10px">
     <b>Mover la guía N°${esc(numero)} a otro viaje</b>
     <p class="small muted">La guía tomará la fecha de envío del viaje de destino. Las hojas afectadas quedarán "sin archivo" hasta regenerarlas, porque el documento impreso deja de reflejar el viaje.</p>
     <label>Viaje de destino</label>
-    <select id="mv-dest-${esc(numero)}">${abiertas.map(h=>`<option value="${esc(String(h.numero))}">Hoja de Ruta N°${esc(String(h.numero))} · envío ${fFecha(h.fecha_envio||h.fecha)} · ${(h.guias||[]).length} guía(s)</option>`).join('')}</select>
+    <select id="mv-dest-${esc(numero)}" onchange="document.getElementById('mv-nueva-${esc(numero)}').style.display=this.value==='__nueva__'?'block':'none'">
+      ${abiertas.map(h=>`<option value="${esc(String(h.numero))}">Hoja de Ruta N°${esc(String(h.numero))} · envío ${fFecha(h.fecha_envio||h.fecha)} · ${(h.guias||[]).length} guía(s)</option>`).join('')}
+      <option value="__nueva__">Nueva ruta…</option>
+    </select>
+    <div id="mv-nueva-${esc(numero)}" style="display:none">
+      <label>Fecha de envío del viaje nuevo</label>
+      <input type="date" id="mv-fecha-${esc(numero)}" value="${hoyISO()}">
+      <p class="small muted">Se creará la Hoja de Ruta N°${esc(String(DB[ARCH.conf].data.proxima_hoja_ruta||1))} con esa fecha.</p>
+    </div>
     <div class="acciones"><button class="btn mini" onclick="guardarMoverGuia('${esc(numero)}')">Mover</button><button class="btn mini sec" onclick="moverGuia('${esc(numero)}')">Cancelar</button></div>
   </div>`;
 }
 async function guardarMoverGuia(numero){
   const g=DB[ARCH.guias].data.guias.find(x=>String(x.numero)===String(numero));
   if(!g)return;
-  const destNum=document.getElementById('mv-dest-'+numero).value;
+  const sel=document.getElementById('mv-dest-'+numero).value;
   const hojas=DB[ARCH.hr].data.hojas;
-  const hNueva=hojas.find(h=>String(h.numero)===String(destNum));
-  if(!hNueva){toast('No se encontró la hoja de destino.');return}
-  if((hNueva.estado||'borrador')!=='borrador'){toast(`La hoja N°${destNum} está cerrada.`);return}
+  let hNueva, creada=false;
+  if(sel==='__nueva__'){
+    const f=(document.getElementById('mv-fecha-'+numero).value||'').trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(f)){toast('Indica la fecha de envío del viaje nuevo.');return}
+    // Una hoja por fecha de envío: el generador del .docx ubica la hoja POR FECHA, así que dos
+    // hojas el mismo día se pisarían al generar el documento.
+    const yaHay=hojas.find(h=>String(h.fecha_envio||h.fecha)===f);
+    if(yaHay){toast(`El ${fFecha(f)} ya tiene la Hoja N°${yaHay.numero}: elígela en la lista.`);return}
+    const conf=DB[ARCH.conf].data;
+    const num=+conf.proxima_hoja_ruta||(hojas.reduce((m,h)=>Math.max(m,+h.numero||0),0)+1);
+    hNueva={numero:num,fecha_envio:f,fecha:null,guias:[],destinos:[],estado:'borrador',archivo:null};
+    hojas.push(hNueva);
+    conf.proxima_hoja_ruta=num+1;
+    creada=true;
+  }else{
+    hNueva=hojas.find(h=>String(h.numero)===String(sel));
+    if(!hNueva){toast('No se encontró la hoja de destino.');return}
+    if((hNueva.estado||'borrador')!=='borrador'){toast(`La hoja N°${sel} está cerrada.`);return}
+  }
+  const destNum=hNueva.numero;
   const hVieja=hojas.find(h=>String(h.numero)===String(g.hoja_ruta));
   velo(true,'Moviendo guía…');
   try{
@@ -1829,9 +1854,10 @@ async function guardarMoverGuia(numero){
       await guardarArchivo(ARCH.conf,`Hoja de ruta N°${hVieja.numero} eliminada por quedar vacía`);
       aviso=` · la N°${hVieja.numero} quedó vacía y se eliminó (próxima: ${conf.proxima_hoja_ruta})`;
     }
+    if(creada)await guardarArchivo(ARCH.conf,`Hoja de ruta N°${destNum} creada (envío ${hNueva.fecha_envio})`);
     await guardarArchivo(ARCH.guias,`Guía N°${numero} movida a la hoja N°${destNum}`);
     await guardarArchivo(ARCH.hr,`Hoja N°${destNum}: entra la guía N°${numero}`);
-    toast(`Guía N°${numero} movida al viaje N°${destNum}${aviso}. Documento de la hoja pendiente de regenerar.`);
+    toast(`Guía N°${numero} ${creada?`en la NUEVA hoja N°${destNum} (envío ${fFecha(hNueva.fecha_envio)})`:`movida al viaje N°${destNum}`}${aviso}. Documento de la hoja pendiente de regenerar.`);
     render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
