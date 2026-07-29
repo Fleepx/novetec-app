@@ -52,7 +52,7 @@ try {
 
 const ARCHIVOS = { cot: 'cotizaciones', oc: 'ordenes_compra', guias: 'guias_despacho',
   inv: 'inventario', conf: 'config', pend: 'pendientes', hr: 'hojas_ruta',
-  prod: 'productos', sin: 'sinonimos', psap: 'pendientes_sap' };
+  prod: 'productos', sin: 'sinonimos', psap: 'pendientes_sap', hprec: 'historial_precios' };
 for (const k in ARCHIVOS) {
   const f = path.join(DATOS, ARCHIVOS[k] + '.json');
   if (!fs.existsSync(f)) { console.error('FALTA el archivo de datos:', f); process.exit(1); }

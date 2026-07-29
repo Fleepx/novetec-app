@@ -240,7 +240,7 @@ a{color:var(--texto)}
 const LSKEY='novetec_cfg';
 let cfg=null;
 let DB={}; // path -> {data, sha}
-const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json',prod:'data/productos.json',sin:'data/sinonimos.json',psap:'data/pendientes_sap.json',arch:'data/archivos.json'};
+const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json',prod:'data/productos.json',sin:'data/sinonimos.json',psap:'data/pendientes_sap.json',arch:'data/archivos.json',hprec:'data/historial_precios.json'};
 
 const b64dec=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,'')),c=>c.charCodeAt(0)));
 function b64enc(s){const b=new TextEncoder().encode(s);let r='';for(let i=0;i<b.length;i+=8192)r+=String.fromCharCode(...b.subarray(i,i+8192));return btoa(r)}
@@ -252,6 +252,7 @@ async function gh(path,opts={}){
   return r.json();
 }
 const ESTRUCTURAS_BASE={'data/cotizaciones.json':{cotizaciones:[]},'data/ordenes_compra.json':{ordenes:[]},
+ 'data/historial_precios.json':{observaciones:[]},
  'data/guias_despacho.json':{guias:[]},'data/inventario.json':{productos:[],movimientos:[]},
  'data/pendientes.json':{pendientes:[]},'data/hojas_ruta.json':{hojas:[]},
  'data/productos.json':{productos:[],correlativo:0},
@@ -277,6 +278,7 @@ function normalizarDatos(p,d){
   if(p===ARCH.inv){arr('productos');arr('movimientos')}
   if(p===ARCH.prod){arr('productos');d.productos.forEach(x=>{x.alias=x.alias||[];x.codigos_cliente=x.codigos_cliente||{}})}
   if(p===ARCH.psap){arr('registros')}
+  if(p===ARCH.hprec){arr('observaciones')}
   if(p===ARCH.pend){arr('pendientes')}
   return d;
 }
@@ -2075,12 +2077,24 @@ async function guardarEditOC(fe){
    de Pendientes SAP (que también es listado de OC del cliente). Los precios de cotización NO
    entran: son oferta, no adjudicado. */
 let preFiltro='',preSoloCon=false;
+/* Los precios salen del HISTORIAL ACUMULATIVO (`historial_precios.json`), que guarda toda
+   observación de precio de OC que hayamos tenido, incluidas las de documentos ya archivados.
+   Motivo (Jefe, 29-07-2026): la lista de precios es la guía para cotizar, así que NO puede
+   perderse cuando se limpia el Panel. Se completa con lo vigente por si algo aún no se anotó. */
 function observacionesPrecio(){
   const obs={}; // codigo NOV -> [{fecha, oc, precio}]
+  const vistos=new Set();
   const push=(cod,nombre,o)=>{
     if(!cod)cod='N:'+normProd(nombre);
+    const k=cod+'|'+o.oc+'|'+o.precio+'|'+o.fecha;
+    if(vistos.has(k))return;                 // la misma observación no se cuenta dos veces
+    vistos.add(k);
     (obs[cod]=obs[cod]||[]).push(o);
   };
+  ((DB[ARCH.hprec]&&DB[ARCH.hprec].data.observaciones)||[]).forEach(h=>{
+    const p=+h.precio||0;if(!p)return;
+    push(h.codigo||codigoDeItem(h.producto,null),h.producto,{fecha:h.fecha||'',oc:String(h.folio_oc||''),precio:p});
+  });
   DB[ARCH.oc].data.ordenes.forEach(o=>o.items.forEach(i=>{
     const p=+i.precio_unitario||0;if(!p)return;
     push(codigoDeItem(i.producto,i.codigo),i.producto,{fecha:o.fecha_emision||'',oc:String(o.folio),precio:p});
