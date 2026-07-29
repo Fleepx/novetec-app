@@ -283,7 +283,7 @@ function normalizarDatos(p,d){
   if(p===ARCH.inv){arr('productos');arr('movimientos')}
   if(p===ARCH.prod){arr('productos');d.productos.forEach(x=>{x.alias=x.alias||[];x.codigos_cliente=x.codigos_cliente||{}})}
   if(p===ARCH.psap){arr('registros')}
-  if(p===ARCH.hprec){arr('observaciones')}
+  if(p===ARCH.hprec){arr('observaciones');arr('cotizaciones')}
   if(p===ARCH.pend){arr('pendientes')}
   return d;
 }
@@ -2205,16 +2205,25 @@ function observacionesPrecio(){
   return obs;
 }
 /* Último precio COTIZADO por producto: referencia para comparar oferta contra adjudicado.
-   No entra en las 4 observaciones de OC ni en el cálculo de variación. */
+   No entra en las 4 observaciones de OC ni en el cálculo de variación.
+   Sale del HISTORIAL ACUMULATIVO (`historial_precios.json` → `cotizaciones`) más las
+   cotizaciones vigentes, por el mismo motivo que los precios de OC: la oferta que hicimos no
+   puede perderse cuando el documento se archiva o se limpia el Panel. */
 function ultimaCotizacion(){
+  const obs=[];
+  ((DB[ARCH.hprec]&&DB[ARCH.hprec].data.cotizaciones)||[]).forEach(h=>{
+    const p=+h.precio||0;if(!p)return;
+    obs.push({cod:h.codigo||codigoDeItem(h.producto,null)||('N:'+normProd(h.producto)),
+              precio:p,fecha:h.fecha||'',folio:String(h.folio||'')});
+  });
+  DB[ARCH.cot].data.cotizaciones.forEach(c=>c.items.forEach(i=>{
+    const p=+i.precio_unitario||0;if(!p)return;
+    obs.push({cod:codigoDeItem(i.producto,i.codigo)||('N:'+normProd(i.producto)),
+              precio:p,fecha:c.fecha||'',folio:String(c.folio||'')});
+  }));
   const m={};
-  [...DB[ARCH.cot].data.cotizaciones]
-    .sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')))
-    .forEach(c=>c.items.forEach(i=>{
-      const p=+i.precio_unitario||0;if(!p)return;
-      const cod=codigoDeItem(i.producto,i.codigo)||('N:'+normProd(i.producto));
-      m[cod]={precio:p,fecha:c.fecha||'',folio:String(c.folio||'')};
-    }));
+  obs.sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)))
+     .forEach(o=>{m[o.cod]={precio:o.precio,fecha:o.fecha,folio:o.folio}});
   return m;
 }
 function rPrecios(){
