@@ -556,18 +556,16 @@ function modalDuplicados(dups,nuevos){
         <div><b>${esc(d.file.name)}</b></div>
         <div class="small muted" style="margin-top:4px">${EST_LBL[d.reg.estado]||'ya está registrado'}${d.reg.fecha?` el ${fFecha(d.reg.fecha)}`:''}${d.reg.referencia?` · ${esc(d.reg.referencia)}`:''}${d.reg.nombre&&d.reg.nombre!==d.file.name?` · se subió como "${esc(d.reg.nombre)}"`:''}</div>
       </div>`).join('')}
-      <p class="small muted">${nuevos.length?`Los otros ${nuevos.length} archivo(s) sí son nuevos.`:'No hay ningún archivo nuevo en esta subida.'}</p>
+      ${nuevos.length?`<p class="small muted">Los otros ${nuevos.length} archivo(s) sí son nuevos: se suben de todas formas aunque descartes ${dups.length===1?'el repetido':'los repetidos'}.</p>`:''}
       <div class="acciones">
-        ${nuevos.length?'<button class="btn mini" id="dup-omitir">Subir solo los nuevos</button>':''}
-        <button class="btn mini sec" id="dup-igual">Subir igual, incluidos los repetidos</button>
-        <button class="btn mini sec" id="dup-cancel">Cancelar</button>
+        <button class="btn mini" id="dup-igual">Cargar igualmente</button>
+        <button class="btn mini sec" id="dup-omitir">Descartar archivo${dups.length===1?'':'s'}</button>
       </div>
     </div>`;
     document.body.appendChild(ov);
     const cerrar=r=>{ov.remove();res(r)};
-    const b1=ov.querySelector('#dup-omitir');if(b1)b1.onclick=()=>cerrar('omitir');
     ov.querySelector('#dup-igual').onclick=()=>cerrar('todos');
-    ov.querySelector('#dup-cancel').onclick=()=>cerrar(null);
+    ov.querySelector('#dup-omitir').onclick=()=>cerrar('omitir');
   });
 }
 async function subirPendiente(tipo){
