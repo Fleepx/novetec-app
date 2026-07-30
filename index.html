@@ -153,6 +153,16 @@ tr.fila-pend>td{background:var(--ambar-bg)}
 .acc-fecha.hr-gris>summary{border-left:5px solid #AEB9C2}
 .acc-fecha.hr-ambar>summary{border-left:5px solid var(--ambar)}
 .acc-fecha.hr-verde>summary{border-left:5px solid var(--verde)}
+/* Acordeón de MES (Jefe, 30-07-2026): agrupa cotizaciones, OC y guías. Va por fuera de todo lo
+   demás (incluida la agrupación por Hoja de Ruta de las guías, que se conserva adentro). Un
+   nivel más grande que acc-fecha para que se note que es el contenedor exterior. */
+.acc-mes{margin-bottom:10px}
+.acc-mes>summary{list-style:none;cursor:pointer;padding:13px 16px;border:1px solid var(--line);border-radius:10px;background:var(--sub-bg);display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;font-weight:700;font-size:var(--fs-md)}
+.acc-mes>summary::-webkit-details-marker{display:none}
+.acc-mes>summary::before{content:'\f105';font-family:'Font Awesome 6 Free';font-weight:900;color:var(--muted);transition:transform .15s}
+.acc-mes[open]>summary::before{transform:rotate(90deg)}
+.acc-mes>summary .cnt{margin-left:auto;font-family:var(--mono);font-size:var(--fs-sm);color:var(--muted);font-weight:500}
+.acc-mes .cuerpo{padding:10px 0 2px 2px}
 td.trunc:hover{background:var(--hover)}
 td.trunc.abierto{white-space:normal;overflow:visible;text-overflow:clip;background:var(--hover)}
 td.num,th.num{text-align:right;font-family:var(--mono);letter-spacing:-.01em}
@@ -485,6 +495,44 @@ const GUIA_ESTADO_COLOR={pendiente:'gris',parcial:'ambar',conforme:'verde'};
 function guiaEstado(g){
   if(!g.conforme)return 'pendiente';
   return (g.rectificaciones||[]).length?'parcial':'conforme';
+}
+
+/* ===== Agrupación por mes (Jefe, 30-07-2026) =====
+   Cotizaciones, OC y Guías se aglomeran en una pestaña plegable por mes calendario (más
+   reciente primero), cerrada hasta que se hace click. En Guías la agrupación por Hoja de
+   Ruta (viaje) se conserva ADENTRO de cada mes: el mes es un nivel exterior nuevo, no la
+   reemplaza. Usa el mismo mecanismo de fichasAbiertas que ya recuerda qué quedó desplegado. */
+const MESES_LBL=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function mesKey(fechaISO){const m=/^(\d{4})-(\d{2})/.exec(fechaISO||'');return m?m[1]+'-'+m[2]:null}
+function mesLbl(key){if(!key)return 'Sin fecha';const[a,m]=key.split('-');return `${MESES_LBL[(+m)-1]} ${a}`}
+/* Agrupa `items` por el mes que entrega fechaFn(item), del más reciente al más antiguo.
+   Los que no tengan fecha válida caen en un grupo "Sin fecha" al final (no se pierden,
+   pero tampoco desordenan el resto). El orden ORIGINAL dentro de cada mes se respeta. */
+function agruparPorMes(items,fechaFn){
+  const g={};
+  items.forEach(it=>{const k=mesKey(fechaFn(it))||'__sin__';(g[k]=g[k]||[]).push(it)});
+  const keys=Object.keys(g).filter(k=>k!=='__sin__').sort((a,b)=>b.localeCompare(a));
+  if(g.__sin__)keys.push('__sin__');
+  return keys.map(k=>[k,g[k]]);
+}
+/* Cuenta de estados para el encabezado del mes, en el orden pedido por Jefe (30-07-2026):
+   confirmados · pendiente · parcial. `mapa` dice qué valor de estadoFn(item) es cada uno. */
+function contarEstados(items,estadoFn,mapa){
+  let ok=0,pend=0,parcial=0;
+  items.forEach(it=>{const e=estadoFn(it);
+    if(e===mapa.ok)ok++;else if(e===mapa.pend)pend++;else if(e===mapa.parcial)parcial++});
+  return {ok,pend,parcial};
+}
+/* Los tres números del encabezado, coloreados con el mismo semáforo verde/gris/ámbar de
+   siempre (confirmados=verde, pendiente=gris/muted, parcial=ámbar). */
+function cntEstados({ok,pend,parcial}){
+  return `<span style="color:var(--verde)">${ok}</span> - <span style="color:var(--muted)">${pend}</span> - <span style="color:var(--ambar)">${parcial}</span>`;
+}
+function accMes(k,titulo,cnt,cuerpo){
+  return `<details class="acc-mes" data-k="mes:${esc(k)}"${fichaAbierta('mes:'+k)?' open':''} ontoggle="recordarFicha(this)">
+    <summary><b>${titulo}</b><span class="cnt">${cnt}</span></summary>
+    <div class="cuerpo">${cuerpo}</div>
+  </details>`;
 }
 
 /* Cola de documentos por procesar con Claude */
@@ -848,7 +896,7 @@ function recordarFicha(el){
   el.open?fichasAbiertas.add(k):fichasAbiertas.delete(k);
 }
 function alternarFichas(btn){
-  const ds=[...document.querySelectorAll('#vista details.doc, #vista details.acc-fecha')];
+  const ds=[...document.querySelectorAll('#vista details.doc, #vista details.acc-fecha, #vista details.acc-mes')];
   if(!ds.length)return;
   const abrir=ds.some(d=>!d.open);
   ds.forEach(d=>{d.open=abrir;recordarFicha(d)});
@@ -1377,7 +1425,9 @@ function rCot(){
   ${formPendiente('cotizaciones','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${listaPend('cotizaciones')}
   ${cs.length?barraFichas():''}
-  ${cs.length?cs.map(c=>{
+  ${cs.length?agruparPorMes(cs,c=>c.fecha).map(([k,items])=>accMes('cot:'+k,mesLbl(k),
+      `${items.length} documento${items.length===1?'':'s'}`,
+      items.map(c=>{
     const est={enviada:'chip ambar',convertida:'chip verde',rechazada:'chip rojo'}[c.estado]||'chip';
     const neto=c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0);
     return `<div class="card">
@@ -1419,7 +1469,8 @@ function rCot(){
       </div>
       <div id="ec-${esc(c.id)}"></div>
       </details>
-    </div>`}).join(''):'<div class="card vacio">Aún no hay cotizaciones registradas.</div>'}`;
+    </div>`}).join('')
+    )).join(''):'<div class="card vacio">Aún no hay cotizaciones registradas.</div>'}`;
 }
 async function borrarCot(id){
   const arr=DB[ARCH.cot].data.cotizaciones;const c=arr.find(x=>x.id===id);if(!c)return;
@@ -1515,7 +1566,10 @@ function rOC(){
   ${listaPend(['ordenes_compra','pendientes_sap'])}
   <div class="filtro"><input placeholder="Filtrar por folio o estado…" value="${esc(ocFiltro)}" oninput="ocFiltro=this.value.toLowerCase();render();this.focus()"></div>
   ${lista.length?barraFichas():''}
-  ${lista.length?lista.map(o=>{
+  ${lista.length?agruparPorMes(lista,o=>o.fecha_carga||o.fecha_emision).map(([k,items])=>{
+    const c=contarEstados(items,ocEstado,{ok:'despachada',pend:'pendiente',parcial:'parcial'});
+    return accMes('oc:'+k,mesLbl(k),`${items.length} documento${items.length===1?'':'s'} (${cntEstados(c)})`,
+    items.map(o=>{
     const s=semaforo(o),e=ocEstado(o);
     const pendD=o.items.reduce((a,i)=>a+((+i.cantidad||0)-(+i.cantidad_despachada||0)),0);
     return `<div class="tag"><div class="bar ${ESTADO_COLOR[e]}"></div><div class="body">
@@ -1546,7 +1600,9 @@ function rOC(){
       <div id="fc-${encodeURIComponent(o.folio)}"></div>
       <div id="eo-${encodeURIComponent(o.folio)}"></div>
       </details>
-    </div></div>`}).join(''):'<div class="card vacio">No hay órdenes de compra.</div>'}`;
+    </div></div>`}).join('')
+    );
+  }).join(''):'<div class="card vacio">No hay órdenes de compra.</div>'}`;
 }
 async function borrarOC(fe){
   const folio=decodeURIComponent(fe);
@@ -1699,17 +1755,17 @@ function rGuias(){
     /* Agrupadas por HOJA DE RUTA (Jefe, 24-07-2026): una hoja = un viaje, y ese es el orden
        en que se recorre el despacho. Dentro de cada hoja, si el viaje tuvo varios destinos,
        las guías se ordenan por bodega en el orden fijo de recorrido. Las guías que aún no
-       están en ninguna hoja van aparte, al inicio, abiertas. */
+       están en ninguna hoja van aparte, al inicio, siempre abiertas: son un pendiente por
+       resolver, no historial, así que quedan FUERA de la agrupación por mes (Jefe, 30-07-2026).
+       El resto se aglomera por MES según la fecha de envío del viaje, con la Hoja de Ruta
+       anidada adentro tal como ya funcionaba. */
     const hojas=DB[ARCH.hr].data.hojas;
     const porHoja={};
     gs.forEach(g=>{const k=g.hoja_ruta?String(g.hoja_ruta):'__sin__';
       (porHoja[k]=porHoja[k]||[]).push(g)});
-    const nums=Object.keys(porHoja).filter(k=>k!=='__sin__')
-      .sort((a,b)=>(+b)-(+a));                       // hoja más reciente arriba
-    if(porHoja.__sin__)nums.unshift('__sin__');
+    const numsReales=Object.keys(porHoja).filter(k=>k!=='__sin__').sort((a,b)=>(+b)-(+a));
     const ordBod=g=>{const i=BODEGAS_ORDEN.indexOf(normBodega(g.destino||''));return i<0?99:i};
-    return nums.map(k=>{
-      const sin=k==='__sin__';
+    const bloqueHoja=(k,sin)=>{
       const lista=[...porHoja[k]].sort((a,b)=>ordBod(a)-ordBod(b)||String(a.numero).localeCompare(String(b.numero),'es',{numeric:true}));
       const hoja=sin?null:hojas.find(x=>String(x.numero)===k);
       const dests=[...new Set(lista.map(g=>normBodega(g.destino||'Sin destino')))]
@@ -1723,10 +1779,21 @@ function rGuias(){
       const titulo=sin
         ?'<span class="chip ambar">Sin hoja de ruta</span>'
         :`<b>Hoja de Ruta N°${esc(k)}</b>${chipEstado}${hoja?` <span class="chip">Envío ${fFecha(hoja.fecha_envio||hoja.fecha)}</span>`:''}`;
-      return `<details class="acc-fecha ${sin?'':'hr-'+ESTADO_COLOR[he]}"${sin?' open':''}><summary>${titulo}<span class="muted small">${esc(dests.join(' · '))}</span><span class="cnt">${lista.length} guía(s)</span>${desc}</summary><div class="cuerpo">
+      const key='hoja:'+k;
+      return{lista,fecha:sin?null:(hoja?(hoja.fecha_envio||hoja.fecha):null),
+        html:`<details class="acc-fecha ${sin?'':'hr-'+ESTADO_COLOR[he]}" data-k="${esc(key)}"${sin||fichaAbierta(key)?' open':''} ontoggle="recordarFicha(this)"><summary>${titulo}<span class="muted small">${esc(dests.join(' · '))}</span><span class="cnt">${lista.length} guía(s)</span>${desc}</summary><div class="cuerpo">
         ${lista.map(tarjetaGuia).join('')}
-      </div></details>`;
+      </div></details>`};
+    };
+    let out=porHoja.__sin__?bloqueHoja('__sin__',true).html:'';
+    const bloques=numsReales.map(k=>bloqueHoja(k,false));
+    out+=agruparPorMes(bloques,b=>b.fecha).map(([mk,items])=>{
+      const todasGuias=items.flatMap(b=>b.lista);
+      const c=contarEstados(todasGuias,guiaEstado,{ok:'conforme',pend:'pendiente',parcial:'parcial'});
+      return accMes('guias:'+mk,mesLbl(mk),`${todasGuias.length} documento${todasGuias.length===1?'':'s'} (${cntEstados(c)})`,
+        items.map(b=>b.html).join(''));
     }).join('');
+    return out;
   })()}`;
 }
 /* Tarjeta de una guía. Las diferencias de NOMBRE ya se ven en la tabla (columna en ámbar).
