@@ -1570,7 +1570,7 @@ function rOC(){
   const psapD=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{registros:[]};
   const psapReg=psapD.registros||[];
   return `${dlProd()}
-  ${ocLeida?panelOCLeida():`<details class="form" open><summary>Leer una orden de compra desde el PDF</summary><div class="inner">
+  ${ocLeida?panelOCLeida():`<details class="form"><summary>Leer una orden de compra desde el PDF</summary><div class="inner">
     <p class="small muted" style="margin-top:10px">Para las OC de SAP en PDF: la app las lee, valida los totales y te muestra lo que encontró para que confirmes. Nada se guarda sin tu aprobación. Si el PDF es una foto escaneada o el formato es otro, súbelo a la cola de más abajo.</p>
     <label>Archivo PDF de la orden de compra</label>
     <input type="file" id="oc-pdf" accept=".pdf">
