@@ -163,6 +163,16 @@ tr.fila-pend>td{background:var(--ambar-bg)}
 .acc-mes[open]>summary::before{transform:rotate(90deg)}
 .acc-mes>summary .cnt{margin-left:auto;font-family:var(--mono);font-size:var(--fs-sm);color:var(--muted);font-weight:500}
 .acc-mes .cuerpo{padding:10px 0 2px 2px}
+/* Acordeón de AÑO (Jefe, 30-07-2026): solo aparece cuando la data cruza más de un año
+   calendario. Sin esto, dos meses del mismo nombre en años distintos (dos "Junio") quedaban
+   uno junto al otro y se leían como un mes duplicado. Un nivel más grande que acc-mes. */
+.acc-anio{margin-bottom:12px}
+.acc-anio>summary{list-style:none;cursor:pointer;padding:14px 16px;border:1.5px solid var(--ink);border-radius:10px;background:var(--card);display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;font-weight:800;font-size:var(--fs-lg)}
+.acc-anio>summary::-webkit-details-marker{display:none}
+.acc-anio>summary::before{content:'\f105';font-family:'Font Awesome 6 Free';font-weight:900;color:var(--muted);transition:transform .15s}
+.acc-anio[open]>summary::before{transform:rotate(90deg)}
+.acc-anio>summary .cnt{margin-left:auto;font-family:var(--mono);font-size:var(--fs-sm);color:var(--muted);font-weight:500}
+.acc-anio .cuerpo{padding:10px 2px 2px}
 td.trunc:hover{background:var(--hover)}
 td.trunc.abierto{white-space:normal;overflow:visible;text-overflow:clip;background:var(--hover)}
 td.num,th.num{text-align:right;font-family:var(--mono);letter-spacing:-.01em}
@@ -534,6 +544,27 @@ function accMes(k,titulo,cnt,cuerpo){
     <div class="cuerpo">${cuerpo}</div>
   </details>`;
 }
+function anioDeMes(k){return k==='__sin__'?null:k.split('-')[0]}
+/* Envuelve los grupos de mes en un acordeón de AÑO, pero SOLO si la data cruza más de un año
+   (Jefe, 30-07-2026). Con un único año no cambia nada en pantalla: cero ruido en el caso común.
+   `grupos` = salida de agruparPorMes; `renderMes` = función que arma el HTML de un grupo mes. */
+function renderMeses(prefijo,grupos,renderMes){
+  const anios=[...new Set(grupos.map(([k])=>anioDeMes(k)).filter(Boolean))];
+  if(anios.length<=1)return grupos.map(renderMes).join('');
+  const porAnio={};
+  grupos.forEach(g=>{const a=anioDeMes(g[0])||'__sin__';(porAnio[a]=porAnio[a]||[]).push(g)});
+  const orden=Object.keys(porAnio).filter(a=>a!=='__sin__').sort((a,b)=>b.localeCompare(a));
+  if(porAnio.__sin__)orden.push('__sin__');
+  return orden.map(a=>{
+    const sub=porAnio[a];
+    const total=sub.reduce((s,g)=>s+g[1].length,0);
+    const key='anio:'+prefijo+':'+a;
+    return `<details class="acc-anio" data-k="${esc(key)}"${fichaAbierta(key)?' open':''} ontoggle="recordarFicha(this)">
+      <summary><b>${a==='__sin__'?'Sin fecha':a}</b><span class="cnt">${total} documento${total===1?'':'s'}</span></summary>
+      <div class="cuerpo">${sub.map(renderMes).join('')}</div>
+    </details>`;
+  }).join('');
+}
 
 /* Cola de documentos por procesar con Claude */
 const TIPO_LBL={cotizaciones:'Cotización',ordenes_compra:'OC',guias_despacho:'Guía de despacho',pendientes_sap:'Pendientes SAP'};
@@ -894,7 +925,7 @@ function recordarFicha(el){
   el.open?fichasAbiertas.add(k):fichasAbiertas.delete(k);
 }
 function alternarFichas(btn){
-  const ds=[...document.querySelectorAll('#vista details.doc, #vista details.acc-fecha, #vista details.acc-mes')];
+  const ds=[...document.querySelectorAll('#vista details.doc, #vista details.acc-fecha, #vista details.acc-mes, #vista details.acc-anio')];
   if(!ds.length)return;
   const abrir=ds.some(d=>!d.open);
   ds.forEach(d=>{d.open=abrir;recordarFicha(d)});
@@ -1423,7 +1454,7 @@ function rCot(){
   ${formPendiente('cotizaciones','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${listaPend('cotizaciones')}
   ${cs.length?barraFichas():''}
-  ${cs.length?agruparPorMes(cs,c=>c.fecha).map(([k,items])=>accMes('cot:'+k,mesLbl(k),
+  ${cs.length?renderMeses('cot',agruparPorMes(cs,c=>c.fecha),([k,items])=>accMes('cot:'+k,mesLbl(k),
       `${items.length} documento${items.length===1?'':'s'}`,
       items.map(c=>{
     const est={enviada:'chip ambar',convertida:'chip verde',rechazada:'chip rojo'}[c.estado]||'chip';
@@ -1468,7 +1499,8 @@ function rCot(){
       <div id="ec-${esc(c.id)}"></div>
       </details>
     </div>`}).join('')
-    )).join(''):'<div class="card vacio">Aún no hay cotizaciones registradas.</div>'}`;
+    ))
+    :'<div class="card vacio">Aún no hay cotizaciones registradas.</div>'}`;
 }
 async function borrarCot(id){
   const arr=DB[ARCH.cot].data.cotizaciones;const c=arr.find(x=>x.id===id);if(!c)return;
@@ -1564,7 +1596,7 @@ function rOC(){
   ${listaPend(['ordenes_compra','pendientes_sap'])}
   <div class="filtro"><input placeholder="Filtrar por folio o estado…" value="${esc(ocFiltro)}" oninput="ocFiltro=this.value.toLowerCase();render();this.focus()"></div>
   ${lista.length?barraFichas():''}
-  ${lista.length?agruparPorMes(lista,o=>o.fecha_carga||o.fecha_emision).map(([k,items])=>{
+  ${lista.length?renderMeses('oc',agruparPorMes(lista,o=>o.fecha_carga||o.fecha_emision),([k,items])=>{
     const c=contarEstados(items,ocEstado,{ok:'despachada',pend:'pendiente',parcial:'parcial'});
     return accMes('oc:'+k,mesLbl(k),`${items.length} documento${items.length===1?'':'s'} (${cntEstados(c)})`,
     items.map(o=>{
@@ -1600,7 +1632,8 @@ function rOC(){
       </details>
     </div></div>`}).join('')
     );
-  }).join(''):'<div class="card vacio">No hay órdenes de compra.</div>'}`;
+  })
+  :'<div class="card vacio">No hay órdenes de compra.</div>'}`;
 }
 async function borrarOC(fe){
   const folio=decodeURIComponent(fe);
@@ -1785,12 +1818,12 @@ function rGuias(){
     };
     let out=porHoja.__sin__?bloqueHoja('__sin__',true).html:'';
     const bloques=numsReales.map(k=>bloqueHoja(k,false));
-    out+=agruparPorMes(bloques,b=>b.fecha).map(([mk,items])=>{
+    out+=renderMeses('guias',agruparPorMes(bloques,b=>b.fecha),([mk,items])=>{
       const todasGuias=items.flatMap(b=>b.lista);
       const c=contarEstados(todasGuias,guiaEstado,{ok:'conforme',pend:'pendiente',parcial:'parcial'});
       return accMes('guias:'+mk,mesLbl(mk),`${todasGuias.length} documento${todasGuias.length===1?'':'s'} (${cntEstados(c)})`,
         items.map(b=>b.html).join(''));
-    }).join('');
+    });
     return out;
   })()}`;
 }
