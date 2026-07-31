@@ -143,8 +143,6 @@ table.tprod td:last-child,table.tprod th:last-child{padding-right:2px}
 tr.fila-pend>td{background:var(--ambar-bg)}
 tr.fila-adj>td{background:var(--verde-bg)}
 tr.fila-adj-parcial>td{background:var(--ambar-bg)}
-.adj-bloque{display:flex;flex-direction:column;gap:6px;margin-top:6px}
-.adj-linea{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 8px;border:1px solid var(--line);border-radius:8px}
 /* Alerta roja junto a una cifra (ej: se despachó más de lo comprado) */
 .alerta-cifra{color:var(--rojo);margin-left:5px;cursor:help}
 /* Acordeón de guías: hoja de ruta -> guías de ese viaje */
@@ -1731,32 +1729,27 @@ async function adjQuitarLinea(fe,oi){
   velo(false);
 }
 function cotPorId(id){return DB[ARCH.cot].data.cotizaciones.find(c=>c.id===id)}
-/* Bloque de adjudicación dentro de la ficha de una OC: estado por línea y acciones. */
-function bloqueAdjudicacionOC(o){
-  if(o.origen!=='oc'||!o.items?.length)return '';
-  const filas=o.items.map((li,oi)=>{
-    const regs=adjDeOCLinea(o.folio,oi);
-    if(regs.length){
-      const refs=regs.map(r=>{const c=cotPorId(r.cot);
-        return `<span class="chip verde" title="${esc(c?c.items[r.cot_idx]?.producto||'':'')}">COT ${esc(c?c.folio:r.cot)} ×${num(r.cantidad)}</span>`}).join(' ');
-      return `<div class="adj-linea"><span class="trunc small" style="flex:1">${esc(li.producto)}</span>${refs}
-        <button class="btn mini sec" onclick="adjQuitarLinea('${encodeURIComponent(o.folio)}',${oi})" title="Quita el vínculo y restituye el saldo de la cotización">Desvincular</button></div>`;
-    }
-    if(lineaSinCotizacion(o.folio,oi))
-      return `<div class="adj-linea"><span class="trunc small" style="flex:1">${esc(li.producto)}</span><span class="chip">sin cotización</span>
-        <button class="btn mini sec" onclick="adjQuitarLinea('${encodeURIComponent(o.folio)}',${oi})">Deshacer</button></div>`;
-    const cands=candidatosParaLinea(o,li);
-    if(!cands.length)
-      return `<div class="adj-linea"><span class="trunc small" style="flex:1">${esc(li.producto)}</span><span class="chip rojo">sin match</span>
-        <button class="btn mini sec" onclick="adjSinCotizacion('${encodeURIComponent(o.folio)}',${oi})" title="Confirma que esta línea no nació de una cotización del sistema">Confirmar sin cotización</button></div>`;
-    const cd=cands[0],c=cd.cot;
-    const difPrecio=!cd.precioOk?` · <span style="color:var(--rojo)">precio distinto: ${clp(+li.precio_unitario||0)} vs ${clp(+cd.it.precio_unitario||0)}</span>`:'';
-    return `<div class="adj-linea"><span class="trunc small" style="flex:1">${esc(li.producto)}</span>
-      <span class="chip ambar" title="${esc(cd.it.producto)}">sugerido: COT ${esc(c.folio)} · ${fFecha(c.fecha)} · saldo ${num(saldoLinea(c,cd.idx))}${difPrecio}</span>
-      <button class="btn mini" onclick="adjConfirmar('${encodeURIComponent(o.folio)}',${oi})">Adjudicar</button>
-      <button class="btn mini sec" onclick="adjSinCotizacion('${encodeURIComponent(o.folio)}',${oi})">Sin cotización</button></div>`;
-  }).join('');
-  return `<div class="small muted" style="margin-top:10px;font-weight:600">Adjudicación a cotizaciones</div><div class="adj-bloque">${filas}</div>`;
+/* Celda "Cotización" de la tabla de ítems de una OC (Jefe, 31-07-2026: columna al final de la
+   tabla, no tarjetas aparte, para no abultar la ficha). Muestra el vínculo o las acciones. */
+function celdaAdjOC(o,li,oi){
+  if(o.origen!=='oc')return '<span class="muted small">—</span>';
+  const fe=encodeURIComponent(o.folio);
+  const regs=adjDeOCLinea(o.folio,oi);
+  if(regs.length){
+    const refs=regs.map(r=>{const c=cotPorId(r.cot);
+      return `<span class="chip verde" title="${esc(c?c.items[r.cot_idx]?.producto||'':'')} · ${clp(c?+(c.items[r.cot_idx]||{}).precio_unitario||0:0)}">COT ${esc(c?c.folio:r.cot)} ×${num(r.cantidad)}</span>`}).join(' ');
+    return `${refs} <button class="btn mini sec" onclick="adjQuitarLinea('${fe}',${oi})" title="Quita el vínculo y restituye el saldo de la cotización">Quitar</button>`;
+  }
+  if(lineaSinCotizacion(o.folio,oi))
+    return `<span class="chip">sin cotización</span> <button class="btn mini sec" onclick="adjQuitarLinea('${fe}',${oi})">Deshacer</button>`;
+  const cands=candidatosParaLinea(o,li);
+  if(!cands.length)
+    return `<span class="chip rojo">sin match</span> <button class="btn mini sec" onclick="adjSinCotizacion('${fe}',${oi})" title="Confirma que esta línea no nació de una cotización del sistema">Sin cotización</button>`;
+  const cd=cands[0],c=cd.cot;
+  const dif=!cd.precioOk?` · precio distinto: ${clp(+li.precio_unitario||0)} en la OC vs ${clp(+cd.it.precio_unitario||0)} cotizado`:'';
+  return `<span class="chip ambar" title="${esc(cd.it.producto)} · ${fFecha(c.fecha)} · saldo ${num(saldoLinea(c,cd.idx))}${dif}">sugerido: COT ${esc(c.folio)}${!cd.precioOk?' (revisar precio)':''}</span>
+    <button class="btn mini" onclick="adjConfirmar('${fe}',${oi})">Adjudicar</button>
+    <button class="btn mini sec" onclick="adjSinCotizacion('${fe}',${oi})">Sin cotización</button>`;
 }
 function rCot(){
   // Más reciente primero (Jefe, 24-07-2026): por fecha desc; a igual fecha, se respeta el orden de carga.
@@ -1976,11 +1969,10 @@ function rOC(){
         <span class="muted small">Emisión ${fFecha(o.fecha_emision)}${o.fecha_carga&&o.fecha_carga!==o.fecha_emision?` · <span title="Día en que se cargó al sistema">cargada ${fFecha(o.fecha_carga)}</span>`:''}${o.fecha_entrega?` · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b>`:''} · ${esc(o.destino||'—')}</span>
         <span class="resumen">${o.items.length} ítem(s) · ${num(pendD)} por despachar</span>
       </summary>
-      <table class="tprod" style="margin-top:12px;min-width:520px"><colgroup><col><col style="width:8ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th></tr>
-      ${o.items.map(i=>{const comp=+i.cantidad_comprada||0;
+      <table class="tprod" style="margin-top:12px;min-width:760px"><colgroup><col><col style="width:8ch"><col style="width:10ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"><col style="width:20ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">P. unit.</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th><th>Cotización</th></tr>
+      ${o.items.map((i,ix)=>{const comp=+i.cantidad_comprada||0;
         const pend=(+i.cantidad||0)-(+i.cantidad_despachada||0);
-        return `<tr${pend>0?' class="fila-pend"':''}><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num" style="${comp<i.cantidad?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(pend)}</td></tr>`}).join('')}</table>
-      ${bloqueAdjudicacionOC(o)}
+        return `<tr${pend>0?' class="fila-pend"':''}><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num" style="${comp<i.cantidad?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(pend)}</td><td>${celdaAdjOC(o,i,ix)}</td></tr>`}).join('')}</table>
       ${o.compras?.length?`<p class="small muted" style="margin-top:6px">Compras: ${o.compras.map(c=>`<span class="mono">${fFecha(c.fecha)}</span> ${esc(c.proveedor||'s/proveedor')} (${c.items.map(i=>`${esc(i.producto)} ×${num(i.cantidad)}`).join(', ')})`).join(' · ')}</p>`:''}
       ${o.guias?.length?`<p class="small muted" style="margin-top:6px">Guías: <span class="mono">${o.guias.map(esc).join(', ')}</span></p>`:''}
       ${o.archivo?`<p class="small"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(o.archivo)}')">Descargar documento</a></p>`:''}
@@ -2690,7 +2682,7 @@ function rPrecios(){
     <span class="small muted">${filas.length} artículo(s) en pantalla</span>
   </div>
   ${filas.length?`<div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:760px">
-    <colgroup><col style="width:6ch"><col><col style="width:11ch"><col style="width:8ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"></colgroup>
+    <colgroup><col style="width:4em"><col><col style="width:11ch"><col style="width:8ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"></colgroup>
     <tr><th></th><th>Producto</th><th class="num">Último precio</th><th class="num">Var.</th><th class="num">Anterior</th><th class="num">2 atrás</th><th class="num">3 atrás</th><th class="num">Cotizado</th></tr>
     ${filas.map(f=>{const ps=f.precios;
       return `<tr>
