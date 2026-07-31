@@ -397,7 +397,9 @@ async function conectar(){
   try{await gh('contents/data');localStorage.setItem(LSKEY,JSON.stringify(cfg));iniciar()}
   catch(e){document.getElementById('s-err').textContent='No se pudo conectar: '+e.message;cfg=null}
 }
-function cambiarConexion(){if(confirm('¿Desconectar este navegador del repositorio?')){localStorage.removeItem(LSKEY);location.reload()}}
+async function cambiarConexion(){
+  if(await confirmar({titulo:'Desconectar el navegador',texto:'Se borrará el acceso guardado en este navegador y tendrás que volver a ingresar el token.',confirmar:'Desconectar',peligro:true})){localStorage.removeItem(LSKEY);location.reload()}
+}
 
 /* ================= Utilidades ================= */
 const v=id=>document.getElementById(id).value;
@@ -590,26 +592,41 @@ async function huella(file){
 }
 const EST_LBL={procesado:'ya fue procesado',en_cola:'ya está en la cola esperando proceso',
                duplicado:'ya fue rechazado antes por duplicado',descartado:'fue descartado antes'};
+/* Aviso de documentos repetidos. Antes pintaba una tarjeta por archivo, lo que con una tanda
+   grande llenaba la pantalla; ahora es una lista compacta con scroll propio: nombre y cuándo
+   se había subido antes (Jefe, 30-07-2026). */
 function modalDuplicados(dups,nuevos){
   return new Promise(res=>{
     const ov=document.createElement('div');ov.className='modal-ov';
-    ov.innerHTML=`<div class="modal">
-      <b>${dups.length===1?'Este documento ya había entrado al sistema':'Estos documentos ya habían entrado al sistema'}</b>
-      <p class="small muted">Se comparó el contenido del archivo, no el nombre: aunque lo hayas renombrado, es el mismo documento.</p>
-      ${dups.map(d=>`<div class="card" style="margin:10px 0;padding:12px">
-        <div><b>${esc(d.file.name)}</b></div>
-        <div class="small muted" style="margin-top:4px">${EST_LBL[d.reg.estado]||'ya está registrado'}${d.reg.fecha?` el ${fFecha(d.reg.fecha)}`:''}${d.reg.referencia?` · ${esc(d.reg.referencia)}`:''}${d.reg.nombre&&d.reg.nombre!==d.file.name?` · se subió como "${esc(d.reg.nombre)}"`:''}</div>
-      </div>`).join('')}
-      ${nuevos.length?`<p class="small muted">Los otros ${nuevos.length} archivo(s) sí son nuevos: se suben de todas formas aunque descartes ${dups.length===1?'el repetido':'los repetidos'}.</p>`:''}
+    ov.innerHTML=`<div class="modal" style="max-width:620px">
+      <b>${dups.length===1?'Este documento ya había entrado al sistema':`${dups.length} documentos ya habían entrado al sistema`}</b>
+      <p class="small muted" style="margin-top:6px">Se comparó el contenido del archivo, no el nombre: aunque lo hayas renombrado, es el mismo documento.</p>
+      <div style="max-height:46vh;overflow:auto;margin-top:10px">
+        <table class="tprod"><colgroup><col><col style="width:15ch"></colgroup>
+        <tr><th>Archivo</th><th>Subido antes</th></tr>
+        ${dups.map(d=>{
+          const det=[EST_LBL[d.reg.estado]||'ya está registrado',
+                     d.reg.referencia||'',
+                     d.reg.nombre&&d.reg.nombre!==d.file.name?`se subió como "${d.reg.nombre}"`:''
+                    ].filter(Boolean).join(' · ');
+          return `<tr><td class="trunc" title="${esc(d.file.name)}${det?' — '+esc(det):''}">${esc(d.file.name)}</td>
+            <td class="mono small muted">${d.reg.fecha?fFecha(d.reg.fecha):'—'}</td></tr>`;
+        }).join('')}
+        </table>
+      </div>
+      ${nuevos.length?`<p class="small muted" style="margin-top:10px">Los otros ${nuevos.length} archivo(s) sí son nuevos: se suben de todas formas aunque descartes ${dups.length===1?'el repetido':'los repetidos'}.</p>`:''}
       <div class="acciones">
         <button class="btn mini" id="dup-igual">Cargar igualmente</button>
         <button class="btn mini sec" id="dup-omitir">Descartar archivo${dups.length===1?'':'s'}</button>
       </div>
     </div>`;
     document.body.appendChild(ov);
-    const cerrar=r=>{ov.remove();res(r)};
+    const cerrar=r=>{document.removeEventListener('keydown',tecla);ov.remove();res(r)};
+    const tecla=e=>{if(e.key==='Escape')cerrar(null)};
+    document.addEventListener('keydown',tecla);
     ov.querySelector('#dup-igual').onclick=()=>cerrar('todos');
     ov.querySelector('#dup-omitir').onclick=()=>cerrar('omitir');
+    ov.onclick=e=>{if(e.target===ov)cerrar(null)};
   });
 }
 async function subirPendiente(tipo){
@@ -715,7 +732,7 @@ function listaPend(tipo){
 }
 async function borrarPendiente(id){
   const arr=DB[ARCH.pend].data.pendientes;const p=arr.find(x=>x.id===id);if(!p)return;
-  if(!confirm(`¿Quitar "${p.nombre}" de la cola y borrar el archivo del repositorio?`))return;
+  if(!await confirmar({titulo:'Quitar de la cola',texto:`${p.nombre}\nEl archivo también se borra del repositorio.`,confirmar:'Quitar',peligro:true}))return;
   velo(true,'Quitando…');
   try{
     arr.splice(arr.indexOf(p),1);
@@ -1025,6 +1042,34 @@ function pedirMonto(o){
     if(bmax)bmax.onclick=()=>{inp.value=max;revisar();inp.focus()};
     revisar();
     setTimeout(()=>{inp.focus();inp.select()},30);
+  });
+}
+
+/* Confirmación propia de la app. Sustituye a confirm() del navegador, que no se puede
+   estilar, corta el hilo y en móvil aparece descolgado del resto de la interfaz.
+   `texto` admite saltos de línea; el primer párrafo va destacado y el resto en gris. */
+function confirmar(o){
+  if(typeof o==='string')o={texto:o};
+  const partes=String(o.texto||'').split('\n').map(t=>t.trim()).filter(Boolean);
+  const primera=partes.shift()||'';
+  return new Promise(res=>{
+    const ov=document.createElement('div');ov.className='modal-ov';
+    ov.innerHTML=`<div class="modal">
+      <b>${esc(o.titulo||primera)}</b>
+      ${o.titulo?`<p style="margin-top:8px">${esc(primera)}</p>`:''}
+      ${partes.map(t=>`<p class="small muted" style="margin-top:8px">${esc(t)}</p>`).join('')}
+      <div class="acciones">
+        <button class="btn${o.peligro?' peligro':''}" id="cf-ok">${esc(o.confirmar||'Aceptar')}</button>
+        <button class="btn sec" id="cf-no">${esc(o.cancelar||'Cancelar')}</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    const cerrar=r=>{document.removeEventListener('keydown',tecla);ov.remove();res(r)};
+    const tecla=e=>{if(e.key==='Escape')cerrar(false)};
+    document.addEventListener('keydown',tecla);
+    ov.querySelector('#cf-ok').onclick=()=>cerrar(true);
+    ov.querySelector('#cf-no').onclick=()=>cerrar(false);
+    ov.onclick=e=>{if(e.target===ov)cerrar(false)};
+    setTimeout(()=>ov.querySelector('#cf-no').focus(),30);
   });
 }
 
@@ -1614,7 +1659,7 @@ function rCot(){
 async function borrarCot(id){
   const arr=DB[ARCH.cot].data.cotizaciones;const c=arr.find(x=>x.id===id);if(!c)return;
   if(c.estado==='convertida'){toast('Tiene una OC asociada: da de baja la OC primero.');return}
-  if(!confirm(`¿Eliminar la cotización ${c.folio}? Esta acción no se puede deshacer.`))return;
+  if(!await confirmar({titulo:`Eliminar la cotización ${c.folio}`,texto:'Esta acción no se puede deshacer.',confirmar:'Eliminar',peligro:true}))return;
   velo(true,'Eliminando…');
   try{
     arr.splice(arr.indexOf(c),1);
@@ -1749,10 +1794,10 @@ async function borrarOC(fe){
   const arr=DB[ARCH.oc].data.ordenes;const o=arr.find(x=>x.folio===folio);if(!o)return;
   if(o.guias?.length){toast(`La OC ${folio} tiene guías asociadas (${o.guias.join(', ')}). Elimina primero esas guías.`);return}
   const comprasBod=(o.compras||[]).filter(c=>c.ingreso_bodega);
-  let msg=`¿Dar de baja la OC ${folio}?`;
-  if(comprasBod.length)msg+=`\n\nSe revertirán del inventario los ingresos de sus ${comprasBod.length} compra(s) registrada(s).`;
-  if(o.cotizacion_id)msg+=`\nSu cotización volverá al estado "enviada".`;
-  if(!confirm(msg))return;
+  let msg='';
+  if(comprasBod.length)msg+=`Se revertirán del inventario los ingresos de sus ${comprasBod.length} compra(s) registrada(s).\n`;
+  if(o.cotizacion_id)msg+='Su cotización volverá al estado "enviada".';
+  if(!await confirmar({titulo:`Dar de baja la OC ${folio}`,texto:msg||'La orden quedará dada de baja.',confirmar:'Dar de baja',peligro:true}))return;
   velo(true,'Dando de baja…');
   try{
     const inv=DB[ARCH.inv].data;
@@ -1781,7 +1826,7 @@ async function borrarGuia(numero){
     msg+=`\n\nSe quitará de la Hoja de Ruta N°${hoja.numero} (envío ${fFecha(hoja.fecha_envio||hoja.fecha)}), que quedará con ${quedan} guía(s).`;
     msg+=`\nSi la vuelves a ingresar con esa misma fecha de envío, se reincorpora a la misma hoja y conserva el N°${hoja.numero}.`;
   }
-  if(!confirm(msg))return;
+  if(!await confirmar({titulo:`Eliminar la guía N°${numero}`,texto:msg,confirmar:'Eliminar',peligro:true}))return;
   velo(true,'Eliminando guía…');
   try{
     const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===g.folio_oc);
@@ -2699,9 +2744,8 @@ async function ingresoInv(){
 async function borrarProd(nombre){
   const inv=DB[ARCH.inv].data;
   const p=inv.productos.find(x=>x.nombre===nombre);if(!p)return;
-  let msg=`¿Eliminar el producto "${nombre}" del inventario?`;
-  if(p.cantidad!==0)msg+=`\n\nAtención: tiene stock ${num(p.cantidad)} y se descartará ese saldo.`;
-  if(!confirm(msg))return;
+  let msg=p.cantidad!==0?`Atención: tiene stock ${num(p.cantidad)} y se descartará ese saldo.`:'Se quitará de la bodega.';
+  if(!await confirmar({titulo:`Eliminar "${nombre}" del inventario`,texto:msg,confirmar:'Eliminar',peligro:true}))return;
   inv.productos.splice(inv.productos.indexOf(p),1);
   inv.movimientos.push({fecha:hoyISO(),tipo:'ajuste',producto:nombre,cantidad:-p.cantidad,referencia:'Producto eliminado del inventario'});
   velo(true,'Eliminando…');
