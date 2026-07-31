@@ -1007,6 +1007,90 @@ function pedirMonto(o){
   });
 }
 
+/* Modal de texto con validación en vivo, hermano de pedirMonto(). Mismas reglas: nada de
+   prompt() ni confirm(). `validar` recibe el texto y devuelve un mensaje de error o ''. */
+function pedirTexto(o){
+  return new Promise(res=>{
+    const ov=document.createElement('div');ov.className='modal-ov';
+    ov.innerHTML=`<div class="modal">
+      <b>${esc(o.titulo)}</b>
+      ${o.producto?`<p class="small muted" style="margin-top:4px">${esc(o.producto)}</p>`:''}
+      ${(o.contexto||[]).length?`<div class="monto-ctx">${o.contexto.map(c=>`<div><div class="et">${esc(c.et)}</div><div class="va">${esc(String(c.va))}</div></div>`).join('')}</div>`:''}
+      <label style="margin-top:12px">${esc(o.etiqueta||'Texto')}</label>
+      <div class="monto-campo"><input id="tx-val" type="text" autocomplete="off" value="${esc(o.valor||'')}"></div>
+      <div class="monto-aviso bien" id="tx-aviso"></div>
+      <div class="acciones">
+        <button class="btn mini" id="tx-ok">${esc(o.confirmar||'Guardar')}</button>
+        <button class="btn mini sec" id="tx-cancel">Cancelar</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    const inp=ov.querySelector('#tx-val'), aviso=ov.querySelector('#tx-aviso'), ok=ov.querySelector('#tx-ok');
+    const revisar=()=>{
+      const t=inp.value.trim();
+      const mal=o.validar?o.validar(t):(t?'':'Escribe un nombre.');
+      aviso.className='monto-aviso '+(mal?'mal':'bien');
+      aviso.textContent=mal||(o.resultado?o.resultado(t):'');
+      ok.disabled=!!mal;ok.style.opacity=mal?.45:1;ok.style.cursor=mal?'not-allowed':'pointer';
+      return !mal;
+    };
+    inp.addEventListener('input',revisar);
+    const cerrar=r=>{document.removeEventListener('keydown',tecla);ov.remove();res(r)};
+    const aceptar=()=>{if(revisar())cerrar(inp.value.trim())};
+    const tecla=e=>{if(e.key==='Escape')cerrar(null);else if(e.key==='Enter'&&document.activeElement!==ov.querySelector('#tx-cancel'))aceptar()};
+    document.addEventListener('keydown',tecla);
+    ok.onclick=aceptar;
+    ov.querySelector('#tx-cancel').onclick=()=>cerrar(null);
+    ov.onclick=e=>{if(e.target===ov)cerrar(null)};
+    revisar();
+    setTimeout(()=>{inp.focus();inp.select()},30);
+  });
+}
+
+/* Renombrar un producto del MAESTRO (Jefe, 30-07-2026). Disponible desde Lista de precios y
+   desde Inventario; el cambio es el mismo en ambas porque toca el maestro.
+   - El nombre anterior se guarda como alias, para que el sistema siga reconociendo documentos
+     que lleguen con la redacción vieja (línea relacional).
+   - Se actualiza también el nombre en inventario.json, que guarda su propia copia.
+   - NO se tocan los nombres a nivel de línea de cotizaciones/OC ni el historial de movimientos:
+     ésos son el registro de lo que decía cada documento en su momento. */
+async function renombrarProducto(codigo){
+  const prods=DB[ARCH.prod].data.productos;
+  const p=prods.find(x=>x.codigo===codigo);
+  if(!p){toast('No encuentro ese producto en el maestro.');return}
+  const nuevo=await pedirTexto({
+    titulo:'Editar nombre del producto',
+    producto:p.codigo,
+    contexto:[{et:'Nombre actual',va:p.nombre}],
+    etiqueta:'Nombre nuevo',
+    valor:p.nombre,
+    validar:t=>{
+      if(!t)return 'El nombre no puede quedar vacío.';
+      if(prods.some(x=>x.codigo!==codigo&&x.nombre.toLowerCase()===t.toLowerCase()))
+        return 'Ya existe otro producto del maestro con ese nombre.';
+      return '';
+    },
+    resultado:t=>t.toLowerCase()===p.nombre.toLowerCase()?'':'El nombre anterior quedará como alias.'
+  });
+  if(nuevo===null||nuevo===p.nombre)return;
+  const anterior=p.nombre;
+  velo(true,'Guardando nombre…');
+  try{
+    p.alias=p.alias||[];
+    if(!p.alias.some(a=>a.toLowerCase()===anterior.toLowerCase()))p.alias.push(anterior);
+    p.nombre=nuevo;
+    await guardarArchivo(ARCH.prod,`Producto ${codigo} renombrado: "${anterior}" → "${nuevo}"`);
+    const inv=DB[ARCH.inv].data;
+    const ip=(inv.productos||[]).find(x=>x.codigo===codigo);
+    if(ip&&ip.nombre!==nuevo){
+      ip.nombre=nuevo;
+      await guardarArchivo(ARCH.inv,`Inventario: nombre de ${codigo} actualizado a "${nuevo}"`);
+    }
+    toast('Nombre actualizado');render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+
 /* Revertir una compra ingresada por error. Solo es revertible lo COMPRADO QUE AÚN NO SE HA
    DESPACHADO: lo que ya salió en una guía se compró de verdad, y descontarlo dejaría el stock
    en negativo por partida doble. El movimiento original nunca se borra; se agrega un ajuste. */
@@ -2360,8 +2444,8 @@ function rPrecios(){
     <span class="small muted">${filas.length} artículo(s) en pantalla</span>
   </div>
   ${filas.length?`<div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:760px">
-    <colgroup><col><col style="width:11ch"><col style="width:8ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"></colgroup>
-    <tr><th>Producto</th><th class="num">Último precio</th><th class="num">Var.</th><th class="num">Anterior</th><th class="num">2 atrás</th><th class="num">3 atrás</th><th class="num">Cotizado</th></tr>
+    <colgroup><col><col style="width:11ch"><col style="width:8ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"><col style="width:6ch"></colgroup>
+    <tr><th>Producto</th><th class="num">Último precio</th><th class="num">Var.</th><th class="num">Anterior</th><th class="num">2 atrás</th><th class="num">3 atrás</th><th class="num">Cotizado</th><th></th></tr>
     ${filas.map(f=>{const ps=f.precios;
       return `<tr>
         <td class="trunc" title="${esc(f.nombre)}${f.codigo?' — '+esc(f.codigo):''}">${esc(f.nombre)}${f.codigo?` <span class="muted small mono">${esc(f.codigo)}</span>`:''}</td>
@@ -2371,6 +2455,7 @@ function rPrecios(){
         <td class="num muted">${ps[2]?celda(ps[2]):''}</td>
         <td class="num muted">${ps[3]?celda(ps[3]):''}</td>
         <td class="num">${f.cot?`<span class="mono" style="color:var(--muted)" title="COT ${esc(f.cot.folio)} · ${fFecha(f.cot.fecha)}${ps[0]?' · adjudicada en '+clp(ps[0].precio):''}">${clp(f.cot.precio)}</span>`:''}</td>
+        <td class="num">${f.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto('${esc(f.codigo)}')"><i class="fa-solid fa-pen"></i></button>`:''}</td>
       </tr>`}).join('')}
   </table></div>
   <p class="small muted">Precios netos del listado de OC (órdenes cargadas y reporte de pendientes SAP), del más reciente al más antiguo. La columna <b>Cotizado</b> es el último precio que ofertamos, solo como referencia: no cuenta para la variación. Pasa el cursor sobre cualquier precio para ver su documento y su fecha.</p>`
@@ -2392,9 +2477,9 @@ function rInv(){
     <div class="acciones"><button class="btn" onclick="ingresoInv()">Registrar ingreso</button></div>
   </div></details>
   <h2>Stock actual (${prods.length} productos)</h2>
-  <div class="card">${prods.length?`<table class="tprod" style="min-width:460px"><colgroup><col style="width:11ch"><col><col style="width:9ch"><col style="width:10ch"></colgroup><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
+  <div class="card">${prods.length?`<table class="tprod" style="min-width:500px"><colgroup><col style="width:11ch"><col><col style="width:9ch"><col style="width:14ch"></colgroup><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
     ${prods.map(p=>`<tr><td class="mono small">${esc(p.codigo||'—')}</td><td class="trunc" title="${esc(p.nombre)}">${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
-    <td class="num"><button class="btn mini sec" title="Ajustar: fijar la cantidad exacta" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-pen"></i></button> <button class="btn mini sec" title="Agregar: sumar unidades al stock" onclick="agregarInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-plus"></i></button></td></tr>`).join('')}</table>`
+    <td class="num"><button class="btn mini sec" title="Ajustar: fijar la cantidad exacta" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-pen"></i></button> <button class="btn mini sec" title="Agregar: sumar unidades al stock" onclick="agregarInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-plus"></i></button>${p.codigo?` <button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto('${esc(p.codigo)}')"><i class="fa-solid fa-tag"></i></button>`:''}</td></tr>`).join('')}</table>`
     :'<div class="vacio">Bodega sin productos registrados. Usa "Registrar ingreso" para la carga inicial.</div>'}</div>
   <h2>Últimos movimientos</h2>
   <div class="card">${movs.length?`<table class="tprod" style="min-width:720px"><colgroup><col style="width:11ch"><col style="width:11ch"><col style="width:9ch"><col><col style="width:8ch"><col style="width:20ch"></colgroup><tr><th>Fecha</th><th>Código</th><th>Tipo</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
