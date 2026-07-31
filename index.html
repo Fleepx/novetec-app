@@ -119,6 +119,10 @@ details.doc[open] .resumen{display:none}
 table{width:100%;border-collapse:collapse;font-size:var(--fs-sm);line-height:1.4}
 th{font-size:var(--fs-xs);font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1.5px solid var(--line);white-space:nowrap}
 td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+/* Realce de fila al pasar el puntero (Jefe, 30-07-2026): permite seguir visualmente
+   dónde empieza y termina cada fila. Solo aplica a filas de datos: los encabezados usan
+   <th>, así que este selector no los toca. */
+tr:hover>td{background:var(--hover)}
 tr:last-child td{border-bottom:none}
 td .small{font-size:var(--fs-xs);line-height:1.4}
 td .small.sep::before{content:'·';color:var(--line);margin:0 5px}
