@@ -571,7 +571,7 @@ function renderMeses(prefijo,grupos,renderMes){
 }
 
 /* Cola de documentos por procesar con Claude */
-const TIPO_LBL={cotizaciones:'Cotización',ordenes_compra:'OC',guias_despacho:'Guía de despacho',pendientes_sap:'Pendientes SAP'};
+const TIPO_LBL={cotizaciones:'Cotización',ordenes_compra:'OC',guias_despacho:'Guía de despacho',pendientes_sap:'Pendientes SAP',inventario:'Inventario'};
 /* Huella SHA-256 del archivo: es lo que permite reconocer un documento ya cargado
    aunque venga con otro nombre (Jefe, 22-07-2026). */
 async function huella(file){
@@ -664,15 +664,21 @@ function dzContar(tipo){
   el.textContent=input.files.length?`${input.files.length} archivo(s) listos: ${[...input.files].map(f=>f.name).join(', ').slice(0,120)}`:'';
 }
 function formPendiente(tipo,accept){
-  const titulo=tipo==='ordenes_compra'?'Subir órdenes de compra o reporte de pendientes SAP':`Subir documento de ${TIPO_LBL[tipo].toLowerCase()}${tipo==='guias_despacho'?' (bundle del viaje)':''}`;
+  const titulo=tipo==='ordenes_compra'?'Subir órdenes de compra o reporte de pendientes SAP'
+    :tipo==='inventario'?'Subir inventario completo desde un archivo'
+    :`Subir documento de ${TIPO_LBL[tipo].toLowerCase()}${tipo==='guias_despacho'?' (bundle del viaje)':''}`;
+  const ayuda=tipo==='guias_despacho'?'Antes de subir las guías, marca las compras en el Panel: el orden es compras, después guía, después hoja de ruta. Sube las guías del viaje e indica la fecha de envío; las guías que compartan fecha se agrupan en la misma hoja de ruta aunque las cargues en momentos distintos.'
+    :tipo==='ordenes_compra'?'Sube aquí tanto las órdenes de compra como el reporte de pendientes SAP del cliente, tal como llegaron. El administrador reconoce cada documento y lo carga donde corresponde.'
+    :tipo==='inventario'?'Sube un solo archivo con todo el inventario en vez de cargar producto por producto. Sirve Excel (.xlsx / .xls) o CSV. Lo ideal es una fila por producto con las columnas Código NOV, Producto y Cantidad; si tu planilla usa otros encabezados igual funciona, el administrador los interpreta. Los productos que no existan en el maestro se dan de alta.'
+    :'Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.';
   return `<details class="form"><summary>${titulo}</summary><div class="inner">
-    <p class="small muted" style="margin-top:10px">${tipo==='guias_despacho'?'Antes de subir las guías, marca las compras en el Panel: el orden es compras, después guía, después hoja de ruta. Sube las guías del viaje e indica la fecha de envío; las guías que compartan fecha se agrupan en la misma hoja de ruta aunque las cargues en momentos distintos.':tipo==='ordenes_compra'?'Sube aquí tanto las órdenes de compra como el reporte de pendientes SAP del cliente, tal como llegaron. El administrador reconoce cada documento y lo carga donde corresponde.':'Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.'}</p>
+    <p class="small muted" style="margin-top:10px">${ayuda}</p>
     <label>Archivos</label>
     <div class="dropzone" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'${tipo}')" onclick="document.getElementById('pd-file-${tipo}').click()">
       <input id="pd-file-${tipo}" type="file" accept="${accept}" multiple style="display:none" onchange="dzContar('${tipo}')" onclick="event.stopPropagation()">
       <div class="dz-icono"><i class="fa-solid fa-cloud-arrow-up"></i></div>
       <div><b>Arrastra los archivos aquí</b> o haz clic para elegirlos</div>
-      <div class="small muted">Se aceptan PDF, Excel, Word e imágenes · varios a la vez</div>
+      <div class="small muted">${tipo==='inventario'?'Se acepta Excel (.xlsx / .xls) y CSV':'Se aceptan PDF, Excel, Word e imágenes · varios a la vez'}</div>
       <div id="pd-count-${tipo}" class="mono small" style="margin-top:6px;color:var(--verde)"></div>
     </div>
     ${tipo==='guias_despacho'?`<label>Fecha de envío del viaje</label><input id="pd-fenv-${tipo}" type="date">`:''}
@@ -2468,6 +2474,8 @@ function rInv(){
   const prods=[...inv.productos].sort((a,b)=>a.nombre.localeCompare(b.nombre));
   const movs=[...inv.movimientos].reverse().slice(0,40);
   return `${dlProd()}
+  ${formPendiente('inventario','.xlsx,.xls,.csv')}
+  ${listaPend('inventario')}
   <details class="form"><summary>Registrar ingreso a bodega</summary><div class="inner">
     <div class="grid3">
       <div><label>Producto</label><input id="i-prod" list="dl-prod"></div>
