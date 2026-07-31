@@ -571,7 +571,7 @@ function renderMeses(prefijo,grupos,renderMes){
 }
 
 /* Cola de documentos por procesar con Claude */
-const TIPO_LBL={cotizaciones:'Cotización',ordenes_compra:'OC',guias_despacho:'Guía de despacho',pendientes_sap:'Pendientes SAP',inventario:'Inventario'};
+const TIPO_LBL={cotizaciones:'Cotización',ordenes_compra:'OC',guias_despacho:'Guía de despacho',pendientes_sap:'Pendientes SAP'};
 /* Huella SHA-256 del archivo: es lo que permite reconocer un documento ya cargado
    aunque venga con otro nombre (Jefe, 22-07-2026). */
 async function huella(file){
@@ -663,13 +663,15 @@ function dzContar(tipo){
   const el=document.getElementById('pd-count-'+tipo);
   el.textContent=input.files.length?`${input.files.length} archivo(s) listos: ${[...input.files].map(f=>f.name).join(', ').slice(0,120)}`:'';
 }
+function dzContarInv(){
+  const i=document.getElementById('inv-plantilla'),el=document.getElementById('inv-plantilla-n');
+  if(el)el.textContent=i&&i.files.length?i.files[0].name:'';
+}
 function formPendiente(tipo,accept){
   const titulo=tipo==='ordenes_compra'?'Subir órdenes de compra o reporte de pendientes SAP'
-    :tipo==='inventario'?'Subir inventario completo desde un archivo'
     :`Subir documento de ${TIPO_LBL[tipo].toLowerCase()}${tipo==='guias_despacho'?' (bundle del viaje)':''}`;
   const ayuda=tipo==='guias_despacho'?'Antes de subir las guías, marca las compras en el Panel: el orden es compras, después guía, después hoja de ruta. Sube las guías del viaje e indica la fecha de envío; las guías que compartan fecha se agrupan en la misma hoja de ruta aunque las cargues en momentos distintos.'
     :tipo==='ordenes_compra'?'Sube aquí tanto las órdenes de compra como el reporte de pendientes SAP del cliente, tal como llegaron. El administrador reconoce cada documento y lo carga donde corresponde.'
-    :tipo==='inventario'?'Sube un solo archivo con todo el inventario en vez de cargar producto por producto. Sirve Excel (.xlsx / .xls) o CSV. Lo ideal es una fila por producto con las columnas Código NOV, Producto y Cantidad; si tu planilla usa otros encabezados igual funciona, el administrador los interpreta. Los productos que no existan en el maestro se dan de alta.'
     :'Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.';
   return `<details class="form"><summary>${titulo}</summary><div class="inner">
     <p class="small muted" style="margin-top:10px">${ayuda}</p>
@@ -678,7 +680,7 @@ function formPendiente(tipo,accept){
       <input id="pd-file-${tipo}" type="file" accept="${accept}" multiple style="display:none" onchange="dzContar('${tipo}')" onclick="event.stopPropagation()">
       <div class="dz-icono"><i class="fa-solid fa-cloud-arrow-up"></i></div>
       <div><b>Arrastra los archivos aquí</b> o haz clic para elegirlos</div>
-      <div class="small muted">${tipo==='inventario'?'Se acepta Excel (.xlsx / .xls) y CSV':'Se aceptan PDF, Excel, Word e imágenes · varios a la vez'}</div>
+      <div class="small muted">Se aceptan PDF, Excel, Word e imágenes · varios a la vez</div>
       <div id="pd-count-${tipo}" class="mono small" style="margin-top:6px;color:var(--verde)"></div>
     </div>
     ${tipo==='guias_despacho'?`<label>Fecha de envío del viaje</label><input id="pd-fenv-${tipo}" type="date">`:''}
@@ -2468,14 +2470,180 @@ function rPrecios(){
   :'<div class="card vacio">No hay artículos que coincidan con la búsqueda.</div>'}`;
 }
 
+/* ================= Plantilla de inventario (Jefe, 30-07-2026) =================
+   Circuito cerrado para hacer el inventario físico: se descarga una planilla con TODO el
+   maestro (código + nombre + cantidad actual), se anotan las cantidades contadas en bodega y
+   se vuelve a subir. La carga es DIRECTA, sin pasar por la cola del administrador, porque la
+   planilla ya trae el código NOV resuelto: no hay nada que interpretar.
+   REGLAS acordadas con el Jefe:
+   - La planilla trae los 312 productos del maestro, no solo los que tienen stock.
+   - Celda Cantidad VACÍA significa "lo conté y hay cero", así que se fija en 0.
+     (Por eso la planilla se descarga con la cantidad actual ya escrita: lo que no se toca,
+     no cambia; lo que se borra, queda en cero.)
+   - Una fila SIN código NOV es un producto nuevo: se da de alta en el maestro con el
+     siguiente correlativo disponible.
+   - Es una foto completa del stock, así que se aplica como AJUSTE (cantidad absoluta), no
+     como ingreso que suma. */
+let _xlsxProm=null;
+function cargarXLSX(){
+  if(window.XLSX)return Promise.resolve(window.XLSX);
+  if(_xlsxProm)return _xlsxProm;
+  _xlsxProm=new Promise((ok,mal)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=()=>ok(window.XLSX);
+    s.onerror=()=>{_xlsxProm=null;mal(new Error('No se pudo cargar el lector de Excel. Revisa la conexión.'))};
+    document.head.appendChild(s);
+  });
+  return _xlsxProm;
+}
+const COL_PLANTILLA=['Código NOV','Producto','Cantidad'];
+async function descargarPlantillaInv(){
+  velo(true,'Armando la plantilla…');
+  try{
+    const XLSX=await cargarXLSX();
+    const stock={};
+    (DB[ARCH.inv].data.productos||[]).forEach(p=>{if(p.codigo)stock[p.codigo]=p.cantidad});
+    const prods=[...DB[ARCH.prod].data.productos].sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
+    const filas=prods.map(p=>({'Código NOV':p.codigo,'Producto':p.nombre,'Cantidad':stock[p.codigo]||0}));
+    const ws=XLSX.utils.json_to_sheet(filas,{header:COL_PLANTILLA});
+    ws['!cols']=[{wch:12},{wch:62},{wch:10}];
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Inventario');
+    XLSX.writeFile(wb,`Inventario_Novetec_${hoyISO()}.xlsx`);
+    toast(`Plantilla descargada con ${filas.length} productos.`);
+  }catch(e){toast('Error: '+e.message)}
+  velo(false);
+}
+/* Busca la columna por encabezado, tolerando variantes de redacción */
+function colDe(fila,claves){
+  for(const k of Object.keys(fila)){
+    const n=k.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(claves.some(c=>n.includes(c)))return k;
+  }
+  return null;
+}
+/* Arma el plan de cambios a partir de las filas de la planilla. Función pura y sin DOM:
+   así se puede probar con el harness antes de escribir nada. */
+function planInventario(filas){
+  if(!filas.length)throw new Error('La planilla no tiene filas.');
+  const kCod=colDe(filas[0],['codigo','nov']),
+        kNom=colDe(filas[0],['producto','nombre','descripcion']),
+        kCant=colDe(filas[0],['cantidad','stock','conteo']);
+  if(!kCant||!(kCod||kNom))throw new Error('No encuentro las columnas Producto y Cantidad.');
+  const stockAct={};
+  (DB[ARCH.inv].data.productos||[]).forEach(p=>{if(p.codigo)stockAct[p.codigo]=p.cantidad});
+  const plan={cambios:[],nuevos:[],iguales:0,ignoradas:0};
+  filas.forEach(r=>{
+    const cod=String(kCod?r[kCod]:'').trim();
+    const nom=String(kNom?r[kNom]:'').trim();
+    const bruto=String(r[kCant]).trim().replace(/\./g,'').replace(',','.');
+    const cant=bruto===''?0:Number(bruto);          // vacío = contado en cero
+    if(!cod&&!nom){plan.ignoradas++;return}
+    if(!isFinite(cant)||cant<0){plan.ignoradas++;return}
+    const m=cod?DB[ARCH.prod].data.productos.find(p=>p.codigo===cod):null;
+    if(m){
+      const antes=stockAct[m.codigo]||0;
+      if(antes===cant)plan.iguales++; else plan.cambios.push({codigo:m.codigo,nombre:m.nombre,antes,cant});
+    }else if(nom){
+      const porNombre=prodMaestro(nom);            // por si el código venía vacío o mal escrito
+      if(porNombre){
+        const antes=stockAct[porNombre.codigo]||0;
+        if(antes===cant)plan.iguales++; else plan.cambios.push({codigo:porNombre.codigo,nombre:porNombre.nombre,antes,cant});
+      }else plan.nuevos.push({nombre:nom,cant});
+    }else plan.ignoradas++;
+  });
+  return plan;
+}
+async function cargarPlantillaInv(){
+  const el=document.getElementById('inv-plantilla');
+  const f=el&&el.files[0];
+  if(!f){toast('Elige la planilla que quieres cargar.');return}
+  velo(true,'Leyendo la planilla…');
+  let plan;
+  try{
+    const XLSX=await cargarXLSX();
+    const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
+    plan=planInventario(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''}));
+  }catch(e){velo(false);toast('Error: '+e.message);return}
+  velo(false);
+  if(!plan.cambios.length&&!plan.nuevos.length){toast('La planilla no trae ningún cambio de stock.');return}
+  if(!await confirmarPlantillaInv(plan))return;
+  velo(true,'Aplicando el inventario…');
+  try{
+    const inv=DB[ARCH.inv].data;
+    const ref='Inventario por planilla '+fFecha(hoyISO());
+    plan.nuevos.forEach(n=>{
+      const m=crearProdMaestro(n.nombre,'UN');
+      inv.productos.push({codigo:m.codigo,nombre:m.nombre,cantidad:n.cant,unidad:m.unidad});
+      inv.movimientos.push({fecha:hoyISO(),tipo:'ajuste',codigo:m.codigo,producto:m.nombre,cantidad:n.cant,referencia:ref+' (producto nuevo)'});
+    });
+    plan.cambios.forEach(c=>{
+      let p=inv.productos.find(x=>x.codigo===c.codigo);
+      if(!p){p={codigo:c.codigo,nombre:c.nombre,cantidad:0,unidad:'UN'};inv.productos.push(p)}
+      p.cantidad=c.cant;
+      inv.movimientos.push({fecha:hoyISO(),tipo:'ajuste',codigo:c.codigo,producto:c.nombre,cantidad:c.cant,referencia:ref});
+    });
+    await guardarMaestroSiNuevo();
+    await guardarArchivo(ARCH.inv,`Inventario por planilla: ${plan.cambios.length} ajuste(s), ${plan.nuevos.length} producto(s) nuevo(s)`);
+    toast(`Inventario cargado: ${plan.cambios.length} ajuste(s) y ${plan.nuevos.length} producto(s) nuevo(s).`);
+    render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+/* Resumen antes de escribir: la carga es directa, pero conviene ver qué va a cambiar por si
+   se subió la planilla equivocada. */
+function confirmarPlantillaInv(plan){
+  return new Promise(res=>{
+    const filas=[...plan.cambios.slice(0,12).map(c=>`<tr><td class="mono small">${esc(c.codigo)}</td><td class="trunc" title="${esc(c.nombre)}">${esc(c.nombre)}</td><td class="num">${num(c.antes)}</td><td class="num" style="font-weight:600">${num(c.cant)}</td></tr>`),
+      ...plan.nuevos.slice(0,6).map(n=>`<tr><td class="mono small" style="color:var(--verde)">nuevo</td><td class="trunc" title="${esc(n.nombre)}">${esc(n.nombre)}</td><td class="num">—</td><td class="num" style="font-weight:600">${num(n.cant)}</td></tr>`)];
+    const resto=(plan.cambios.length>12?plan.cambios.length-12:0)+(plan.nuevos.length>6?plan.nuevos.length-6:0);
+    const ov=document.createElement('div');ov.className='modal-ov';
+    ov.innerHTML=`<div class="modal" style="max-width:640px">
+      <b>Revisa antes de cargar el inventario</b>
+      <div class="monto-ctx" style="margin-top:10px">
+        <div><div class="et">Ajustes de stock</div><div class="va">${plan.cambios.length}</div></div>
+        <div><div class="et">Productos nuevos</div><div class="va">${plan.nuevos.length}</div></div>
+        <div><div class="et">Sin cambio</div><div class="va">${plan.iguales}</div></div>
+      </div>
+      ${plan.ignoradas?`<p class="small muted" style="margin-top:8px">${plan.ignoradas} fila(s) sin datos válidos se omiten.</p>`:''}
+      <div style="max-height:260px;overflow:auto;margin-top:10px"><table class="tprod"><colgroup><col style="width:11ch"><col><col style="width:8ch"><col style="width:8ch"></colgroup>
+        <tr><th>Código</th><th>Producto</th><th class="num">Antes</th><th class="num">Queda</th></tr>${filas.join('')}</table></div>
+      ${resto?`<p class="small muted">y ${resto} más…</p>`:''}
+      <div class="acciones">
+        <button class="btn" id="pl-ok">Cargar inventario</button>
+        <button class="btn sec" id="pl-no">Cancelar</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    const cerrar=r=>{document.removeEventListener('keydown',tecla);ov.remove();res(r)};
+    const tecla=e=>{if(e.key==='Escape')cerrar(false)};
+    document.addEventListener('keydown',tecla);
+    ov.querySelector('#pl-ok').onclick=()=>cerrar(true);
+    ov.querySelector('#pl-no').onclick=()=>cerrar(false);
+    ov.onclick=e=>{if(e.target===ov)cerrar(false)};
+  });
+}
+
 /* ================= Inventario ================= */
 function rInv(){
   const inv=DB[ARCH.inv].data;
   const prods=[...inv.productos].sort((a,b)=>a.nombre.localeCompare(b.nombre));
   const movs=[...inv.movimientos].reverse().slice(0,40);
   return `${dlProd()}
-  ${formPendiente('inventario','.xlsx,.xls,.csv')}
-  ${listaPend('inventario')}
+  <details class="form"><summary>Inventario por planilla — descargar y cargar</summary><div class="inner">
+    <p class="small muted" style="margin-top:10px">Descarga la planilla con todos los productos del maestro y su cantidad actual, anota lo que cuentes en bodega y vuelve a subirla. La carga es directa: como la planilla trae el código NOV, no necesita pasar por revisión.</p>
+    <p class="small muted"><b>Importante:</b> es una foto completa del stock. La cantidad que escribas reemplaza a la anterior, y una celda de cantidad vacía se toma como cero. Si agregas filas nuevas sin código, esos productos se dan de alta en el maestro.</p>
+    <div class="acciones" style="margin-top:12px"><button class="btn sec" onclick="descargarPlantillaInv()"><i class="fa-solid fa-file-arrow-down"></i> Descargar plantilla</button></div>
+    <label style="margin-top:16px">Planilla completada</label>
+    <div class="dropzone" onclick="document.getElementById('inv-plantilla').click()">
+      <input id="inv-plantilla" type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="dzContarInv()" onclick="event.stopPropagation()">
+      <div class="dz-icono"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+      <div><b>Haz clic para elegir la planilla</b></div>
+      <div class="small muted">Excel (.xlsx / .xls) o CSV</div>
+      <div id="inv-plantilla-n" class="mono small" style="margin-top:6px;color:var(--verde)"></div>
+    </div>
+    <div class="acciones"><button class="btn" onclick="cargarPlantillaInv()">Cargar inventario</button></div>
+  </div></details>
   <details class="form"><summary>Registrar ingreso a bodega</summary><div class="inner">
     <div class="grid3">
       <div><label>Producto</label><input id="i-prod" list="dl-prod"></div>
