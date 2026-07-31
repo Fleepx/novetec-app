@@ -170,6 +170,15 @@ tr.fila-pend>td{background:var(--ambar-bg)}
 /* Acordeón de AÑO (Jefe, 30-07-2026): solo aparece cuando la data cruza más de un año
    calendario. Sin esto, dos meses del mismo nombre en años distintos (dos "Junio") quedaban
    uno junto al otro y se leían como un mes duplicado. Un nivel más grande que acc-mes. */
+/* Acordeón de la cola de archivos (Jefe, 30-07-2026): cerrado por defecto y mostrando solo
+   el conteo, para que una carga grande no ocupe toda la pantalla. */
+.acc-cola{border:1.5px solid var(--ambar);border-radius:10px;background:var(--card);margin-bottom:14px}
+.acc-cola>summary{list-style:none;cursor:pointer;padding:14px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:var(--fs-sm);font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ambar)}
+.acc-cola>summary::-webkit-details-marker{display:none}
+.acc-cola>summary::before{content:'\f105';font-family:'Font Awesome 6 Free';font-weight:900;transition:transform .15s}
+.acc-cola[open]>summary::before{transform:rotate(90deg)}
+.acc-cola>summary .cnt{margin-left:auto;font-family:var(--mono);font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted)}
+.acc-cola .cuerpo{padding:0 16px 14px;max-height:60vh;overflow:auto}
 .acc-anio{margin-bottom:12px}
 .acc-anio>summary{list-style:none;cursor:pointer;padding:14px 16px;border:1.5px solid var(--ink);border-radius:10px;background:var(--card);display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;font-weight:800;font-size:var(--fs-lg)}
 .acc-anio>summary::-webkit-details-marker{display:none}
@@ -692,13 +701,17 @@ function listaPend(tipo){
   const tipos=Array.isArray(tipo)?tipo:[tipo];
   const ps=DB[ARCH.pend].data.pendientes.filter(p=>tipos.includes(p.tipo));
   if(!ps.length)return '';
-  return `<div class="card" style="border-color:var(--ambar)"><b class="small" style="text-transform:uppercase;letter-spacing:.08em;color:var(--ambar)">En cola — pendiente del administrador (${ps.length})</b>
+  const k='cola:'+tipos.join('+');
+  return `<details class="acc-cola" data-k="${esc(k)}"${fichaAbierta(k)?' open':''} ontoggle="recordarFicha(this)">
+  <summary>En cola — pendiente del administrador<span class="cnt">${ps.length} archivo${ps.length===1?'':'s'}</span></summary>
+  <div class="cuerpo">
   ${ps.map(p=>`<div class="small" style="margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <span class="mono">${fFecha(p.subido)}</span>
     <a href="#" onclick="event.preventDefault();descargarArchivo('${esc(p.archivo)}')">${esc(p.nombre)}</a>
     ${p.nota?`<span class="muted">· ${esc(p.nota)}</span>`:''}
     <button class="btn mini peligro" onclick="borrarPendiente('${esc(p.id)}')">Quitar</button>
-  </div>`).join('')}</div>`;
+  </div>`).join('')}
+  </div></details>`;
 }
 async function borrarPendiente(id){
   const arr=DB[ARCH.pend].data.pendientes;const p=arr.find(x=>x.id===id);if(!p)return;
