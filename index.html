@@ -178,7 +178,9 @@ tr.fila-pend>td{background:var(--ambar-bg)}
 .acc-cola>summary::before{content:'\f105';font-family:'Font Awesome 6 Free';font-weight:900;transition:transform .15s}
 .acc-cola[open]>summary::before{transform:rotate(90deg)}
 .acc-cola>summary .cnt{margin-left:auto;font-family:var(--mono);font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted)}
-.acc-cola .cuerpo{padding:0 16px 14px;max-height:60vh;overflow:auto}
+/* Alto de unos 5 archivos (cada fila mide ~37px: botón mini de 29px más 8px de separación).
+   En em para que acompañe al zoom de la app. El resto queda bajo el scroll. */
+.acc-cola .cuerpo{padding:0 16px 14px;max-height:12.5em;overflow:auto}
 .acc-anio{margin-bottom:12px}
 .acc-anio>summary{list-style:none;cursor:pointer;padding:14px 16px;border:1.5px solid var(--ink);border-radius:10px;background:var(--card);display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;font-weight:800;font-size:var(--fs-lg)}
 .acc-anio>summary::-webkit-details-marker{display:none}
@@ -601,7 +603,7 @@ function modalDuplicados(dups,nuevos){
     ov.innerHTML=`<div class="modal" style="max-width:620px">
       <b>${dups.length===1?'Este documento ya había entrado al sistema':`${dups.length} documentos ya habían entrado al sistema`}</b>
       <p class="small muted" style="margin-top:6px">Se comparó el contenido del archivo, no el nombre: aunque lo hayas renombrado, es el mismo documento.</p>
-      <div style="max-height:46vh;overflow:auto;margin-top:10px">
+      <div style="max-height:13em;overflow:auto;margin-top:10px">
         <table class="tprod"><colgroup><col><col style="width:15ch"></colgroup>
         <tr><th>Archivo</th><th>Subido antes</th></tr>
         ${dups.map(d=>{
