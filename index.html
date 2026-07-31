@@ -1969,7 +1969,7 @@ function rOC(){
         <span class="muted small">Emisión ${fFecha(o.fecha_emision)}${o.fecha_carga&&o.fecha_carga!==o.fecha_emision?` · <span title="Día en que se cargó al sistema">cargada ${fFecha(o.fecha_carga)}</span>`:''}${o.fecha_entrega?` · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b>`:''} · ${esc(o.destino||'—')}</span>
         <span class="resumen">${o.items.length} ítem(s) · ${num(pendD)} por despachar</span>
       </summary>
-      <table class="tprod" style="margin-top:12px;min-width:760px"><colgroup><col><col style="width:8ch"><col style="width:10ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"><col style="width:20ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">P. unit.</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th><th>Cotización</th></tr>
+      <table class="tprod" style="margin-top:12px;min-width:940px"><colgroup><col style="width:12em"><col style="width:8ch"><col style="width:10ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"><col style="width:20ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">P. unit.</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th><th>Cotización</th></tr>
       ${o.items.map((i,ix)=>{const comp=+i.cantidad_comprada||0;
         const pend=(+i.cantidad||0)-(+i.cantidad_despachada||0);
         return `<tr${pend>0?' class="fila-pend"':''}><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num" style="${comp<i.cantidad?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(pend)}</td><td>${celdaAdjOC(o,i,ix)}</td></tr>`}).join('')}</table>
@@ -2681,8 +2681,8 @@ function rPrecios(){
     <button class="btn mini sec" onclick="alternarNombres(this)"><i class="fa-solid fa-arrows-up-down-left-right"></i> Desplegar nombres</button>
     <span class="small muted">${filas.length} artículo(s) en pantalla</span>
   </div>
-  ${filas.length?`<div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:760px">
-    <colgroup><col style="width:4em"><col><col style="width:11ch"><col style="width:8ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"></colgroup>
+  ${filas.length?`<div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:960px">
+    <colgroup><col style="width:4em"><col style="width:12em"><col style="width:11ch"><col style="width:8ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"></colgroup>
     <tr><th></th><th>Producto</th><th class="num">Último precio</th><th class="num">Var.</th><th class="num">Anterior</th><th class="num">2 atrás</th><th class="num">3 atrás</th><th class="num">Cotizado</th></tr>
     ${filas.map(f=>{const ps=f.precios;
       return `<tr>
