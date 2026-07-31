@@ -2444,10 +2444,11 @@ function rPrecios(){
     <span class="small muted">${filas.length} artículo(s) en pantalla</span>
   </div>
   ${filas.length?`<div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:760px">
-    <colgroup><col><col style="width:11ch"><col style="width:8ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"><col style="width:6ch"></colgroup>
-    <tr><th>Producto</th><th class="num">Último precio</th><th class="num">Var.</th><th class="num">Anterior</th><th class="num">2 atrás</th><th class="num">3 atrás</th><th class="num">Cotizado</th><th></th></tr>
+    <colgroup><col style="width:6ch"><col><col style="width:11ch"><col style="width:8ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"></colgroup>
+    <tr><th></th><th>Producto</th><th class="num">Último precio</th><th class="num">Var.</th><th class="num">Anterior</th><th class="num">2 atrás</th><th class="num">3 atrás</th><th class="num">Cotizado</th></tr>
     ${filas.map(f=>{const ps=f.precios;
       return `<tr>
+        <td>${f.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto('${esc(f.codigo)}')"><i class="fa-solid fa-pen"></i></button>`:''}</td>
         <td class="trunc" title="${esc(f.nombre)}${f.codigo?' — '+esc(f.codigo):''}">${esc(f.nombre)}${f.codigo?` <span class="muted small mono">${esc(f.codigo)}</span>`:''}</td>
         <td class="num" style="font-weight:700">${ps[0]?celda(ps[0]):'<span class="muted">—</span>'}</td>
         <td class="num small">${variacion(ps)}</td>
@@ -2455,7 +2456,6 @@ function rPrecios(){
         <td class="num muted">${ps[2]?celda(ps[2]):''}</td>
         <td class="num muted">${ps[3]?celda(ps[3]):''}</td>
         <td class="num">${f.cot?`<span class="mono" style="color:var(--muted)" title="COT ${esc(f.cot.folio)} · ${fFecha(f.cot.fecha)}${ps[0]?' · adjudicada en '+clp(ps[0].precio):''}">${clp(f.cot.precio)}</span>`:''}</td>
-        <td class="num">${f.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto('${esc(f.codigo)}')"><i class="fa-solid fa-pen"></i></button>`:''}</td>
       </tr>`}).join('')}
   </table></div>
   <p class="small muted">Precios netos del listado de OC (órdenes cargadas y reporte de pendientes SAP), del más reciente al más antiguo. La columna <b>Cotizado</b> es el último precio que ofertamos, solo como referencia: no cuenta para la variación. Pasa el cursor sobre cualquier precio para ver su documento y su fecha.</p>`
