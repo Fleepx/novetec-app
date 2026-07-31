@@ -141,6 +141,10 @@ table.tprod td:last-child,table.tprod th:last-child{padding-right:2px}
 .aviso-medida{color:var(--ambar);margin-right:5px;cursor:help}
 /* Línea de una OC que aún tiene unidades por despachar: amarillo suave (Jefe, 24-07-2026) */
 tr.fila-pend>td{background:var(--ambar-bg)}
+tr.fila-adj>td{background:var(--verde-bg)}
+tr.fila-adj-parcial>td{background:var(--ambar-bg)}
+.adj-bloque{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.adj-linea{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:5px 8px;border:1px solid var(--line);border-radius:8px}
 /* Alerta roja junto a una cifra (ej: se despachó más de lo comprado) */
 .alerta-cifra{color:var(--rojo);margin-left:5px;cursor:help}
 /* Acordeón de guías: hoja de ruta -> guías de ese viaje */
@@ -280,7 +284,7 @@ a{color:var(--texto)}
 const LSKEY='novetec_cfg';
 let cfg=null;
 let DB={}; // path -> {data, sha}
-const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json',prod:'data/productos.json',sin:'data/sinonimos.json',psap:'data/pendientes_sap.json',arch:'data/archivos.json',hprec:'data/historial_precios.json'};
+const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json',prod:'data/productos.json',sin:'data/sinonimos.json',psap:'data/pendientes_sap.json',arch:'data/archivos.json',hprec:'data/historial_precios.json',adj:'data/adjudicaciones.json',bod:'data/bodegas.json'};
 
 const b64dec=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,'')),c=>c.charCodeAt(0)));
 function b64enc(s){const b=new TextEncoder().encode(s);let r='';for(let i=0;i<b.length;i+=8192)r+=String.fromCharCode(...b.subarray(i,i+8192));return btoa(r)}
@@ -297,6 +301,8 @@ const ESTRUCTURAS_BASE={'data/cotizaciones.json':{cotizaciones:[]},'data/ordenes
  'data/pendientes.json':{pendientes:[]},'data/hojas_ruta.json':{hojas:[]},
  'data/productos.json':{productos:[],correlativo:0},
  'data/pendientes_sap.json':{registros:[],actualizado:null,archivo_origen:null},
+ 'data/adjudicaciones.json':{registros:[],descartes:[]},
+ 'data/bodegas.json':{bodegas:[],excepcionales:[]},
  'data/archivos.json':{archivos:[]},
  'data/config.json':{empresa:'Novetec SPA',semaforo:{rojo_dias:5,amarillo_dias:10},proxima_hoja_ruta:1,resumen_ocultos:[]}};
 /* Normalización defensiva: garantiza la estructura mínima de cada documento apenas se carga,
@@ -310,7 +316,11 @@ function normalizarDatos(p,d){
     o.items.forEach(i=>{i.producto=i.producto||'';i.cantidad=+i.cantidad||0;
       i.cantidad_comprada=+i.cantidad_comprada||0;i.cantidad_despachada=+i.cantidad_despachada||0})})}
   if(p===ARCH.cot){arr('cotizaciones');d.cotizaciones.forEach(c=>{c.items=c.items||[];
+    // Migración 31-07-2026: la cotización ya no tiene estado de envío. 'enviada'/'convertida' -> 'abierta'.
+    if(c.estado==='enviada'||c.estado==='convertida'||!c.estado)c.estado='abierta';
     c.items.forEach(i=>{i.producto=i.producto||'';i.cantidad=+i.cantidad||0;i.precio_unitario=+i.precio_unitario||0})})}
+  if(p===ARCH.adj){arr('registros');arr('descartes')}
+  if(p===ARCH.bod){arr('bodegas');arr('excepcionales')}
   if(p===ARCH.guias){arr('guias');d.guias.forEach(g=>{g.items=g.items||[];
     g.oc=g.oc||g.folio_oc||'';g.folio_oc=g.folio_oc||g.oc||'';g.discrepancias=g.discrepancias||[];
     g.items.forEach(i=>{i.producto=i.producto||'';i.cantidad=+i.cantidad||0})})}
@@ -1528,7 +1538,13 @@ async function guardarOCLeida(){
     await guardarArchivo(ARCH.prod,`Maestro: productos de la OC ${o.folio}`);
     await guardarArchivo(ARCH.oc,`OC ${o.folio} cargada desde el PDF`);
     await guardarArchivo(ARCH.arch,`Registro de archivos: OC ${o.folio}`);
-    ocLeida=null;toast(`Orden de compra ${o.folio} cargada`);render();
+    // Match automático contra las cotizaciones abiertas (Jefe, 31-07-2026)
+    const nueva=DB[ARCH.oc].data.ordenes.find(x=>String(x.folio)===String(o.folio));
+    const res=nueva?adjudicarOCAuto(nueva):{auto:0,sug:0,sin:0};
+    if(res.auto)await guardarArchivo(ARCH.adj,`OC ${o.folio}: ${res.auto} línea(s) adjudicada(s) automáticamente a cotización`);
+    ocLeida=null;
+    toast(`Orden de compra ${o.folio} cargada`+(res.auto?` · ${res.auto} línea(s) adjudicada(s) a cotización`:'')+(res.sug?` · ${res.sug} por confirmar`:''));
+    render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
@@ -1600,6 +1616,148 @@ function leerItems(cont,conPrecio=true){
   })).filter(i=>i.producto&&i.cantidad>0);
 }
 
+/* ================= Adjudicación cotización → OC (Jefe, 31-07-2026) =================
+   Libro único en adjudicaciones.json. Cada registro consume saldo de UNA línea de cotización
+   a favor de UNA línea de OC. Saldos y estados SIEMPRE derivados del libro, nunca guardados.
+   Jerarquía de match acordada: puerta de entrada = código NOV/SAP (el ~11% de los precios se
+   repite entre productos distintos, por eso el precio no puede ir primero sin esta puerta).
+   Dentro de la puerta: 1) PRECIO, el más fuerte — idéntico (±$1) habilita match automático;
+   distinto NUNCA es automático (caso FOCO: mismo código, productos distintos). 2) CANTIDAD —
+   igual suma fuerte, distinta no descarta (parciales son lo normal; una línea de OC puede
+   consumir varias líneas de cotización en cascada: caso 9 = 3 + 6). 3) BODEGA — filtro duro
+   solo en cotizaciones XLSX (vienen de SAP del cliente); en nuestros PDF es observación manual
+   y pesa poco. 4) NOMBRE — el más débil, solo desempate. La RECENCIA ordena la búsqueda. */
+function adjRegistros(){return DB[ARCH.adj].data.registros}
+function adjDescartes(){return DB[ARCH.adj].data.descartes}
+function consumosDeLinea(cotId,idx){return adjRegistros().filter(r=>r.cot===cotId&&r.cot_idx===idx)}
+function saldoLinea(c,idx){const it=c.items[idx]||{};
+  return Math.max((+it.cantidad||0)-consumosDeLinea(c.id,idx).reduce((s,r)=>s+(+r.cantidad||0),0),0)}
+function adjDeOCLinea(folio,idx){return adjRegistros().filter(r=>r.oc===String(folio)&&r.oc_idx===idx)}
+function lineaSinCotizacion(folio,idx){return adjDescartes().some(d=>d.oc===String(folio)&&d.oc_idx===idx)}
+function cotAdjudicacion(c){let adj=0,parc=0;
+  c.items.forEach((it,i)=>{const s=saldoLinea(c,i),t=+it.cantidad||0;
+    if(t>0&&s<=0)adj++;else if(t>0&&s<t)parc++});
+  return {adj,parc,total:c.items.length}}
+function simNombre(a,b){a=normProd(a);b=normProd(b);if(!a||!b)return 0;if(a===b)return 1;
+  if(a.includes(b)||b.includes(a))return .92;
+  const ta=new Set(a.split(' ')),tb=new Set(b.split(' '));let inter=0;ta.forEach(t=>{if(tb.has(t))inter++});
+  const uni=new Set([...ta,...tb]).size;return uni?inter/uni:0}
+function candidatosParaLinea(oc,li){
+  const out=[];
+  DB[ARCH.cot].data.cotizaciones.forEach(c=>{
+    if(c.estado!=='abierta')return;                                    // cerradas y rechazadas fuera del pool
+    if(String(c.fecha||'')>String(oc.fecha_emision||'9999-12-31'))return; // posterior a la OC: imposible
+    const esXlsx=/^COT-XLSX/i.test(String(c.id));
+    c.items.forEach((it,i)=>{
+      if(saldoLinea(c,i)<=0)return;
+      const codOk=li.codigo&&li.codigo===it.codigo,
+            sapOk=li.codigo_sap&&it.codigo_sap&&li.codigo_sap===it.codigo_sap;
+      if(!codOk&&!sapOk)return;                                        // PUERTA: código NOV/SAP
+      if(esXlsx&&it.bodega&&normBodega(it.bodega)!==normBodega(oc.destino))return; // bodega dura solo XLSX
+      const p1=+li.precio_unitario||0,p2=+it.precio_unitario||0;
+      const precioOk=p1>0&&p2>0&&Math.abs(p1-p2)<=1;
+      const dias=Math.round((new Date(oc.fecha_emision||0)-new Date(c.fecha||0))/864e5);
+      const sc=50+(precioOk?30:0)
+        +((+li.cantidad||0)===(+it.cantidad||0)?10:0)
+        +(it.bodega?(esXlsx?10:4):0)
+        +(dias>=0&&dias<=15?12:dias<=45?6:0)
+        +Math.round(simNombre(li.producto,it.producto)*6);
+      out.push({sc,precioOk,cot:c,idx:i,it});
+    });
+  });
+  return out.sort((a,b)=>b.sc-a.sc||String(b.cot.fecha||'').localeCompare(String(a.cot.fecha||'')));
+}
+/* Adjudica en cascada las líneas de una OC recién guardada. Solo escribe en memoria;
+   quien llama decide cuándo persistir ARCH.adj. Devuelve cuántas quedaron en cada estado. */
+function adjudicarOCAuto(o){
+  let auto=0,sug=0,sin=0;
+  (o.items||[]).forEach((li,oi)=>{
+    if(adjDeOCLinea(o.folio,oi).length||lineaSinCotizacion(o.folio,oi))return;
+    const cands=candidatosParaLinea(o,li);
+    if(!cands.length){sin++;return}
+    if(cands[0].precioOk&&cands[0].sc>=90){
+      let pend=+li.cantidad||0;
+      for(const cd of cands){
+        if(pend<=0||!cd.precioOk||cd.sc<80)break;
+        const t=Math.min(pend,saldoLinea(cd.cot,cd.idx));if(t<=0)continue;
+        adjRegistros().push({oc:String(o.folio),oc_idx:oi,cot:cd.cot.id,cot_idx:cd.idx,
+          codigo:li.codigo||null,cantidad:t,origen:'auto',fecha:hoyISO()});
+        pend-=t;
+      }
+      auto++;
+    }else sug++;
+  });
+  return {auto,sug,sin};
+}
+async function adjConfirmar(fe,oi){
+  const folio=decodeURIComponent(fe);
+  const o=DB[ARCH.oc].data.ordenes.find(x=>String(x.folio)===folio);if(!o)return;
+  const li=o.items[oi];if(!li)return;
+  const cands=candidatosParaLinea(o,li);if(!cands.length){toast('Ya no hay candidatos con saldo.');render();return}
+  let pend=+li.cantidad||0;const usados=[];
+  for(const cd of cands){
+    if(pend<=0)break;
+    if(cd.sc<cands[0].sc-15)break;                       // consume solo candidatos comparables al mejor
+    const t=Math.min(pend,saldoLinea(cd.cot,cd.idx));if(t<=0)continue;
+    adjRegistros().push({oc:String(o.folio),oc_idx:oi,cot:cd.cot.id,cot_idx:cd.idx,
+      codigo:li.codigo||null,cantidad:t,origen:'manual',fecha:hoyISO()});
+    usados.push(cd);pend-=t;
+  }
+  if(!usados.length){toast('Ya no hay saldo disponible en las cotizaciones candidatas.');render();return}
+  velo(true,'Guardando la adjudicación…');
+  try{await guardarArchivo(ARCH.adj,`OC ${folio}: línea "${li.producto}" adjudicada a ${[...new Set(usados.map(u=>u.cot.folio))].join(', ')}`);
+    toast('Línea adjudicada');render()}catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+async function adjSinCotizacion(fe,oi){
+  const folio=decodeURIComponent(fe);
+  const o=DB[ARCH.oc].data.ordenes.find(x=>String(x.folio)===folio);if(!o)return;
+  adjDescartes().push({oc:folio,oc_idx:oi,fecha:hoyISO()});
+  velo(true);
+  try{await guardarArchivo(ARCH.adj,`OC ${folio}: línea ${oi+1} confirmada sin cotización`);render()}
+  catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+async function adjQuitarLinea(fe,oi){
+  const folio=decodeURIComponent(fe);
+  const d=DB[ARCH.adj].data;
+  const antes=d.registros.length+d.descartes.length;
+  d.registros=d.registros.filter(r=>!(r.oc===folio&&r.oc_idx===oi));
+  d.descartes=d.descartes.filter(r=>!(r.oc===folio&&r.oc_idx===oi));
+  if(d.registros.length+d.descartes.length===antes)return;
+  velo(true);
+  try{await guardarArchivo(ARCH.adj,`OC ${folio}: línea ${oi+1} desvinculada (saldo restituido)`);render()}
+  catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+function cotPorId(id){return DB[ARCH.cot].data.cotizaciones.find(c=>c.id===id)}
+/* Bloque de adjudicación dentro de la ficha de una OC: estado por línea y acciones. */
+function bloqueAdjudicacionOC(o){
+  if(o.origen!=='oc'||!o.items?.length)return '';
+  const filas=o.items.map((li,oi)=>{
+    const regs=adjDeOCLinea(o.folio,oi);
+    if(regs.length){
+      const refs=regs.map(r=>{const c=cotPorId(r.cot);
+        return `<span class="chip verde" title="${esc(c?c.items[r.cot_idx]?.producto||'':'')}">COT ${esc(c?c.folio:r.cot)} ×${num(r.cantidad)}</span>`}).join(' ');
+      return `<div class="adj-linea"><span class="trunc small" style="flex:1">${esc(li.producto)}</span>${refs}
+        <button class="btn mini sec" onclick="adjQuitarLinea('${encodeURIComponent(o.folio)}',${oi})" title="Quita el vínculo y restituye el saldo de la cotización">Desvincular</button></div>`;
+    }
+    if(lineaSinCotizacion(o.folio,oi))
+      return `<div class="adj-linea"><span class="trunc small" style="flex:1">${esc(li.producto)}</span><span class="chip">sin cotización</span>
+        <button class="btn mini sec" onclick="adjQuitarLinea('${encodeURIComponent(o.folio)}',${oi})">Deshacer</button></div>`;
+    const cands=candidatosParaLinea(o,li);
+    if(!cands.length)
+      return `<div class="adj-linea"><span class="trunc small" style="flex:1">${esc(li.producto)}</span><span class="chip rojo">sin match</span>
+        <button class="btn mini sec" onclick="adjSinCotizacion('${encodeURIComponent(o.folio)}',${oi})" title="Confirma que esta línea no nació de una cotización del sistema">Confirmar sin cotización</button></div>`;
+    const cd=cands[0],c=cd.cot;
+    const difPrecio=!cd.precioOk?` · <span style="color:var(--rojo)">precio distinto: ${clp(+li.precio_unitario||0)} vs ${clp(+cd.it.precio_unitario||0)}</span>`:'';
+    return `<div class="adj-linea"><span class="trunc small" style="flex:1">${esc(li.producto)}</span>
+      <span class="chip ambar" title="${esc(cd.it.producto)}">sugerido: COT ${esc(c.folio)} · ${fFecha(c.fecha)} · saldo ${num(saldoLinea(c,cd.idx))}${difPrecio}</span>
+      <button class="btn mini" onclick="adjConfirmar('${encodeURIComponent(o.folio)}',${oi})">Adjudicar</button>
+      <button class="btn mini sec" onclick="adjSinCotizacion('${encodeURIComponent(o.folio)}',${oi})">Sin cotización</button></div>`;
+  }).join('');
+  return `<div class="small muted" style="margin-top:10px;font-weight:600">Adjudicación a cotizaciones</div><div class="adj-bloque">${filas}</div>`;
+}
 function rCot(){
   // Más reciente primero (Jefe, 24-07-2026): por fecha desc; a igual fecha, se respeta el orden de carga.
   const cs=[...DB[ARCH.cot].data.cotizaciones]
@@ -1613,31 +1771,40 @@ function rCot(){
   ${cs.length?renderMeses('cot',agruparPorMes(cs,c=>c.fecha),([k,items])=>accMes('cot:'+k,mesLbl(k),
       `${items.length} documento${items.length===1?'':'s'}`,
       items.map(c=>{
-    const est={enviada:'chip ambar',convertida:'chip verde',rechazada:'chip rojo'}[c.estado]||'chip';
+    const est={abierta:'chip ink',cerrada:'chip',rechazada:'chip rojo'}[c.estado]||'chip';
     const neto=c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0);
+    const adj=cotAdjudicacion(c);
+    const ocsAdj=[...new Set(adjRegistros().filter(r=>r.cot===c.id).map(r=>r.oc))];
     return `<div class="card">
       <details class="doc" data-k="cot:${esc(c.id)}"${fichaAbierta('cot:'+c.id)?' open':''} ontoggle="recordarFicha(this)">
       <summary class="top" style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:2px">
         <span class="folio mono" style="font-weight:700;margin-right:2px">COT ${esc(c.folio)}</span>
         <span class="${est}">${c.estado}</span>
+        ${adj.adj||adj.parc?`<span class="chip ${adj.adj===adj.total?'verde':'ambar'}" title="Líneas totalmente adjudicadas en OC${ocsAdj.length?': '+ocsAdj.join(', '):''}">${adj.adj}/${adj.total} líneas adjudicadas</span>`:''}
         <span class="chip">${fFecha(c.fecha)}</span>
         <span class="muted small">${esc(c.cliente)}</span>
-        ${c.oc_asociada?`<span class="chip ink">OC ${esc(c.oc_asociada)}</span>`:''}
         <span class="resumen">${c.items.length} ítem(s) · ${clp(neto)}</span>
       </summary>
       ${(()=>{
         const bodegas=[...new Set(c.items.map(i=>i.bodega).filter(Boolean))];
         const conBodega=bodegas.length>0;
-        const tablaItems=arr=>arr.map(i=>`<tr><td class="trunc" title="${esc(i.producto)}${i.marca?' — '+esc(i.marca):''}">${esc(i.producto)}${i.marca?`<span class="small muted sep">${esc(i.marca)}</span>`:''}</td><td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num">${clp(i.cantidad*i.precio_unitario)}</td></tr>`).join('');
+        const idx=c.items.map((it,ix)=>[it,ix]);
+        // Adjudicadas RESALTADAS (Jefe, 31-07-2026): verde = línea completa, ámbar = parcial.
+        // Sin alerta por lo no adjudicado: que no se adjudique todo es lo normal.
+        const tablaItems=arr=>arr.map(([i,ix])=>{
+          const s=saldoLinea(c,ix),t=+i.cantidad||0;
+          const cls=t>0&&s<=0?' class="fila-adj"':t>0&&s<t?' class="fila-adj-parcial"':'';
+          const ocs=[...new Set(consumosDeLinea(c.id,ix).map(r=>r.oc))];
+          return `<tr${cls}><td class="trunc" title="${esc(i.producto)}${i.marca?' — '+esc(i.marca):''}">${esc(i.producto)}${i.marca?`<span class="small muted sep">${esc(i.marca)}</span>`:''}${ocs.length?` <span class="chip verde" title="Adjudicada en OC${s>0?' (parcial: saldo '+num(s)+')':''}">${ocs.map(f=>'OC '+esc(f)).join(' · ')}</span>`:''}</td><td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num">${clp(i.cantidad*i.precio_unitario)}</td></tr>`}).join('');
         let html='';
         if(conBodega){
           const orden=['Rancagua','San Francisco de Mostazal','El Peumo','Longovilo'];
           const grupos=orden.filter(b=>bodegas.includes(b)).concat(bodegas.filter(b=>!orden.includes(b)));
-          html=grupos.map(b=>{const its=c.items.filter(i=>i.bodega===b);
+          html=grupos.map(b=>{const its=idx.filter(([i])=>i.bodega===b);
             return `<div class="bodega-lbl"><i class="fa-solid fa-location-dot" style="font-size:13px;color:var(--muted)"></i> ${esc(b)} <span class="muted">· ${its.length} ítem(s)</span></div>
             <table class="tprod" style="min-width:460px"><colgroup><col><col style="width:9ch"><col style="width:11ch"><col style="width:12ch"></colgroup><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(its)}</table>`;}).join('');
         } else {
-          html=`<table class="tprod" style="margin-top:12px;min-width:460px"><colgroup><col><col style="width:9ch"><col style="width:11ch"><col style="width:12ch"></colgroup><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(c.items)}
+          html=`<table class="tprod" style="margin-top:12px;min-width:460px"><colgroup><col><col style="width:9ch"><col style="width:11ch"><col style="width:12ch"></colgroup><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(idx)}
             <tr><td colspan="3" style="border:none"></td><td class="num" style="font-weight:700">${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</td></tr></table>`;
         }
         if(conBodega)html+=`<div class="small" style="text-align:right;font-weight:700;margin-top:10px;padding-top:8px;border-top:1px solid var(--line)">Neto: ${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</div>`;
@@ -1646,13 +1813,14 @@ function rCot(){
       ${c.notas?`<p class="small muted" style="margin-top:12px">${esc(c.notas)}</p>`:''}
       ${c.archivo?`<p class="small" style="margin-top:8px"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(c.archivo)}')"><i class="fa-solid fa-download" style="font-size:12px"></i> Descargar documento</a></p>`:''}
       <div class="acciones">
-      ${c.estado==='enviada'?`
-        <button class="btn mini" onclick="irASubirOC()"><i class="fa-solid fa-cloud-arrow-up"></i> El cliente envió la OC · subir documento</button>
+      ${c.estado==='abierta'?`
+        <button class="btn mini" onclick="irASubirOC()"><i class="fa-solid fa-cloud-arrow-up"></i> El cliente envió una OC · subir documento</button>
+        <button class="btn mini sec" onclick="cerrarCot('${esc(c.id)}')" title="La excluye de las búsquedas de match de nuevas OC">Cerrar cotización</button>
         <button class="btn mini peligro" onclick="rechazarCot('${esc(c.id)}')">Cliente la rechazó</button>`:''}
-      <button class="btn mini sec" onclick="editCot('${esc(c.id)}')"><i class="fa-solid fa-pen"></i> Modificar</button>
-      ${c.estado!=='convertida'?`<button class="btn mini peligro" onclick="borrarCot('${esc(c.id)}')">Eliminar</button>`:'<span class="small muted">Para eliminarla, da de baja primero su OC.</span>'}
+      ${c.estado==='cerrada'?`<button class="btn mini sec" onclick="reabrirCot('${esc(c.id)}')">Reabrir</button>`:''}
+      ${c.estado==='rechazada'?`<button class="btn mini sec" onclick="deshacerRechazoCot('${esc(c.id)}')">Deshacer el rechazo</button>`:''}
+      <button class="btn mini peligro" onclick="borrarCot('${esc(c.id)}')">Eliminar</button>
       </div>
-      <div id="ec-${esc(c.id)}"></div>
       </details>
     </div>`}).join('')
     ))
@@ -1660,21 +1828,61 @@ function rCot(){
 }
 async function borrarCot(id){
   const arr=DB[ARCH.cot].data.cotizaciones;const c=arr.find(x=>x.id===id);if(!c)return;
-  if(c.estado==='convertida'){toast('Tiene una OC asociada: da de baja la OC primero.');return}
-  if(!await confirmar({titulo:`Eliminar la cotización ${c.folio}`,texto:'Esta acción no se puede deshacer.',confirmar:'Eliminar',peligro:true}))return;
+  const regs=adjRegistros().filter(r=>r.cot===id);
+  const ocs=[...new Set(regs.map(r=>r.oc))];
+  let texto='Esta acción no se puede deshacer.';
+  if(regs.length)texto=`Tiene ${regs.length} adjudicación(es) hacia la(s) OC ${ocs.join(', ')}. Al eliminarla, esas líneas de OC quedarán otra vez sin cotización.\n\nEsta acción no se puede deshacer.`;
+  if(!await confirmar({titulo:`Eliminar la cotización ${c.folio}`,texto,confirmar:'Eliminar',peligro:true}))return;
   velo(true,'Eliminando…');
   try{
     arr.splice(arr.indexOf(c),1);
+    if(regs.length){
+      const d=DB[ARCH.adj].data;
+      d.registros=d.registros.filter(r=>r.cot!==id);
+      await guardarArchivo(ARCH.adj,`Adjudicaciones liberadas por eliminación de cotización ${c.folio}`);
+    }
     await guardarArchivo(ARCH.cot,`Cotización ${c.folio} eliminada`);
     if(c.archivo)await borrarArchivoRepo(c.archivo,`Borrado documento de cotización ${c.folio}`);
     toast('Cotización eliminada');render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
+/* Rechazar pide confirmación y deja un Deshacer PERMANENTE mientras siga rechazada (Jefe, 31-07-2026).
+   Cerrar solo la excluye del match de nuevas OC; reabrir es libre. Los tres cambios de estado
+   conservan las adjudicaciones ya hechas: el estado solo gobierna las búsquedas FUTURAS. */
 async function rechazarCot(id){
   const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id);if(!c)return;
+  if(!await confirmar({titulo:`El cliente rechazó la cotización ${c.folio}`,
+    texto:'Quedará marcada como rechazada y fuera de las búsquedas de match. Podrás deshacerlo en cualquier momento.',
+    confirmar:'Marcar rechazada',peligro:true}))return;
   c.estado='rechazada';velo(true);
-  try{await guardarArchivo(ARCH.cot,`Cotización ${c.folio} rechazada`);render()}catch(e){}
+  try{await guardarArchivo(ARCH.cot,`Cotización ${c.folio} rechazada`);render()}
+  catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+async function deshacerRechazoCot(id){
+  const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id);if(!c)return;
+  c.estado='abierta';velo(true);
+  try{await guardarArchivo(ARCH.cot,`Cotización ${c.folio}: rechazo deshecho, vuelve a abierta`);
+    toast('Rechazo deshecho');render()}
+  catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+async function cerrarCot(id){
+  const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id);if(!c)return;
+  if(!await confirmar({titulo:`Cerrar la cotización ${c.folio}`,
+    texto:'Las nuevas OC dejarán de buscar match en ella. Lo ya adjudicado se conserva. Se puede reabrir cuando quieras.',
+    confirmar:'Cerrar'}))return;
+  c.estado='cerrada';velo(true);
+  try{await guardarArchivo(ARCH.cot,`Cotización ${c.folio} cerrada`);render()}
+  catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+async function reabrirCot(id){
+  const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id);if(!c)return;
+  c.estado='abierta';velo(true);
+  try{await guardarArchivo(ARCH.cot,`Cotización ${c.folio} reabierta`);render()}
+  catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
 
@@ -1718,7 +1926,6 @@ function ordenesUnificadas(){
 }
 function ordenPorFolio(folio){return ordenesUnificadas().find(o=>String(o.folio)===String(folio))}
 function rOC(){
-  const cots=DB[ARCH.cot].data.cotizaciones.filter(c=>c.estado==='enviada');
   // Una sola lista, ordenada por FOLIO (Jefe, 22-07-2026)
   const lista=ordenesUnificadas().filter(o=>!ocFiltro
     ||String(o.folio).toLowerCase().includes(ocFiltro)
@@ -1773,6 +1980,7 @@ function rOC(){
       ${o.items.map(i=>{const comp=+i.cantidad_comprada||0;
         const pend=(+i.cantidad||0)-(+i.cantidad_despachada||0);
         return `<tr${pend>0?' class="fila-pend"':''}><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num" style="${comp<i.cantidad?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(pend)}</td></tr>`}).join('')}</table>
+      ${bloqueAdjudicacionOC(o)}
       ${o.compras?.length?`<p class="small muted" style="margin-top:6px">Compras: ${o.compras.map(c=>`<span class="mono">${fFecha(c.fecha)}</span> ${esc(c.proveedor||'s/proveedor')} (${c.items.map(i=>`${esc(i.producto)} ×${num(i.cantidad)}`).join(', ')})`).join(' · ')}</p>`:''}
       ${o.guias?.length?`<p class="small muted" style="margin-top:6px">Guías: <span class="mono">${o.guias.map(esc).join(', ')}</span></p>`:''}
       ${o.archivo?`<p class="small"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(o.archivo)}')">Descargar documento</a></p>`:''}
@@ -1796,9 +2004,10 @@ async function borrarOC(fe){
   const arr=DB[ARCH.oc].data.ordenes;const o=arr.find(x=>x.folio===folio);if(!o)return;
   if(o.guias?.length){toast(`La OC ${folio} tiene guías asociadas (${o.guias.join(', ')}). Elimina primero esas guías.`);return}
   const comprasBod=(o.compras||[]).filter(c=>c.ingreso_bodega);
+  const adjOC=adjRegistros().filter(r=>r.oc===String(folio)).length+adjDescartes().filter(r=>r.oc===String(folio)).length;
   let msg='';
   if(comprasBod.length)msg+=`Se revertirán del inventario los ingresos de sus ${comprasBod.length} compra(s) registrada(s).\n`;
-  if(o.cotizacion_id)msg+='Su cotización volverá al estado "enviada".';
+  if(adjOC)msg+='Sus adjudicaciones a cotizaciones se eliminarán y el saldo de esas líneas quedará disponible otra vez.';
   if(!await confirmar({titulo:`Dar de baja la OC ${folio}`,texto:msg||'La orden quedará dada de baja.',confirmar:'Dar de baja',peligro:true}))return;
   velo(true,'Dando de baja…');
   try{
@@ -1808,11 +2017,14 @@ async function borrarOC(fe){
       if(p){p.cantidad-=it.cantidad;
         inv.movimientos.push({fecha:hoyISO(),tipo:'ajuste',codigo:p.codigo,producto:p.nombre,cantidad:-it.cantidad,referencia:`Reverso por baja de OC ${folio}`})}
     }));
-    const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===o.cotizacion_id);
-    if(c){c.estado='enviada';c.oc_asociada=null}
+    if(adjOC){
+      const d=DB[ARCH.adj].data;
+      d.registros=d.registros.filter(r=>r.oc!==String(folio));
+      d.descartes=d.descartes.filter(r=>r.oc!==String(folio));
+    }
     arr.splice(arr.indexOf(o),1);
     await guardarArchivo(ARCH.oc,`OC ${folio} dada de baja`);
-    if(c)await guardarArchivo(ARCH.cot,`Cotización ${c.folio} liberada por baja de OC ${folio}`);
+    if(adjOC)await guardarArchivo(ARCH.adj,`Adjudicaciones de la OC ${folio} liberadas por su baja`);
     if(comprasBod.length)await guardarArchivo(ARCH.inv,`Inventario: reverso por baja de OC ${folio}`);
     if(o.archivo)await borrarArchivoRepo(o.archivo,`Borrado documento de OC ${folio}`);
     toast(`OC ${folio} dada de baja`);render();
@@ -2324,44 +2536,8 @@ function leerEdit(contId,originales){
       _ix:ix};
   }).filter(i=>i.producto&&i.cantidad>0);
 }
-/* ----- Cotización ----- */
-function editCot(id){
-  const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id);if(!c)return;
-  const box=document.getElementById('ec-'+id);
-  if(box.innerHTML){box.innerHTML='';return}
-  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:8px">
-    ${c.estado==='convertida'?'<p class="small" style="color:var(--ambar)">Esta cotización ya tiene OC asociada, y la OC es el documento que manda. Corrige aquí solo si el error viene de la cotización.</p>':''}
-    <div class="grid3">
-      <div><label>Folio</label><input id="ec-folio-${id}" value="${esc(c.folio)}"></div>
-      <div><label>Fecha</label><input id="ec-fecha-${id}" type="date" value="${esc(c.fecha||'')}"></div>
-      <div><label>Cliente</label><input id="ec-cli-${id}" value="${esc(c.cliente||'')}"></div>
-    </div>
-    <label>Ítems</label>
-    <table class="tprod" style="min-width:470px">${COLS_EDIT}<tbody id="ec-items-${id}">${c.items.map(filaEdit).join('')}</tbody></table>
-    <button class="btn mini sec" type="button" onclick="document.getElementById('ec-items-${id}').insertAdjacentHTML('beforeend',filaEdit({},-1))">+ ítem</button>
-    <label>Notas</label><textarea id="ec-notas-${id}" rows="2">${esc(c.notas||'')}</textarea>
-    <div class="acciones"><button class="btn mini" onclick="guardarEditCot('${id}')">Guardar cambios</button><button class="btn mini sec" onclick="editCot('${id}')">Cancelar</button></div>
-  </div>`;
-}
-async function guardarEditCot(id){
-  const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id);if(!c)return;
-  const folio=document.getElementById('ec-folio-'+id).value.trim();
-  if(!folio){toast('El folio no puede quedar vacío.');return}
-  if(DB[ARCH.cot].data.cotizaciones.some(x=>x.id!==id&&String(x.folio)===folio)){toast('Ya existe otra cotización con ese folio.');return}
-  const items=leerEdit('ec-items-'+id,c.items);
-  if(!items.length){toast('La cotización debe tener al menos un ítem.');return}
-  velo(true,'Guardando cambios…');
-  try{
-    c.folio=folio;
-    c.fecha=document.getElementById('ec-fecha-'+id).value||c.fecha;
-    c.cliente=document.getElementById('ec-cli-'+id).value.trim();
-    c.notas=document.getElementById('ec-notas-'+id).value.trim();
-    c.items=items.map(({_ix,...r})=>r);
-    await guardarArchivo(ARCH.cot,`Cotización ${folio} modificada`);
-    toast('Cotización actualizada');render();
-  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
-  velo(false);
-}
+/* ----- Cotización: NO editable (Jefe, 31-07-2026). Si un documento vino mal, se elimina
+   y se vuelve a cargar; editCot/guardarEditCot se retiraron con esa regla. ----- */
 /* ----- Orden de compra ----- */
 function editOC(fe){
   const folio=decodeURIComponent(fe);
@@ -2413,8 +2589,10 @@ async function guardarEditOC(fe){
         if(String(g.folio_oc)===folio){g.folio_oc=nuevoFolio;tocaGuias=true}
         if(String(g.oc)===folio){g.oc=nuevoFolio;tocaGuias=true}
       });
-      const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.oc_asociada===folio);
-      if(c){c.oc_asociada=nuevoFolio;await guardarArchivo(ARCH.cot,`Cotización ${c.folio}: OC renumerada a ${nuevoFolio}`)}
+      const d=DB[ARCH.adj].data;let tocaAdj=false;
+      d.registros.forEach(r=>{if(r.oc===folio){r.oc=nuevoFolio;tocaAdj=true}});
+      d.descartes.forEach(r=>{if(r.oc===folio){r.oc=nuevoFolio;tocaAdj=true}});
+      if(tocaAdj)await guardarArchivo(ARCH.adj,`Adjudicaciones: OC ${folio} renumerada a ${nuevoFolio}`);
     }
     await guardarArchivo(ARCH.oc,`OC ${nuevoFolio} modificada`);
     if(tocaGuias)await guardarArchivo(ARCH.guias,`Guías actualizadas: OC ${folio} renumerada a ${nuevoFolio}`);
