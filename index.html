@@ -1454,13 +1454,23 @@ function consolidarOC(items){
     else m.set(k,{...i,fusion:1})});
   return [...m.values()].sort((a,b)=>a.pos-b.pos);
 }
+/* Un producto NUESTRO puede cargar VARIOS códigos SAP del cliente (Jefe, 04-08-2026): Agrosuper
+   abre un material nuevo por cada variante que pide, y al fusionar dos códigos NOV el SAP del
+   absorbido debe seguir reconociéndose. Por eso `codigos_cliente.agrosuper` admite texto (un solo
+   código, el caso normal) o lista (producto fusionado). Esto NO contradice el caso "papelero":
+   ahí un mismo SAP apunta a dos productos distintos; acá un producto reúne varios SAP. */
+function sapsDe(p){const v=(p.codigos_cliente||{}).agrosuper;
+  return v==null?[]:(Array.isArray(v)?v:[v]).map(String).filter(Boolean)}
 /* Resolución contra el maestro: lo inequívoco se resuelve solo, lo dudoso queda para Jefe */
 function resolverItems(items){
   const prods=DB[ARCH.prod].data.productos;
   const nrm=t=>String(t||'').toUpperCase().replace(/Ñ/g,'N').replace(/[^A-Z0-9]/g,'');
   return items.map(i=>{
-    const porSap=i.codigo_sap?prods.filter(p=>(p.codigos_cliente||{}).agrosuper===i.codigo_sap):[];
-    const porNom=prods.filter(p=>nrm(p.nombre)===nrm(i.producto));
+    const porSap=i.codigo_sap?prods.filter(p=>sapsDe(p).includes(String(i.codigo_sap))):[];
+    // El nombre del absorbido queda como alias del sobreviviente: los alias TIENEN que
+    // pesar igual que el nombre, si no la fusión no sirve para reconocer nada a futuro.
+    const porNom=prods.filter(p=>nrm(p.nombre)===nrm(i.producto)
+      ||(p.alias||[]).some(a=>nrm(a)===nrm(i.producto)));
     let estado='nuevo',codigo=null,opciones=[];
     if(porSap.length&&porNom.length&&porSap.some(p=>porNom.includes(p))){
       estado='existente';codigo=porSap.find(p=>porNom.includes(p)).codigo;
