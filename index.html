@@ -2774,7 +2774,18 @@ const HR_PLANTILLA='documentos/plantillas/base_hoja_ruta.docx';
 const HR_BODEGA_TITULO={'Rancagua':'BODEGA CENTRAL - RANCAGUA',
   'San Francisco de Mostazal':'BODEGA SAN FRANCISCO - SAN FRANCISCO DE MOSTAZAL',
   'El Peumo':'BODEGA EL PEUMO - LA CALERA','Longovilo':'BODEGA LONGOVILO - LONGOVILO'};
-const HR_COLS=[1134,1701,5386,1417];        // 2cm · 3cm · 9,5cm · 2,5cm, en twips
+/* Formato aprobado por Jefe el 04-08-2026. Los margenes viven en el sectPr de la
+   plantilla base: si se cambian alli, HR_MARGEN_LAT tiene que seguirlos o la tabla
+   deja de calzar con el ancho util. */
+const HR_ANCHO_PAG=12240, HR_MARGEN_LAT=850;               // twips (Carta · 1,5 cm)
+const HR_UTIL=HR_ANCHO_PAG-2*HR_MARGEN_LAT;                // 10540 tw = 18,59 cm
+const HR_COLS=[1134,1701,HR_UTIL-1134-1701-1417,1417];     // 2 · 3 · 11,09 · 2,5 cm
+/* Tinta azul en vez de negro (Jefe, 04-08-2026): la impresora de la oficina no esta
+   imprimiendo el canal negro y las hojas salian en blanco, solo con el logo. #000033
+   es el tono mas oscuro que salio bien impreso en la tira de prueba; mas oscuro que
+   eso el driver lo separa como negro puro y vuelve el problema. Aplica a texto Y a
+   los bordes de la tabla. */
+const HR_TINTA='000033';
 let _zipProm=null;
 function cargarJSZip(){
   if(window.JSZip)return Promise.resolve(window.JSZip);
@@ -2815,19 +2826,22 @@ async function subirBinario(ruta,blob,msg){
 /* ---- Armado del XML. Espejo exacto de generar_hoja_ruta.py ---- */
 const hrEsc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 function hrRun(t,sz,b){
-  const rpr='<w:rPr>'+(b?'<w:b/>':'')+(sz?`<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/>`:'')+'</w:rPr>';
+  const rpr='<w:rPr>'+(b?'<w:b/>':'')+`<w:color w:val="${HR_TINTA}"/>`
+    +(sz?`<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/>`:'')+'</w:rPr>';
   return `<w:r>${rpr}<w:t xml:space="preserve">${hrEsc(t)}</w:t></w:r>`;
 }
 const hrP=(cont,ppr)=>`<w:p>${ppr||''}${cont}</w:p>`;
-const HR_BORDES='<w:tcBorders>'+['top','left','bottom','right']
-  .map(l=>`<w:${l} w:val="single" w:sz="4" w:space="0" w:color="000000"/>`).join('')+'</w:tcBorders>';
-function hrCelda(txt,w,merge,b){
+const hrBordes=()=>'<w:tcBorders>'+['top','left','bottom','right']
+  .map(l=>`<w:${l} w:val="single" w:sz="4" w:space="0" w:color="${HR_TINTA}"/>`).join('')+'</w:tcBorders>';
+/* keep: pega la fila con la siguiente. Se usa para que una guia NUNCA se parta entre
+   paginas; la ultima fila de cada guia va sin keep, y ahi es donde puede caer el corte. */
+function hrCelda(txt,w,merge,b,sz,span,antes,keep){
   const vm=merge==='restart'?'<w:vMerge w:val="restart"/>':(merge==='cont'?'<w:vMerge/>':'');
-  // Interlineado compacto: sin esto, con ~17 filas la tabla se pasa de la página por un pelo
-  // y LibreOffice deja un encabezado huérfano en la página siguiente (visto en la N°14).
-  const comp='<w:pPr><w:spacing w:before="20" w:after="20"/></w:pPr>';
-  const cuerpo=txt==null?`<w:p>${comp}</w:p>`:`<w:p>${comp}${hrRun(txt,20,b)}</w:p>`;
-  return `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${HR_BORDES}${vm}`
+  const gs=span?`<w:gridSpan w:val="${span}"/>`:'';
+  const esp=antes==null?20:antes;
+  const ppr=`<w:pPr>${keep?'<w:keepNext/>':''}<w:spacing w:before="${esp}" w:after="${esp}"/></w:pPr>`;
+  const cuerpo=txt==null?`<w:p>${ppr}</w:p>`:`<w:p>${ppr}${hrRun(txt,sz||20,b)}</w:p>`;
+  return `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${gs}${hrBordes()}${vm}`
         +`<w:vAlign w:val="center"/></w:tcPr>${cuerpo}</w:tc>`;
 }
 function hrCant(v,u){
@@ -2835,35 +2849,58 @@ function hrCant(v,u){
   const s=Number.isInteger(n)?String(n):String(Math.round(n*10)/10).replace('.',',');
   return `${s} ${u||'UN'}`;
 }
+/* Una tabla por destino. La bodega es la PRIMERA FILA de la tabla, celda unica de ancho
+   completo: asi viaja pegada a sus guias y no queda un titulo huerfano al pie de pagina.
+   Filas 1 y 2 marcadas como encabezado repetido, por si una bodega no cabe ni en una
+   pagina entera y hay que partirla igual. */
+function hrTabla(dest,gs){
+  const filas=[
+    '<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>'
+      +hrCelda(HR_BODEGA_TITULO[dest]||('BODEGA '+dest.toUpperCase()),
+               HR_COLS.reduce((a,b)=>a+b,0),null,true,26,4,90,true)+'</w:tr>',
+    '<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>'
+      +hrCelda('N° Guía',HR_COLS[0],null,true,20,null,20,true)
+      +hrCelda('Folio OC',HR_COLS[1],null,true,20,null,20,true)
+      +hrCelda('Producto',HR_COLS[2],null,true,20,null,20,true)
+      +hrCelda('Cantidad',HR_COLS[3],null,true,20,null,20,true)+'</w:tr>'];
+  const cuerpo=[];
+  gs.forEach(g=>(g.items||[]).forEach((it,k)=>cuerpo.push({
+    n:k===0?g.numero:null, oc:k===0?g.oc:null, pr:it.producto,
+    ct:hrCant(it.cantidad,it.unidad), m:k===0?'restart':'cont'})));
+  cuerpo.forEach((f,i)=>{
+    const finGuia=(i===cuerpo.length-1)||(cuerpo[i+1].m==='restart');
+    const keep=!finGuia;                        // el corte solo cae entre guias
+    filas.push('<w:tr><w:trPr><w:cantSplit/></w:trPr>'
+      +hrCelda(f.n,HR_COLS[0],f.m,false,20,null,20,keep)
+      +hrCelda(f.oc,HR_COLS[1],f.m,false,20,null,20,keep)
+      +hrCelda(f.pr,HR_COLS[2],null,false,20,null,20,keep)
+      +hrCelda(f.ct,HR_COLS[3],null,false,20,null,20,keep)+'</w:tr>');
+  });
+  return `<w:tbl><w:tblPr><w:tblW w:w="${HR_COLS.reduce((a,b)=>a+b,0)}" w:type="dxa"/>`
+    +'<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>'
+    +HR_COLS.map(c=>`<w:gridCol w:w="${c}"/>`).join('')+'</w:tblGrid>'+filas.join('')+'</w:tbl>';
+}
+/* Word fusiona dos tablas consecutivas si no hay un parrafo entre medio. */
+const HR_ESPACIO=`<w:p><w:pPr><w:keepNext/><w:spacing w:before="0" w:after="0"/>`
+  +`<w:rPr><w:sz w:val="20"/></w:rPr></w:pPr></w:p>`;
+/* Cabecera: titulo y fecha centrados en la hoja, encuadrados dentro del mismo alto que
+   el logo (2,94 cm). El logo va anclado al margen, no en offset absoluto, asi queda
+   pegado arriba y a la derecha aunque despues cambien los margenes. */
+function hrCabecera(numero,fechaISO){
+  const banda=Math.round(2.94*566.929), lt=Math.round(28*20*1.15), lf=Math.round(12*20*1.15);
+  const sobra=Math.max(0,banda-lt-lf), arriba=Math.floor(sobra/2), abajo=sobra-arriba;
+  return hrP(`<w:r><w:rPr><w:noProof/></w:rPr>[[DRAWING]]</w:r>`
+      +hrRun(`GUÍA DE RUTA N° ${numero}`,56,true),
+      `<w:pPr><w:keepNext/><w:jc w:val="center"/><w:spacing w:before="${arriba}" w:after="0"/></w:pPr>`)
+    +hrP(hrRun('Fecha: '+fFecha(fechaISO),24),
+      `<w:pPr><w:keepNext/><w:jc w:val="center"/><w:spacing w:before="0" w:after="${abajo}"/></w:pPr>`);
+}
 function hrCuerpo(numero,fechaISO,guias,destinos){
-  const enc=hrP(`<w:r><w:rPr><w:noProof/></w:rPr>[[DRAWING]]</w:r>`,'<w:pPr><w:jc w:val="center"/></w:pPr>')
-    +hrP(hrRun(`GUÍA DE RUTA N° ${numero}`,56,true),'<w:pPr><w:jc w:val="center"/></w:pPr>')
-    +hrP(hrRun('Fecha: '+fFecha(fechaISO),24),'<w:pPr><w:jc w:val="center"/></w:pPr>');
-  const keep='<w:keepNext/><w:keepLines/>';
-  const bloques=destinos.map((dest,idx)=>{
+  return hrCabecera(numero,fechaISO)+destinos.map((dest,idx)=>{
     const gs=guias.filter(g=>normBodega(g.destino||'')===dest)
       .sort((a,b)=>String(a.numero).localeCompare(String(b.numero),'es',{numeric:true}));
-    const antes=idx===0?1100:500;                    // el primer bloque arranca bajo el logo
-    let out=hrP(hrRun(HR_BODEGA_TITULO[dest]||('BODEGA '+dest.toUpperCase()),28,true),
-        `<w:pPr>${keep}<w:spacing w:before="${antes}" w:after="120"/></w:pPr>`)
-      +hrP(hrRun('Detalle por Guía de Despacho:',22,true),
-        `<w:pPr>${keep}<w:spacing w:after="120"/></w:pPr>`);
-    const filas=['<w:tr><w:trPr><w:tblHeader/></w:trPr>'
-      +hrCelda('N° Guía',HR_COLS[0],null,true)+hrCelda('Folio OC',HR_COLS[1],null,true)
-      +hrCelda('Producto',HR_COLS[2],null,true)+hrCelda('Cantidad',HR_COLS[3],null,true)+'</w:tr>'];
-    gs.forEach(g=>(g.items||[]).forEach((it,k)=>{
-      const m=k===0?'restart':'cont';                // N° Guía y Folio OC se fusionan hacia abajo
-      filas.push('<w:tr><w:trPr><w:cantSplit/></w:trPr>'
-        +hrCelda(k===0?g.numero:null,HR_COLS[0],m)
-        +hrCelda(k===0?g.oc:null,HR_COLS[1],m)
-        +hrCelda(it.producto,HR_COLS[2])
-        +hrCelda(hrCant(it.cantidad,it.unidad),HR_COLS[3])+'</w:tr>');
-    }));
-    return out+`<w:tbl><w:tblPr><w:tblW w:w="${HR_COLS.reduce((a,b)=>a+b,0)}" w:type="dxa"/>`
-      +'<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>'
-      +HR_COLS.map(c=>`<w:gridCol w:w="${c}"/>`).join('')+'</w:tblGrid>'+filas.join('')+'</w:tbl>';
+    return (idx?HR_ESPACIO:'')+hrTabla(dest,gs);
   }).join('');
-  return enc+bloques;
 }
 async function generarHojaRuta(numero){
   const hoja=DB[ARCH.hr].data.hojas.find(h=>String(h.numero)===String(numero));
