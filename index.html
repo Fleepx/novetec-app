@@ -2195,9 +2195,10 @@ function rGuias(){
       const hoja=sin?null:hojas.find(x=>String(x.numero)===k);
       const dests=[...new Set(lista.map(g=>normBodega(g.destino||'Sin destino')))]
         .sort((a,b)=>BODEGAS_ORDEN.indexOf(a)-BODEGAS_ORDEN.indexOf(b));
-      const desc=hoja&&hoja.archivo
+      const btnGen=sin?'':`<button class="btn mini sec" title="${hoja&&hoja.archivo?'Rehacer el documento con las guías que tiene hoy la hoja':'Crear el documento Word de la hoja de ruta'}" onclick="event.preventDefault();event.stopPropagation();generarHojaRuta('${esc(k)}')"><i class="fa-solid fa-file-word"></i> ${hoja&&hoja.archivo?'Regenerar':'Generar'}</button>`;
+      const desc=(hoja&&hoja.archivo
         ?`<button class="btn mini" title="Descargar la hoja de ruta N°${esc(k)}" onclick="event.preventDefault();event.stopPropagation();descargarArchivo('${esc(hoja.archivo)}','Guia_de_Ruta_N${esc(k)}_${esc(fFecha(hoja.fecha_envio||hoja.fecha))}.docx')"><i class="fa-solid fa-download"></i> Hoja de ruta</button>`
-        :(sin?'':'<span class="chip ambar" title="La hoja de ruta aún no se ha generado">sin archivo</span>');
+        :(sin?'':'<span class="chip ambar" title="La hoja de ruta aún no se ha generado">sin archivo</span>'))+btnGen;
       const he=hojaEstado(lista);
       const nConf=lista.filter(g=>g.conforme).length;
       const chipEstado=sin?'':`<span class="chip ${ESTADO_COLOR[he]}" title="${he==='parcial'?`${nConf} de ${lista.length} guías confirmadas`:(he==='despachada'?'Todas las guías confirmadas':'Ninguna guía confirmada todavía')}">${HOJA_LBL[he]}</span>`;
@@ -2760,6 +2761,158 @@ function cargarXLSX(){
     document.head.appendChild(s);
   });
   return _xlsxProm;
+}
+/* ══════ HOJA DE RUTA: generación del .docx desde el navegador ══════
+   Un .docx es un ZIP con XML adentro, y entre una hoja de ruta y otra lo ÚNICO que cambia es
+   word/document.xml. El logo flotante con sus offsets en EMU, los márgenes, los estilos y las
+   relaciones son siempre los mismos. Por eso NO armamos un Word desde cero (ahí se pierde
+   formato): bajamos la plantilla base, le reemplazamos el cuerpo entre <w:body> y <w:sectPr>,
+   y volvemos a comprimir. La fidelidad no depende de reproducir bien el formato, depende de
+   no tocarlo. Es el mismo procedimiento que usaba generar_hoja_ruta.py, portado al navegador
+   para que el proceso sea autónomo. */
+const HR_PLANTILLA='documentos/plantillas/base_hoja_ruta.docx';
+const HR_BODEGA_TITULO={'Rancagua':'BODEGA CENTRAL - RANCAGUA',
+  'San Francisco de Mostazal':'BODEGA SAN FRANCISCO - SAN FRANCISCO DE MOSTAZAL',
+  'El Peumo':'BODEGA EL PEUMO - LA CALERA','Longovilo':'BODEGA LONGOVILO - LONGOVILO'};
+const HR_COLS=[1134,1701,5386,1417];        // 2cm · 3cm · 9,5cm · 2,5cm, en twips
+let _zipProm=null;
+function cargarJSZip(){
+  if(window.JSZip)return Promise.resolve(window.JSZip);
+  if(_zipProm)return _zipProm;
+  _zipProm=new Promise((ok,mal)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s.onload=()=>ok(window.JSZip);
+    s.onerror=()=>{_zipProm=null;mal(new Error('No se pudo cargar el generador de Word. Revisa la conexión.'))};
+    document.head.appendChild(s);
+  });
+  return _zipProm;
+}
+/* Trae un binario del repo de datos tal cual, sin pasar por base64 cuando se puede. */
+async function bajarBinarioRepo(p){
+  const r=await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(p)}?t=${Date.now()}`,
+    {headers:{'Authorization':'Bearer '+cfg.token,'Accept':'application/vnd.github.raw'}});
+  if(!r.ok)throw new Error('No se encontró '+p+' (HTTP '+r.status+')');
+  const b=await r.blob();
+  if(b.type.includes('json')){                 // la API respondió metadata: rearmar desde base64
+    const j=JSON.parse(await b.text());
+    if(!j.content)throw new Error('El servidor no devolvió el archivo '+p);
+    const bin=atob(j.content.replace(/\s/g,''));
+    const arr=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+    return arr.buffer;
+  }
+  return await b.arrayBuffer();
+}
+async function subirBinario(ruta,blob,msg){
+  const b64=await new Promise((res,rej)=>{const r=new FileReader();
+    r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(blob)});
+  let sha=null;
+  try{const j=await gh(`contents/${encodeURI(ruta)}?t=${Date.now()}`);sha=j.sha}catch(_){}
+  await gh(`contents/${encodeURI(ruta)}`,{method:'PUT',
+    body:JSON.stringify(sha?{message:msg,content:b64,sha}:{message:msg,content:b64})});
+}
+/* ---- Armado del XML. Espejo exacto de generar_hoja_ruta.py ---- */
+const hrEsc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function hrRun(t,sz,b){
+  const rpr='<w:rPr>'+(b?'<w:b/>':'')+(sz?`<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/>`:'')+'</w:rPr>';
+  return `<w:r>${rpr}<w:t xml:space="preserve">${hrEsc(t)}</w:t></w:r>`;
+}
+const hrP=(cont,ppr)=>`<w:p>${ppr||''}${cont}</w:p>`;
+const HR_BORDES='<w:tcBorders>'+['top','left','bottom','right']
+  .map(l=>`<w:${l} w:val="single" w:sz="4" w:space="0" w:color="000000"/>`).join('')+'</w:tcBorders>';
+function hrCelda(txt,w,merge,b){
+  const vm=merge==='restart'?'<w:vMerge w:val="restart"/>':(merge==='cont'?'<w:vMerge/>':'');
+  // Interlineado compacto: sin esto, con ~17 filas la tabla se pasa de la página por un pelo
+  // y LibreOffice deja un encabezado huérfano en la página siguiente (visto en la N°14).
+  const comp='<w:pPr><w:spacing w:before="20" w:after="20"/></w:pPr>';
+  const cuerpo=txt==null?`<w:p>${comp}</w:p>`:`<w:p>${comp}${hrRun(txt,20,b)}</w:p>`;
+  return `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${HR_BORDES}${vm}`
+        +`<w:vAlign w:val="center"/></w:tcPr>${cuerpo}</w:tc>`;
+}
+function hrCant(v,u){
+  const n=+v||0;
+  const s=Number.isInteger(n)?String(n):String(Math.round(n*10)/10).replace('.',',');
+  return `${s} ${u||'UN'}`;
+}
+function hrCuerpo(numero,fechaISO,guias,destinos){
+  const enc=hrP(`<w:r><w:rPr><w:noProof/></w:rPr>[[DRAWING]]</w:r>`,'<w:pPr><w:jc w:val="center"/></w:pPr>')
+    +hrP(hrRun(`GUÍA DE RUTA N° ${numero}`,56,true),'<w:pPr><w:jc w:val="center"/></w:pPr>')
+    +hrP(hrRun('Fecha: '+fFecha(fechaISO),24),'<w:pPr><w:jc w:val="center"/></w:pPr>');
+  const keep='<w:keepNext/><w:keepLines/>';
+  const bloques=destinos.map((dest,idx)=>{
+    const gs=guias.filter(g=>normBodega(g.destino||'')===dest)
+      .sort((a,b)=>String(a.numero).localeCompare(String(b.numero),'es',{numeric:true}));
+    const antes=idx===0?1100:500;                    // el primer bloque arranca bajo el logo
+    let out=hrP(hrRun(HR_BODEGA_TITULO[dest]||('BODEGA '+dest.toUpperCase()),28,true),
+        `<w:pPr>${keep}<w:spacing w:before="${antes}" w:after="120"/></w:pPr>`)
+      +hrP(hrRun('Detalle por Guía de Despacho:',22,true),
+        `<w:pPr>${keep}<w:spacing w:after="120"/></w:pPr>`);
+    const filas=['<w:tr><w:trPr><w:tblHeader/></w:trPr>'
+      +hrCelda('N° Guía',HR_COLS[0],null,true)+hrCelda('Folio OC',HR_COLS[1],null,true)
+      +hrCelda('Producto',HR_COLS[2],null,true)+hrCelda('Cantidad',HR_COLS[3],null,true)+'</w:tr>'];
+    gs.forEach(g=>(g.items||[]).forEach((it,k)=>{
+      const m=k===0?'restart':'cont';                // N° Guía y Folio OC se fusionan hacia abajo
+      filas.push('<w:tr><w:trPr><w:cantSplit/></w:trPr>'
+        +hrCelda(k===0?g.numero:null,HR_COLS[0],m)
+        +hrCelda(k===0?g.oc:null,HR_COLS[1],m)
+        +hrCelda(it.producto,HR_COLS[2])
+        +hrCelda(hrCant(it.cantidad,it.unidad),HR_COLS[3])+'</w:tr>');
+    }));
+    return out+`<w:tbl><w:tblPr><w:tblW w:w="${HR_COLS.reduce((a,b)=>a+b,0)}" w:type="dxa"/>`
+      +'<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>'
+      +HR_COLS.map(c=>`<w:gridCol w:w="${c}"/>`).join('')+'</w:tblGrid>'+filas.join('')+'</w:tbl>';
+  }).join('');
+  return enc+bloques;
+}
+async function generarHojaRuta(numero){
+  const hoja=DB[ARCH.hr].data.hojas.find(h=>String(h.numero)===String(numero));
+  if(!hoja){toast('No encontré la Hoja de Ruta N°'+numero);return}
+  const guias=DB[ARCH.guias].data.guias.filter(g=>String(g.hoja_ruta)===String(numero));
+  if(!guias.length){toast('La Hoja de Ruta N°'+numero+' no tiene guías asociadas.');return}
+  const sinItems=guias.filter(g=>!(g.items||[]).length);
+  if(sinItems.length){toast(`La guía N°${sinItems[0].numero} no tiene productos cargados: no puedo armar la tabla.`);return}
+  if((hoja.estado||'borrador')==='cerrada'&&!await confirmar({
+      titulo:'La hoja ya está cerrada',
+      cuerpo:`La Hoja de Ruta N°${numero} está cerrada. Regenerar el documento reemplaza el archivo del viaje ya despachado. ¿Continuar?`,
+      ok:'Regenerar igual',peligro:true}))return;
+  const fecha=hoja.fecha_envio||hoja.fecha;
+  if(!fecha){toast('La hoja no tiene fecha de envío.');return}
+  const destinos=BODEGAS_ORDEN.filter(d=>guias.some(g=>normBodega(g.destino||'')===d));
+  const otros=[...new Set(guias.map(g=>normBodega(g.destino||'')).filter(d=>!BODEGAS_ORDEN.includes(d)))];
+  if(otros.length){toast('Destino desconocido en las guías: '+otros.join(', ')+'. Revísalo antes de generar.');return}
+  velo(true,'Generando la hoja de ruta…');
+  try{
+    const JSZipLib=await cargarJSZip();
+    const zip=await JSZipLib.loadAsync(await bajarBinarioRepo(HR_PLANTILLA));
+    const ent=zip.file('word/document.xml');
+    if(!ent)throw new Error('La plantilla base no tiene word/document.xml');
+    const x=await ent.async('string');
+    // El bloque <w:drawing> del logo se recorta de la plantilla y se reinyecta tal cual:
+    // así el logo conserva posición, tamaño y ajuste sin que nosotros los describamos.
+    const dm=x.match(/<w:drawing>[\s\S]*?<\/w:drawing>/);
+    if(!dm)throw new Error('La plantilla base no trae el logo');
+    const ini=x.indexOf('<w:body>')+'<w:body>'.length, fin=x.indexOf('<w:sectPr',ini);
+    if(ini<8||fin<0)throw new Error('La plantilla base tiene una estructura inesperada');
+    const cuerpo=hrCuerpo(numero,fecha,guias,destinos).replace('[[DRAWING]]',dm[0]);
+    zip.file('word/document.xml',x.slice(0,ini)+cuerpo+x.slice(fin));
+    const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',
+      mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+    const nombre=`Guia_de_Ruta_N${numero}_${fFecha(fecha)}.docx`;
+    const ruta='documentos/hojas_ruta/'+nombre;
+    // Una sola versión por hoja: si cambió la fecha, el archivo viejo se borra.
+    if(hoja.archivo&&hoja.archivo!==ruta)await borrarArchivoRepo(hoja.archivo,`Hoja N°${numero}: reemplazada por ${nombre}`);
+    await subirBinario(ruta,blob,`Hoja de Ruta N°${numero} generada desde la app`);
+    hoja.archivo=ruta;hoja.destinos=destinos;
+    hoja.guias=guias.map(g=>String(g.numero)).sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
+    await guardarArchivo(ARCH.hr,`Hoja de Ruta N°${numero}: documento generado (${guias.length} guía(s), ${destinos.length} destino(s))`);
+    bajarBlob(blob,nombre);                                    // bajarBlob ya cierra el velo
+    toast(`Hoja de Ruta N°${numero} generada: ${guias.length} guía(s) en ${destinos.join(' · ')}`);
+    render();
+  }catch(e){
+    velo(false);
+    toast('No se pudo generar: '+e.message);
+  }
 }
 const COL_PLANTILLA=['Código NOV','Producto','Cantidad'];
 async function descargarPlantillaInv(){
