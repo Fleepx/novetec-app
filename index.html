@@ -830,33 +830,49 @@ function hojaDeGuia(g){
   if(!g||!g.hoja_ruta)return null;
   return DB[ARCH.hr].data.hojas.find(h=>String(h.numero)===String(g.hoja_ruta)&&hrTipo(h)===hrTipoGuia(g))||null;
 }
-/* OJO: la lista de bodegas vive en CUATRO lugares (este orden, CENTRO_BODEGA, normBodega
-   y HR_BODEGA_TITULO) más data/bodegas.json. Al agregar una hay que tocar los cinco. */
-const BODEGAS_ORDEN=['Rancagua','San Francisco de Mostazal','El Peumo','Longovilo','Casablanca','Doñihue','San Pablo','Lo Miranda'];
-const BODEGAS_EXCEPCION=['San Pablo','Lo Miranda'];
-/* PEND-* son códigos PROVISORIOS mientras Jefe consigue el centro SAP real (04-08-2026).
-   No corresponden a nada que venga en un documento, así que no pueden producir un calce
-   equivocado: si llega el centro verdadero de esas plantas, saldrá como desconocido. */
-const CENTRO_BODEGA={'C394':'Rancagua','C001':'Rancagua','C011':'Rancagua','C395':'San Francisco de Mostazal','097':'Longovilo','7187':'El Peumo','PEND-CASABLANCA':'Casablanca','PEND-DONIHUE':'Doñihue'};
-function bodegaDeCentro(c){return CENTRO_BODEGA[String(c||'').trim().toUpperCase()]||null}
+/* ══════ BODEGAS: una sola fuente ══════
+   Todo sale de data/bodegas.json. Antes la lista estaba repetida en cuatro constantes del
+   código y agregar una bodega obligaba a tocarlas todas — se olvidaba una y el sistema
+   quedaba a medias. Ahora agregar una bodega es editar SOLO ese archivo.
+   Se calcula una vez por carga y se recalcula cuando el archivo cambia. */
+let _bodCache=null,_bodRef=null;
+function bodegas(){
+  const d=(DB[ARCH.bod]&&DB[ARCH.bod].data)||null;
+  const lista=d?[...(d.bodegas||[]),...(d.excepcionales||[])]:[];
+  if(_bodRef!==lista)_bodCache=null,_bodRef=lista;
+  if(_bodCache)return _bodCache;
+  _bodCache=lista.slice().sort((a,b)=>(+a.orden||99)-(+b.orden||99)).map(b=>({
+    nombre:b.nombre, orden:+b.orden||99,
+    centros:(b.centros||[]).map(c=>String(c).trim().toUpperCase()),
+    claves:(b.claves||[]).concat(b.nombre).map(t=>sinTilde(t)),
+    titulo:b.titulo_documento||('BODEGA '+String(b.nombre||'').toUpperCase()),
+    excepcional:!!b.excepcional}));
+  return _bodCache;
+}
+const sinTilde=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+/* Orden de prioridad en tablas y documentos. Es una función, no una constante:
+   depende de datos que se cargan después de que el script se evalúa. */
+function bodegasOrden(){return bodegas().map(b=>b.nombre)}
+function bodegasExcepcion(){return bodegas().filter(b=>b.excepcional).map(b=>b.nombre)}
+function bodegaDeCentro(c){
+  const k=String(c||'').trim().toUpperCase();
+  const b=bodegas().find(x=>x.centros.includes(k));
+  return b?b.nombre:null;
+}
+function bodegaTitulo(nombre){
+  const b=bodegas().find(x=>x.nombre===nombre);
+  return b?b.titulo:('BODEGA '+String(nombre||'').toUpperCase());
+}
+/* Normaliza cómo viene escrito un destino en un documento. Gana la PRIMERA bodega cuya
+   clave aparezca en el texto, por eso el orden del archivo importa. Sin tildes a ambos
+   lados: los documentos vienen con y sin ñ. */
 function normBodega(b){
   const s=String(b||'').trim();if(!s)return 'Sin destino';
-  const x=s.toLowerCase();
-  if(x.includes('rancagua')||x.includes('central'))return 'Rancagua';
-  if(x.includes('mostazal')||x.includes('san francisco'))return 'San Francisco de Mostazal';
-  if(x.includes('peumo')||x.includes('calera'))return 'El Peumo';
-  if(x.includes('longovilo'))return 'Longovilo';
-  // Agrosuper las nombra "Planta de Alimentos X"; en pantalla usamos solo la ciudad.
-  // Se acepta con y sin ñ: los documentos vienen de las dos formas.
-  if(x.includes('casablanca'))return 'Casablanca';
-  if(x.includes('doñihue')||x.includes('donihue'))return 'Doñihue';
-  if(x.includes('san pablo'))return 'San Pablo';
-  if(x.includes('lo miranda'))return 'Lo Miranda';
-  return s;
+  const x=sinTilde(s);
+  const hit=bodegas().find(bo=>bo.claves.some(k=>k&&x.includes(k)));
+  return hit?hit.nombre:s;
 }
-/* Producto cuyo documento de origen no especifica la medida o la TALLA: hay que confirmarla
-   antes de despachar, porque en bodega cada medida y cada talla se cuentan y se cargan por
-   separado (las tallas se separan SIEMPRE en códigos distintos). */
+
 function medidaPendiente(codigo){
   if(!codigo)return false;
   const p=DB[ARCH.prod].data.productos.find(x=>x.codigo===codigo);
@@ -989,8 +1005,8 @@ function rPanel(){
         <td class="num">${clp(f.precio)}</td>
       </tr>`).join('')}
     </table></div>`;
-  const destOrden=BODEGAS_ORDEN.filter(b=>grupos[b])
-    .concat(Object.keys(grupos).filter(b=>!BODEGAS_ORDEN.includes(b)).sort((a,b)=>a.localeCompare(b,'es')));
+  const destOrden=bodegasOrden().filter(b=>grupos[b])
+    .concat(Object.keys(grupos).filter(b=>!bodegasOrden().includes(b)).sort((a,b)=>a.localeCompare(b,'es')));
   return `
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
     <button class="btn mini sec" onclick="alternarNombres(this)"><i class="fa-solid fa-arrows-up-down-left-right"></i> Desplegar nombres</button>
@@ -2222,13 +2238,13 @@ function rGuias(){
       (porHoja[k]=porHoja[k]||[]).push(g)});
     const numReal=k=>+String(k).split(':')[1]||0;
     const numsReales=Object.keys(porHoja).filter(k=>k!=='__sin__').sort((a,b)=>numReal(b)-numReal(a));
-    const ordBod=g=>{const i=BODEGAS_ORDEN.indexOf(normBodega(g.destino||''));return i<0?99:i};
+    const ordBod=g=>{const i=bodegasOrden().indexOf(normBodega(g.destino||''));return i<0?99:i};
     const bloqueHoja=(k,sin)=>{
       const lista=[...porHoja[k]].sort((a,b)=>ordBod(a)-ordBod(b)||String(a.numero).localeCompare(String(b.numero),'es',{numeric:true}));
       const hoja=sin?null:hojas.find(x=>hrClave(x)===k);
       const tp=hoja?hrTipo(hoja):'ruta', num=hoja?String(hoja.numero):String(k).split(':')[1];
       const dests=[...new Set(lista.map(g=>normBodega(g.destino||'Sin destino')))]
-        .sort((a,b)=>BODEGAS_ORDEN.indexOf(a)-BODEGAS_ORDEN.indexOf(b));
+        .sort((a,b)=>bodegasOrden().indexOf(a)-bodegasOrden().indexOf(b));
       const btnGen=sin?'':`<button class="btn mini sec" title="${hoja&&hoja.archivo?'Rehacer el documento con las guías que tiene hoy':'Crear el documento Word'}" onclick="event.preventDefault();event.stopPropagation();generarDocumento('${esc(tp)}','${esc(num)}')"><i class="fa-solid fa-file-word"></i> ${hoja&&hoja.archivo?'Regenerar':'Generar'}</button>`;
       const desc=(hoja&&hoja.archivo
         ?`<button class="btn mini" title="Descargar ${esc(hrLbl(tp))} N°${esc(num)}" onclick="event.preventDefault();event.stopPropagation();descargarArchivo('${esc(hoja.archivo)}','${esc(HR_TIPOS[tp].archivo)}_N${esc(num)}_${esc(fFecha(hoja.fecha_envio||hoja.fecha))}.docx')"><i class="fa-solid fa-download"></i> ${esc(hrLbl(tp))}</button>`
@@ -2343,26 +2359,29 @@ async function guardarMoverGuia(numero){
   const sel=document.getElementById('mv-dest-'+numero).value;
   const hojas=DB[ARCH.hr].data.hojas;
   let hNueva, creada=false;
-  if(sel==='__nueva__'){
+  // El selector manda "__nueva__:ruta" o "__nueva__:retiro" al crear, y "tipo:numero"
+  // al elegir uno existente. Comparar contra "__nueva__" pelado no calzaba nunca.
+  if(sel.startsWith('__nueva__')){
+    const tp=HR_TIPOS[sel.split(':')[1]]?sel.split(':')[1]:'ruta';
     const f=(document.getElementById('mv-fecha-'+numero).value||'').trim();
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(f)){toast('Indica la fecha de envío del viaje nuevo.');return}
-    // Una hoja por fecha de envío: el generador del .docx ubica la hoja POR FECHA, así que dos
-    // hojas el mismo día se pisarían al generar el documento.
-    const yaHay=hojas.find(h=>String(h.fecha_envio||h.fecha)===f);
-    if(yaHay){toast(`El ${fFecha(f)} ya tiene la Hoja N°${yaHay.numero}: elígela en la lista.`);return}
-    const conf=DB[ARCH.conf].data;
-    const num=+conf.proxima_hoja_ruta||(hojas.reduce((m,h)=>Math.max(m,+h.numero||0),0)+1);
-    hNueva={numero:num,fecha_envio:f,fecha:null,guias:[],destinos:[],estado:'borrador',archivo:null};
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(f)){toast('Indica la fecha del documento nuevo.');return}
+    // Un documento por fecha Y POR TIPO: el mismo día puede haber una Hoja de Ruta y un
+    // Resumen de Retiros, pero no dos del mismo tipo, o se pisarían al generar el .docx.
+    const yaHay=hojas.find(h=>String(h.fecha_envio||h.fecha)===f&&hrTipo(h)===tp);
+    if(yaHay){toast(`El ${fFecha(f)} ya tiene ${hrLbl(tp)} N°${yaHay.numero}: elígelo en la lista.`);return}
+    const conf=DB[ARCH.conf].data, clave=HR_TIPOS[tp].conf;
+    const num=+conf[clave]||(hojas.filter(h=>hrTipo(h)===tp).reduce((m,h)=>Math.max(m,+h.numero||0),0)+1);
+    hNueva={numero:num,tipo:tp,fecha_envio:f,fecha:null,guias:[],destinos:[],estado:'borrador',archivo:null};
     hojas.push(hNueva);
-    conf.proxima_hoja_ruta=num+1;
+    conf[clave]=num+1;
     creada=true;
   }else{
-    hNueva=hojas.find(h=>String(h.numero)===String(sel));
-    if(!hNueva){toast('No se encontró la hoja de destino.');return}
-    if((hNueva.estado||'borrador')!=='borrador'){toast(`La hoja N°${sel} está cerrada.`);return}
+    hNueva=hojas.find(h=>hrClave(h)===sel);
+    if(!hNueva){toast('No se encontró el documento de destino.');return}
+    if((hNueva.estado||'borrador')!=='borrador'){toast(`${hrLbl(hrTipo(hNueva))} N°${hNueva.numero} está cerrado.`);return}
   }
-  const destNum=hNueva.numero;
-  const hVieja=hojas.find(h=>String(h.numero)===String(g.hoja_ruta));
+  const destNum=hNueva.numero, destTipo=hrTipo(hNueva), destLbl=hrLbl(destTipo);
+  const hVieja=hojaDeGuia(g);
   velo(true,'Moviendo guía…');
   try{
     let aviso='';
@@ -2372,25 +2391,26 @@ async function guardarMoverGuia(numero){
     }
     hNueva.guias=[...new Set([...(hNueva.guias||[]),String(numero)])].sort((a,b)=>(+a)-(+b));
     hNueva.archivo=null;
-    g.hoja_ruta=+hNueva.numero;
+    g.hoja_ruta=+hNueva.numero;g.hoja_tipo=destTipo;
     g.fecha_envio=hNueva.fecha_envio||hNueva.fecha||g.fecha_envio;
     const gs=DB[ARCH.guias].data.guias;
     const dests=h=>[...new Set((h.guias||[]).map(n=>{const x=gs.find(y=>String(y.numero)===String(n));return x?normBodega(x.destino||''):null}).filter(Boolean))]
-      .sort((a,b)=>BODEGAS_ORDEN.indexOf(a)-BODEGAS_ORDEN.indexOf(b));
+      .sort((a,b)=>bodegasOrden().indexOf(a)-bodegasOrden().indexOf(b));
     hNueva.destinos=dests(hNueva);
     if(hVieja)hVieja.destinos=dests(hVieja);
     if(hVieja&&!hVieja.guias.length){
+      const tpV=hrTipo(hVieja), claveV=HR_TIPOS[tpV].conf;
       hojas.splice(hojas.indexOf(hVieja),1);
       const conf=DB[ARCH.conf].data;
-      const maxN=hojas.reduce((m,h)=>Math.max(m,+h.numero||0),0);
-      conf.proxima_hoja_ruta=maxN+1;
-      await guardarArchivo(ARCH.conf,`Hoja de ruta N°${hVieja.numero} eliminada por quedar vacía`);
-      aviso=` · la N°${hVieja.numero} quedó vacía y se eliminó (próxima: ${conf.proxima_hoja_ruta})`;
+      const maxN=hojas.filter(h=>hrTipo(h)===tpV).reduce((m,h)=>Math.max(m,+h.numero||0),0);
+      conf[claveV]=maxN+1;
+      await guardarArchivo(ARCH.conf,`${hrLbl(tpV)} N°${hVieja.numero} eliminado por quedar vacío`);
+      aviso=` · ${hrLbl(tpV)} N°${hVieja.numero} quedó vacío y se eliminó (próximo: ${conf[claveV]})`;
     }
-    if(creada)await guardarArchivo(ARCH.conf,`Hoja de ruta N°${destNum} creada (envío ${hNueva.fecha_envio})`);
-    await guardarArchivo(ARCH.guias,`Guía N°${numero} movida a la hoja N°${destNum}`);
-    await guardarArchivo(ARCH.hr,`Hoja N°${destNum}: entra la guía N°${numero}`);
-    toast(`Guía N°${numero} ${creada?`en la NUEVA hoja N°${destNum} (envío ${fFecha(hNueva.fecha_envio)})`:`movida al viaje N°${destNum}`}${aviso}. Documento de la hoja pendiente de regenerar.`);
+    if(creada)await guardarArchivo(ARCH.conf,`${destLbl} N°${destNum} creado (${hNueva.fecha_envio})`);
+    await guardarArchivo(ARCH.guias,`Guía N°${numero} movida a ${destLbl} N°${destNum}`);
+    await guardarArchivo(ARCH.hr,`${destLbl} N°${destNum}: entra la guía N°${numero}`);
+    toast(`Guía N°${numero} ${creada?`en el NUEVO ${destLbl} N°${destNum} (${fFecha(hNueva.fecha_envio)})`:`movida a ${destLbl} N°${destNum}`}${aviso}. Documento pendiente de regenerar.`);
     render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
@@ -2988,7 +3008,7 @@ async function leerGuiaPDF(inp){
     const oc=DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===String(g.oc));
     hgResolverContraOC(g,oc);
     g.destino=normBodega(g.destino_texto||'');
-    if(!BODEGAS_ORDEN.includes(g.destino)){g.avisos.push(`Destino no reconocido: "${g.destino_texto||''}"`);g.destino=''}
+    if(!bodegasOrden().includes(g.destino)){g.avisos.push(`Destino no reconocido: "${g.destino_texto||''}"`);g.destino=''}
     if(!oc)g.avisos.push(`La OC ${g.oc||'(sin folio)'} no está en el sistema: la guía quedará marcada como pendiente`);
     _gLeida={g,oc,file,hash:h};
     velo(false);render();
@@ -3021,7 +3041,7 @@ function panelGuiaLeida(){
       <div><label>Fecha</label><input type="date" value="${esc(g.fecha||'')}" onchange="glCab('fecha',this.value)"></div>
       <div><label>Folio OC</label><input value="${esc(g.oc||'')}" onchange="glCab('oc',this.value)"></div>
       <div><label>Destino</label><select onchange="glCab('destino',this.value)"><option value="">— elegir —</option>
-        ${BODEGAS_ORDEN.map(b=>`<option value="${esc(b)}"${g.destino===b?' selected':''}>${esc(b)}</option>`).join('')}</select></div>
+        ${bodegasOrden().map(b=>`<option value="${esc(b)}"${g.destino===b?' selected':''}>${esc(b)}</option>`).join('')}</select></div>
       <div><label>Chofer</label><input value="${esc(g.chofer||'')}" onchange="glCab('chofer',this.value)"></div>
       <div><label>Patente</label><input value="${esc(g.patente||'')}" onchange="glCab('patente',this.value)"></div>
     </div>
@@ -3096,10 +3116,6 @@ function formLeerGuia(){
 }
 
 const HR_PLANTILLA='documentos/plantillas/base_hoja_ruta.docx';
-const HR_BODEGA_TITULO={'Rancagua':'BODEGA CENTRAL - RANCAGUA',
-  'San Francisco de Mostazal':'BODEGA SAN FRANCISCO - SAN FRANCISCO DE MOSTAZAL',
-  'El Peumo':'BODEGA EL PEUMO - LA CALERA','Longovilo':'BODEGA LONGOVILO - LONGOVILO',
-  'Casablanca':'PLANTA DE ALIMENTOS - CASABLANCA','Doñihue':'PLANTA DE ALIMENTOS - DOÑIHUE'};
 /* Formato aprobado por Jefe el 04-08-2026. Los margenes viven en el sectPr de la
    plantilla base: si se cambian alli, HR_MARGEN_LAT tiene que seguirlos o la tabla
    deja de calzar con el ancho util. */
@@ -3182,7 +3198,7 @@ function hrCant(v,u){
 function hrTabla(dest,gs){
   const filas=[
     '<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>'
-      +hrCelda(HR_BODEGA_TITULO[dest]||('BODEGA '+dest.toUpperCase()),
+      +hrCelda(bodegaTitulo(dest),
                HR_COLS.reduce((a,b)=>a+b,0),null,true,26,4,90,true)+'</w:tr>',
     '<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>'
       +hrCelda('N° Guía',HR_COLS[0],null,true,20,null,20,true)
@@ -3242,8 +3258,8 @@ async function generarDocumento(tipo,numero){
       confirmar:'Regenerar igual',peligro:true}))return;
   const fecha=hoja.fecha_envio||hoja.fecha;
   if(!fecha){toast('La hoja no tiene fecha de envío.');return}
-  const destinos=BODEGAS_ORDEN.filter(d=>guias.some(g=>normBodega(g.destino||'')===d));
-  const otros=[...new Set(guias.map(g=>normBodega(g.destino||'')).filter(d=>!BODEGAS_ORDEN.includes(d)))];
+  const destinos=bodegasOrden().filter(d=>guias.some(g=>normBodega(g.destino||'')===d));
+  const otros=[...new Set(guias.map(g=>normBodega(g.destino||'')).filter(d=>!bodegasOrden().includes(d)))];
   if(otros.length){toast('Destino desconocido en las guías: '+otros.join(', ')+'. Revísalo antes de generar.');return}
   velo(true,'Generando la hoja de ruta…');
   try{
