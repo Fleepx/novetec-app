@@ -1884,6 +1884,8 @@ function rCot(){
         if(conBodega)html+=`<div class="small" style="text-align:right;font-weight:700;margin-top:10px;padding-top:8px;border-top:1px solid var(--line)">Neto: ${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</div>`;
         return html;
       })()}
+      ${(()=>{const x=cotFechaSospechosa(c);return x
+        ?`<div class="chip ambar" style="display:block;white-space:normal;margin-top:12px" title="Los folios de Facto suben con la fecha. Si un folio mayor tiene fecha anterior, casi siempre es un documento duplicado que arrastró la fecha vieja.">Fecha sospechosa: en Facto los folios suben con la fecha, pero la ${esc(c.folio)} (${fFecha(c.fecha)}) no calza con la ${esc(x.folio)} (${fFecha(x.fecha)}), que es su vecina de folio. Si el documento se duplicó de otro, corrígelo con el botón Recotización.</div>`:''})()}
       ${c.notas?`<p class="small muted" style="margin-top:12px">${esc(c.notas)}</p>`:''}
       ${c.archivo?`<p class="small" style="margin-top:8px"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(c.archivo)}')"><i class="fa-solid fa-download" style="font-size:12px"></i> Descargar documento</a></p>`:''}
       <div class="acciones">
@@ -1892,6 +1894,8 @@ function rCot(){
         <button class="btn mini sec" onclick="cerrarCot('${esc(c.id)}')" title="La excluye de las búsquedas de match de nuevas OC">Cerrar cotización</button>
         <button class="btn mini peligro" onclick="rechazarCot('${esc(c.id)}')">Cliente la rechazó</button>`:''}
       ${c.estado==='cerrada'?`<button class="btn mini sec" onclick="reabrirCot('${esc(c.id)}')">Reabrir</button>`:''}
+      <button class="btn mini sec" onclick="panelRecot('${esc(c.id)}')" title="Corregir la fecha y declarar a qué cotización reemplaza"><i class="fa-solid fa-rotate"></i> Recotización</button>
+      </div><div id="rc-${esc(c.id)}"></div><div class="acciones">
       ${c.estado==='rechazada'?`<button class="btn mini sec" onclick="deshacerRechazoCot('${esc(c.id)}')">Deshacer el rechazo</button>`:''}
       <button class="btn mini peligro" onclick="borrarCot('${esc(c.id)}')">Eliminar</button>
       </div>
@@ -1942,6 +1946,28 @@ async function deshacerRechazoCot(id){
   catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
+/* Los folios de Facto suben junto con la fecha, sin excepción. Si una cotización está
+   fechada antes que la de folio inmediatamente anterior, o después que la del folio
+   siguiente, algo pasó: casi siempre un documento duplicado que se quedó con la fecha del
+   original. Detectarlo importa porque la ventana temporal del match usa la fecha como
+   puerta, y una fecha vieja deja fuera de juego a una cotización vigente.
+   Se compara solo con los VECINOS inmediatos de folio, no con toda la lista: comparar
+   contra todas hace que una sola fecha mala marque como sospechosas a decenas de fichas
+   sanas, y un aviso que aparece en todas partes deja de mirarse.
+   Solo aplica a cotizaciones con folio numérico: los consolidados XLSX no tienen folio. */
+function cotFechaSospechosa(c){
+  const fol=x=>/^\d+$/.test(String(x.folio||''))?+x.folio:null;
+  const f=fol(c);
+  if(!f||!c.fecha||c.reemplaza_a)return null;      // ya declarada como recotización: sin ruido
+  const otras=DB[ARCH.cot].data.cotizaciones.filter(x=>x!==c&&fol(x)&&x.fecha);
+  let ant=null,sig=null;
+  otras.forEach(x=>{const g=fol(x);
+    if(g<f&&(!ant||g>fol(ant)))ant=x;
+    if(g>f&&(!sig||g<fol(sig)))sig=x;});
+  if(ant&&String(c.fecha)<String(ant.fecha))return ant;
+  if(sig&&String(c.fecha)>String(sig.fecha))return sig;
+  return null;
+}
 async function cerrarCot(id){
   const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id);if(!c)return;
   if(!await confirmar({titulo:`Cerrar la cotización ${c.folio}`,
@@ -1950,6 +1976,75 @@ async function cerrarCot(id){
   c.estado='cerrada';velo(true);
   try{await guardarArchivo(ARCH.cot,`Cotización ${c.folio} cerrada`);render()}
   catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+/* ══════ RECOTIZACIÓN ══════
+   El vendedor rehace una cotización DUPLICANDO el documento anterior en Facto: cambia el
+   correlativo y los precios, pero se le queda la FECHA vieja (caso COT 831, folio posterior
+   al 829 del 21-07 y fechada 10-06). Eso no se arregla borrando y recargando, porque el
+   error viene impreso en el PDF: hay que poder corregirlo en el sistema.
+   Y la fecha no es cosmética: la ventana temporal del match (mismo mes o el anterior) la usa
+   como puerta, así que una fecha vieja deja la cotización vigente fuera de las OC nuevas.
+   Al declarar el reemplazo se cierra la anterior, porque si compiten las dos ninguna
+   empareja sola: mismo código con precio distinto nunca es match automático. */
+function panelRecot(id){
+  const C=DB[ARCH.cot].data.cotizaciones, c=C.find(x=>x.id===id); if(!c)return;
+  const box=document.getElementById('rc-'+id);
+  if(box.innerHTML){box.innerHTML='';return}
+  const cods=new Set(c.items.map(i=>i.codigo).filter(Boolean));
+  // Candidatas: anteriores y con al menos un producto en común. Es lo que hace una
+  // recotización; ofrecer la lista completa solo invita a equivocarse.
+  const cand=C.filter(x=>x.id!==id&&String(x.fecha||'')<=String(c.fecha||'9999')
+      &&x.items.some(i=>cods.has(i.codigo)))
+    .sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
+  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:10px">
+    <b>Recotización de ${esc(c.folio)}</b>
+    <p class="small muted">Cuando el vendedor rehace una cotización duplicando el documento, se arrastra la fecha vieja. Corrígela aquí: la fecha decide con qué órdenes de compra puede emparejar.</p>
+    <label>Fecha real de emisión</label>
+    <input type="date" id="rc-f-${esc(id)}" value="${esc(c.fecha||'')}">
+    <label>Reemplaza a</label>
+    <select id="rc-r-${esc(id)}">
+      <option value="">— no reemplaza a ninguna —</option>
+      ${cand.map(x=>`<option value="${esc(x.id)}"${c.reemplaza_a===x.id?' selected':''}>COT ${esc(x.folio)} · ${fFecha(x.fecha)} · ${esc(x.estado)} · ${x.items.length} línea(s)</option>`).join('')}
+    </select>
+    ${cand.length?'<p class="small muted">Al guardar, la cotización reemplazada se cierra. Se puede reabrir cuando quieras.</p>':'<p class="small muted">No hay cotizaciones anteriores con productos en común.</p>'}
+    <div class="acciones"><button class="btn mini" onclick="guardarRecot('${esc(id)}')">Guardar</button>
+    <button class="btn mini sec" onclick="panelRecot('${esc(id)}')">Cancelar</button></div>
+  </div>`;
+}
+async function guardarRecot(id){
+  const C=DB[ARCH.cot].data.cotizaciones, c=C.find(x=>x.id===id); if(!c)return;
+  const f=(document.getElementById('rc-f-'+id).value||'').trim();
+  const rid=document.getElementById('rc-r-'+id).value;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(f)){toast('Indica la fecha real de emisión.');return}
+  const vieja=rid?C.find(x=>x.id===rid):null;
+  if(rid&&!vieja){toast('No encontré la cotización reemplazada.');return}
+  if(vieja&&String(vieja.fecha||'')>f){toast(`La ${vieja.folio} es del ${fFecha(vieja.fecha)}: una recotización no puede ser anterior a la que reemplaza.`);return}
+  const cambioF=f!==c.fecha;
+  if(!await confirmar({titulo:`Recotización ${c.folio}`,
+    texto:`${cambioF?`La fecha pasa de ${fFecha(c.fecha)} a ${fFecha(f)}, lo que cambia con qué OC puede emparejar.`:'La fecha no cambia.'}${vieja?`\nLa cotización ${vieja.folio} quedará cerrada.`:''}`,
+    confirmar:'Guardar'}))return;
+  velo(true,'Guardando…');
+  try{
+    if(cambioF){
+      c.notas=(c.notas?c.notas+' ':'')+`Fecha corregida de ${c.fecha} a ${f} el ${hoyISO()}: el documento se duplicó de una cotización anterior y arrastró la fecha vieja.`;
+      c.fecha=f;
+    }
+    // Soltar un reemplazo anterior si se cambió de opinión
+    if(c.reemplaza_a&&c.reemplaza_a!==rid){
+      const p=C.find(x=>x.id===c.reemplaza_a); if(p)delete p.reemplazada_por;
+    }
+    if(vieja){
+      c.reemplaza_a=vieja.id; vieja.reemplazada_por=c.id;
+      if(vieja.estado==='abierta'){
+        vieja.estado='cerrada';
+        vieja.notas=(vieja.notas?vieja.notas+' ':'')+`Cerrada el ${hoyISO()}: recotizada en la ${c.folio}.`;
+      }
+    } else delete c.reemplaza_a;
+    await guardarArchivo(ARCH.cot,`Recotización: ${c.folio}${cambioF?` con fecha ${f}`:''}${vieja?` reemplaza a ${vieja.folio}`:''}`);
+    toast(`${c.folio} actualizada${vieja?`; ${vieja.folio} cerrada`:''}.`);
+    render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
 async function reabrirCot(id){
