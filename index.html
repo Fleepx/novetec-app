@@ -302,7 +302,7 @@ const ESTRUCTURAS_BASE={'data/cotizaciones.json':{cotizaciones:[]},'data/ordenes
  'data/adjudicaciones.json':{registros:[],descartes:[]},
  'data/bodegas.json':{bodegas:[],excepcionales:[]},
  'data/archivos.json':{archivos:[]},
- 'data/config.json':{empresa:'Novetec SPA',semaforo:{rojo_dias:5,amarillo_dias:10},proxima_hoja_ruta:1,resumen_ocultos:[]}};
+ 'data/config.json':{empresa:'Novetec SPA',semaforo:{rojo_dias:5,amarillo_dias:10},proxima_hoja_ruta:1,proximo_resumen_retiro:1,resumen_ocultos:[]}};
 /* Normalización defensiva: garantiza la estructura mínima de cada documento apenas se carga,
    para que un registro incompleto (cargado a mano o por una versión vieja) NUNCA tumbe una
    vista. Motivo real: el 24-07-2026 la pestaña de guías se cayó porque tres guías se cargaron
@@ -321,8 +321,10 @@ function normalizarDatos(p,d){
   if(p===ARCH.bod){arr('bodegas');arr('excepcionales')}
   if(p===ARCH.guias){arr('guias');d.guias.forEach(g=>{g.items=g.items||[];
     g.oc=g.oc||g.folio_oc||'';g.folio_oc=g.folio_oc||g.oc||'';g.discrepancias=g.discrepancias||[];
+    if(g.hoja_ruta)g.hoja_tipo=HR_TIPOS[g.hoja_tipo]?g.hoja_tipo:'ruta';
     g.items.forEach(i=>{i.producto=i.producto||'';i.cantidad=+i.cantidad||0})})}
-  if(p===ARCH.hr){arr('hojas');d.hojas.forEach(h=>{h.guias=h.guias||[];h.destinos=h.destinos||[]})}
+  if(p===ARCH.hr){arr('hojas');d.hojas.forEach(h=>{h.guias=h.guias||[];h.destinos=h.destinos||[];
+    h.tipo=HR_TIPOS[h.tipo]?h.tipo:'ruta'})}   // todo lo anterior a 08-2026 es hoja de ruta
   if(p===ARCH.inv){arr('productos');arr('movimientos')}
   if(p===ARCH.prod){arr('productos');d.productos.forEach(x=>{x.alias=x.alias||[];x.codigos_cliente=x.codigos_cliente||{}})}
   if(p===ARCH.psap){arr('registros')}
@@ -808,6 +810,26 @@ function render(){
 /* Bodegas del cliente: orden fijo de presentación y mapeo de centros SAP */
 /* Cuatro bodegas principales + dos destinos EXCEPCIONALES (Jefe, 24-07-2026): San Pablo y
    Lo Miranda son entregas puntuales, válidas, y van después de las principales. */
+/* DOS documentos con el mismo formato y correlativos separados (Jefe, 04-08-2026):
+   'ruta'   = Hoja de Ruta      -> salimos nosotros a entregar
+   'retiro' = Resumen de Retiros -> el cliente viene a buscar la mercaderia
+   Una guia pertenece a UNO de los dos, nunca a ambos: o la llevamos o la retiran.
+   El tipo vive en la hoja (h.tipo) y en la guia (g.hoja_tipo); los numeros se repiten
+   entre tipos, asi que la clave de agrupacion SIEMPRE es tipo+numero, nunca el numero solo. */
+const HR_TIPOS={
+  ruta  :{lbl:'Hoja de Ruta',       titulo:'GUÍA DE RUTA N°',    archivo:'Guia_de_Ruta',
+          carpeta:'hojas_ruta',     conf:'proxima_hoja_ruta'},
+  retiro:{lbl:'Resumen de Retiros', titulo:'RESUMEN DE RETIROS N°', archivo:'Resumen_de_Retiros',
+          carpeta:'resumenes_retiro', conf:'proximo_resumen_retiro'}};
+const hrTipo=o=>(o&&HR_TIPOS[o.tipo]?o.tipo:'ruta');
+const hrTipoGuia=g=>(g&&HR_TIPOS[g.hoja_tipo]?g.hoja_tipo:'ruta');
+const hrClave=h=>hrTipo(h)+':'+h.numero;
+const hrClaveGuia=g=>g.hoja_ruta?hrTipoGuia(g)+':'+g.hoja_ruta:'__sin__';
+const hrLbl=t=>(HR_TIPOS[t]||HR_TIPOS.ruta).lbl;
+function hojaDeGuia(g){
+  if(!g||!g.hoja_ruta)return null;
+  return DB[ARCH.hr].data.hojas.find(h=>String(h.numero)===String(g.hoja_ruta)&&hrTipo(h)===hrTipoGuia(g))||null;
+}
 const BODEGAS_ORDEN=['Rancagua','San Francisco de Mostazal','El Peumo','Longovilo','San Pablo','Lo Miranda'];
 const BODEGAS_EXCEPCION=['San Pablo','Lo Miranda'];
 const CENTRO_BODEGA={'C394':'Rancagua','C001':'Rancagua','C011':'Rancagua','C395':'San Francisco de Mostazal','097':'Longovilo','7187':'El Peumo'};
@@ -2059,11 +2081,11 @@ async function borrarOC(fe){
 }
 async function borrarGuia(numero){
   const arr=DB[ARCH.guias].data.guias;const g=arr.find(x=>x.numero===numero);if(!g)return;
-  const hoja=DB[ARCH.hr].data.hojas.find(x=>String(x.numero)===String(g.hoja_ruta));
+  const hoja=hojaDeGuia(g);
   let msg=`¿Eliminar la guía N°${numero}?\n\nSe devolverán sus cantidades al inventario y al pendiente de la OC ${g.folio_oc}.`;
   if(hoja){
     const quedan=(hoja.guias||[]).filter(n=>String(n)!==String(numero)).length;
-    msg+=`\n\nSe quitará de la Hoja de Ruta N°${hoja.numero} (envío ${fFecha(hoja.fecha_envio||hoja.fecha)}), que quedará con ${quedan} guía(s).`;
+    msg+=`\n\nSe quitará de ${hrLbl(hrTipo(hoja))} N°${hoja.numero} (envío ${fFecha(hoja.fecha_envio||hoja.fecha)}), que quedará con ${quedan} guía(s).`;
     msg+=`\nSi la vuelves a ingresar con esa misma fecha de envío, se reincorpora a la misma hoja y conserva el N°${hoja.numero}.`;
   }
   if(!await confirmar({titulo:`Eliminar la guía N°${numero}`,texto:msg,confirmar:'Eliminar',peligro:true}))return;
@@ -2097,7 +2119,7 @@ async function borrarGuia(numero){
     await guardarArchivo(ARCH.guias,`Guía N°${numero} eliminada`);
     if(o)await guardarArchivo(ARCH.oc,`OC ${g.folio_oc}: reverso de guía N°${numero}`);
     await guardarArchivo(ARCH.inv,`Inventario: reverso de guía N°${numero}`);
-    if(hoja)await guardarArchivo(ARCH.hr,`Hoja de Ruta N°${hoja.numero}: quitada la guía N°${numero}, pendiente de regenerar`);
+    if(hoja)await guardarArchivo(ARCH.hr,`${hrLbl(hrTipo(hoja))} N°${hoja.numero}: quitada la guía N°${numero}, pendiente de regenerar`);
     toast(`Guía N°${numero} eliminada y cantidades devueltas`);render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
@@ -2186,25 +2208,27 @@ function rGuias(){
        anidada adentro tal como ya funcionaba. */
     const hojas=DB[ARCH.hr].data.hojas;
     const porHoja={};
-    gs.forEach(g=>{const k=g.hoja_ruta?String(g.hoja_ruta):'__sin__';
+    gs.forEach(g=>{const k=hrClaveGuia(g);
       (porHoja[k]=porHoja[k]||[]).push(g)});
-    const numsReales=Object.keys(porHoja).filter(k=>k!=='__sin__').sort((a,b)=>(+b)-(+a));
+    const numReal=k=>+String(k).split(':')[1]||0;
+    const numsReales=Object.keys(porHoja).filter(k=>k!=='__sin__').sort((a,b)=>numReal(b)-numReal(a));
     const ordBod=g=>{const i=BODEGAS_ORDEN.indexOf(normBodega(g.destino||''));return i<0?99:i};
     const bloqueHoja=(k,sin)=>{
       const lista=[...porHoja[k]].sort((a,b)=>ordBod(a)-ordBod(b)||String(a.numero).localeCompare(String(b.numero),'es',{numeric:true}));
-      const hoja=sin?null:hojas.find(x=>String(x.numero)===k);
+      const hoja=sin?null:hojas.find(x=>hrClave(x)===k);
+      const tp=hoja?hrTipo(hoja):'ruta', num=hoja?String(hoja.numero):String(k).split(':')[1];
       const dests=[...new Set(lista.map(g=>normBodega(g.destino||'Sin destino')))]
         .sort((a,b)=>BODEGAS_ORDEN.indexOf(a)-BODEGAS_ORDEN.indexOf(b));
-      const btnGen=sin?'':`<button class="btn mini sec" title="${hoja&&hoja.archivo?'Rehacer el documento con las guías que tiene hoy la hoja':'Crear el documento Word de la hoja de ruta'}" onclick="event.preventDefault();event.stopPropagation();generarHojaRuta('${esc(k)}')"><i class="fa-solid fa-file-word"></i> ${hoja&&hoja.archivo?'Regenerar':'Generar'}</button>`;
+      const btnGen=sin?'':`<button class="btn mini sec" title="${hoja&&hoja.archivo?'Rehacer el documento con las guías que tiene hoy':'Crear el documento Word'}" onclick="event.preventDefault();event.stopPropagation();generarDocumento('${esc(tp)}','${esc(num)}')"><i class="fa-solid fa-file-word"></i> ${hoja&&hoja.archivo?'Regenerar':'Generar'}</button>`;
       const desc=(hoja&&hoja.archivo
-        ?`<button class="btn mini" title="Descargar la hoja de ruta N°${esc(k)}" onclick="event.preventDefault();event.stopPropagation();descargarArchivo('${esc(hoja.archivo)}','Guia_de_Ruta_N${esc(k)}_${esc(fFecha(hoja.fecha_envio||hoja.fecha))}.docx')"><i class="fa-solid fa-download"></i> Hoja de ruta</button>`
-        :(sin?'':'<span class="chip ambar" title="La hoja de ruta aún no se ha generado">sin archivo</span>'))+btnGen;
+        ?`<button class="btn mini" title="Descargar ${esc(hrLbl(tp))} N°${esc(num)}" onclick="event.preventDefault();event.stopPropagation();descargarArchivo('${esc(hoja.archivo)}','${esc(HR_TIPOS[tp].archivo)}_N${esc(num)}_${esc(fFecha(hoja.fecha_envio||hoja.fecha))}.docx')"><i class="fa-solid fa-download"></i> ${esc(hrLbl(tp))}</button>`
+        :(sin?'':'<span class="chip ambar" title="El documento aún no se ha generado">sin archivo</span>'))+btnGen;
       const he=hojaEstado(lista);
       const nConf=lista.filter(g=>g.conforme).length;
       const chipEstado=sin?'':`<span class="chip ${ESTADO_COLOR[he]}" title="${he==='parcial'?`${nConf} de ${lista.length} guías confirmadas`:(he==='despachada'?'Todas las guías confirmadas':'Ninguna guía confirmada todavía')}">${HOJA_LBL[he]}</span>`;
       const titulo=sin
-        ?'<span class="chip ambar">Sin hoja de ruta</span>'
-        :`<b>Hoja de Ruta N°${esc(k)}</b>${chipEstado}${hoja?` <span class="chip">Envío ${fFecha(hoja.fecha_envio||hoja.fecha)}</span>`:''}`;
+        ?'<span class="chip ambar">Sin documento asignado</span>'
+        :`<b>${esc(hrLbl(tp))} N°${esc(num)}</b>${tp==='retiro'?'<span class="chip" title="La mercadería la retira el cliente">retiro</span>':''}${chipEstado}${hoja?` <span class="chip">Envío ${fFecha(hoja.fecha_envio||hoja.fecha)}</span>`:''}`;
       const key='hoja:'+k;
       return{lista,fecha:sin?null:(hoja?(hoja.fecha_envio||hoja.fecha):null),
         html:`<details class="acc-fecha ${sin?'':'hr-'+ESTADO_COLOR[he]}" data-k="${esc(key)}"${sin||fichaAbierta(key)?' open':''} ontoggle="recordarFicha(this)"><summary>${titulo}<span class="muted small">${esc(dests.join(' · '))}</span><span class="cnt">${lista.length} guía(s)</span>${desc}</summary><div class="cuerpo">
@@ -2243,7 +2267,7 @@ function tarjetaGuia(g){
       <span class="chip"><i class="fa-solid fa-warehouse" style="font-size:11px"></i> ${esc(normBodega(g.destino||'Sin destino'))}</span>
       <span class="chip" title="Fecha de la guía">${fFecha(g.fecha)}</span>
       <span class="chip ink">OC ${esc(g.oc||g.folio_oc)}</span>
-      ${g.hoja_ruta?'':'<span class="chip ambar">Sin hoja de ruta</span>'}
+      ${g.hoja_ruta?'':'<span class="chip ambar">Sin documento asignado</span>'}
       <button class="btn mini peligro" style="margin-left:auto" onclick="borrarGuia('${esc(g.numero)}')">Eliminar</button>
     </div>
     <table class="tprod" style="margin-top:12px;min-width:380px"><colgroup><col><col style="width:11ch"></colgroup>
@@ -2282,22 +2306,23 @@ function moverGuia(numero){
   if(!g)return;
   const box=document.getElementById('mv-'+numero);
   if(box.innerHTML){box.innerHTML='';return}
-  const hojas=DB[ARCH.hr].data.hojas.filter(h=>String(h.numero)!==String(g.hoja_ruta));
+  const hojas=DB[ARCH.hr].data.hojas.filter(h=>hrClave(h)!==hrClaveGuia(g));
   const abiertas=hojas.filter(h=>(h.estado||'borrador')==='borrador')
-    .sort((a,b)=>(+b.numero)-(+a.numero));
+    .sort((a,b)=>hrTipo(a).localeCompare(hrTipo(b))||(+b.numero)-(+a.numero));
 
   box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:10px">
-    <b>Mover la guía N°${esc(numero)} a otro viaje</b>
-    <p class="small muted">La guía tomará la fecha de envío del viaje de destino. Las hojas afectadas quedarán "sin archivo" hasta regenerarlas, porque el documento impreso deja de reflejar el viaje.</p>
-    <label>Viaje de destino</label>
-    <select id="mv-dest-${esc(numero)}" onchange="document.getElementById('mv-nueva-${esc(numero)}').style.display=this.value==='__nueva__'?'block':'none'">
-      ${abiertas.map(h=>`<option value="${esc(String(h.numero))}">Hoja de Ruta N°${esc(String(h.numero))} · envío ${fFecha(h.fecha_envio||h.fecha)} · ${(h.guias||[]).length} guía(s)</option>`).join('')}
-      <option value="__nueva__">Nueva ruta…</option>
+    <b>Mover la guía N°${esc(numero)} a otro documento</b>
+    <p class="small muted">Puede ir a una Hoja de Ruta (la entregamos nosotros) o a un Resumen de Retiros (la retira el cliente). La guía tomará la fecha del documento de destino, y los documentos afectados quedarán "sin archivo" hasta regenerarlos.</p>
+    <label>Documento de destino</label>
+    <select id="mv-dest-${esc(numero)}" onchange="document.getElementById('mv-nueva-${esc(numero)}').style.display=this.value.startsWith('__nueva__')?'block':'none'">
+      ${abiertas.map(h=>`<option value="${esc(hrClave(h))}">${esc(hrLbl(hrTipo(h)))} N°${esc(String(h.numero))} · ${fFecha(h.fecha_envio||h.fecha)} · ${(h.guias||[]).length} guía(s)</option>`).join('')}
+      <option value="__nueva__:ruta">Nueva Hoja de Ruta…</option>
+      <option value="__nueva__:retiro">Nuevo Resumen de Retiros…</option>
     </select>
     <div id="mv-nueva-${esc(numero)}" style="display:none">
-      <label>Fecha de envío del viaje nuevo</label>
+      <label>Fecha del documento nuevo</label>
       <input type="date" id="mv-fecha-${esc(numero)}" value="${hoyISO()}">
-      <p class="small muted">Se creará la Hoja de Ruta N°${esc(String(DB[ARCH.conf].data.proxima_hoja_ruta||1))} con esa fecha.</p>
+      <p class="small muted">Hoja de Ruta N°${esc(String(DB[ARCH.conf].data.proxima_hoja_ruta||1))} · Resumen de Retiros N°${esc(String(DB[ARCH.conf].data.proximo_resumen_retiro||1))}, según lo que elijas arriba.</p>
     </div>
     <div class="acciones"><button class="btn mini" onclick="guardarMoverGuia('${esc(numero)}')">Mover</button><button class="btn mini sec" onclick="moverGuia('${esc(numero)}')">Cancelar</button></div>
   </div>`;
@@ -2886,32 +2911,33 @@ const HR_ESPACIO=`<w:p><w:pPr><w:keepNext/><w:spacing w:before="0" w:after="0"/>
 /* Cabecera: titulo y fecha centrados en la hoja, encuadrados dentro del mismo alto que
    el logo (2,94 cm). El logo va anclado al margen, no en offset absoluto, asi queda
    pegado arriba y a la derecha aunque despues cambien los margenes. */
-function hrCabecera(numero,fechaISO){
+function hrCabecera(numero,fechaISO,tipo){
   const banda=Math.round(2.94*566.929), lt=Math.round(28*20*1.15), lf=Math.round(12*20*1.15);
   const sobra=Math.max(0,banda-lt-lf), arriba=Math.floor(sobra/2), abajo=sobra-arriba;
   return hrP(`<w:r><w:rPr><w:noProof/></w:rPr>[[DRAWING]]</w:r>`
-      +hrRun(`GUÍA DE RUTA N° ${numero}`,56,true),
+      +hrRun(`${(HR_TIPOS[tipo]||HR_TIPOS.ruta).titulo} ${numero}`,56,true),
       `<w:pPr><w:keepNext/><w:jc w:val="center"/><w:spacing w:before="${arriba}" w:after="0"/></w:pPr>`)
     +hrP(hrRun('Fecha: '+fFecha(fechaISO),24),
       `<w:pPr><w:keepNext/><w:jc w:val="center"/><w:spacing w:before="0" w:after="${abajo}"/></w:pPr>`);
 }
-function hrCuerpo(numero,fechaISO,guias,destinos){
-  return hrCabecera(numero,fechaISO)+destinos.map((dest,idx)=>{
+function hrCuerpo(numero,fechaISO,guias,destinos,tipo){
+  return hrCabecera(numero,fechaISO,tipo)+destinos.map((dest,idx)=>{
     const gs=guias.filter(g=>normBodega(g.destino||'')===dest)
       .sort((a,b)=>String(a.numero).localeCompare(String(b.numero),'es',{numeric:true}));
     return (idx?HR_ESPACIO:'')+hrTabla(dest,gs);
   }).join('');
 }
-async function generarHojaRuta(numero){
-  const hoja=DB[ARCH.hr].data.hojas.find(h=>String(h.numero)===String(numero));
-  if(!hoja){toast('No encontré la Hoja de Ruta N°'+numero);return}
-  const guias=DB[ARCH.guias].data.guias.filter(g=>String(g.hoja_ruta)===String(numero));
-  if(!guias.length){toast('La Hoja de Ruta N°'+numero+' no tiene guías asociadas.');return}
+async function generarDocumento(tipo,numero){
+  const tp=HR_TIPOS[tipo]?tipo:'ruta', T=HR_TIPOS[tp], lbl=T.lbl;
+  const hoja=DB[ARCH.hr].data.hojas.find(h=>String(h.numero)===String(numero)&&hrTipo(h)===tp);
+  if(!hoja){toast(`No encontré ${lbl} N°${numero}`);return}
+  const guias=DB[ARCH.guias].data.guias.filter(g=>String(g.hoja_ruta)===String(numero)&&hrTipoGuia(g)===tp);
+  if(!guias.length){toast(`${lbl} N°${numero} no tiene guías asociadas.`);return}
   const sinItems=guias.filter(g=>!(g.items||[]).length);
   if(sinItems.length){toast(`La guía N°${sinItems[0].numero} no tiene productos cargados: no puedo armar la tabla.`);return}
   if((hoja.estado||'borrador')==='cerrada'&&!await confirmar({
-      titulo:'La hoja ya está cerrada',
-      cuerpo:`La Hoja de Ruta N°${numero} está cerrada. Regenerar el documento reemplaza el archivo del viaje ya despachado. ¿Continuar?`,
+      titulo:'El documento ya está cerrado',
+      cuerpo:`${lbl} N°${numero} está cerrado. Regenerarlo reemplaza el archivo de un despacho ya cumplido. ¿Continuar?`,
       ok:'Regenerar igual',peligro:true}))return;
   const fecha=hoja.fecha_envio||hoja.fecha;
   if(!fecha){toast('La hoja no tiene fecha de envío.');return}
@@ -2931,20 +2957,20 @@ async function generarHojaRuta(numero){
     if(!dm)throw new Error('La plantilla base no trae el logo');
     const ini=x.indexOf('<w:body>')+'<w:body>'.length, fin=x.indexOf('<w:sectPr',ini);
     if(ini<8||fin<0)throw new Error('La plantilla base tiene una estructura inesperada');
-    const cuerpo=hrCuerpo(numero,fecha,guias,destinos).replace('[[DRAWING]]',dm[0]);
+    const cuerpo=hrCuerpo(numero,fecha,guias,destinos,tp).replace('[[DRAWING]]',dm[0]);
     zip.file('word/document.xml',x.slice(0,ini)+cuerpo+x.slice(fin));
     const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',
       mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
-    const nombre=`Guia_de_Ruta_N${numero}_${fFecha(fecha)}.docx`;
-    const ruta='documentos/hojas_ruta/'+nombre;
+    const nombre=`${T.archivo}_N${numero}_${fFecha(fecha)}.docx`;
+    const ruta=`documentos/${T.carpeta}/${nombre}`;
     // Una sola versión por hoja: si cambió la fecha, el archivo viejo se borra.
-    if(hoja.archivo&&hoja.archivo!==ruta)await borrarArchivoRepo(hoja.archivo,`Hoja N°${numero}: reemplazada por ${nombre}`);
-    await subirBinario(ruta,blob,`Hoja de Ruta N°${numero} generada desde la app`);
+    if(hoja.archivo&&hoja.archivo!==ruta)await borrarArchivoRepo(hoja.archivo,`${lbl} N°${numero}: reemplazado por ${nombre}`);
+    await subirBinario(ruta,blob,`${lbl} N°${numero} generado desde la app`);
     hoja.archivo=ruta;hoja.destinos=destinos;
     hoja.guias=guias.map(g=>String(g.numero)).sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
-    await guardarArchivo(ARCH.hr,`Hoja de Ruta N°${numero}: documento generado (${guias.length} guía(s), ${destinos.length} destino(s))`);
+    await guardarArchivo(ARCH.hr,`${lbl} N°${numero}: documento generado (${guias.length} guía(s), ${destinos.length} destino(s))`);
     bajarBlob(blob,nombre);                                    // bajarBlob ya cierra el velo
-    toast(`Hoja de Ruta N°${numero} generada: ${guias.length} guía(s) en ${destinos.join(' · ')}`);
+    toast(`${lbl} N°${numero} generado: ${guias.length} guía(s) en ${destinos.join(' · ')}`);
     render();
   }catch(e){
     velo(false);
