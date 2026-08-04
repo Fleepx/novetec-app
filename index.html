@@ -830,9 +830,14 @@ function hojaDeGuia(g){
   if(!g||!g.hoja_ruta)return null;
   return DB[ARCH.hr].data.hojas.find(h=>String(h.numero)===String(g.hoja_ruta)&&hrTipo(h)===hrTipoGuia(g))||null;
 }
-const BODEGAS_ORDEN=['Rancagua','San Francisco de Mostazal','El Peumo','Longovilo','San Pablo','Lo Miranda'];
+/* OJO: la lista de bodegas vive en CUATRO lugares (este orden, CENTRO_BODEGA, normBodega
+   y HR_BODEGA_TITULO) más data/bodegas.json. Al agregar una hay que tocar los cinco. */
+const BODEGAS_ORDEN=['Rancagua','San Francisco de Mostazal','El Peumo','Longovilo','Casablanca','Doñihue','San Pablo','Lo Miranda'];
 const BODEGAS_EXCEPCION=['San Pablo','Lo Miranda'];
-const CENTRO_BODEGA={'C394':'Rancagua','C001':'Rancagua','C011':'Rancagua','C395':'San Francisco de Mostazal','097':'Longovilo','7187':'El Peumo'};
+/* PEND-* son códigos PROVISORIOS mientras Jefe consigue el centro SAP real (04-08-2026).
+   No corresponden a nada que venga en un documento, así que no pueden producir un calce
+   equivocado: si llega el centro verdadero de esas plantas, saldrá como desconocido. */
+const CENTRO_BODEGA={'C394':'Rancagua','C001':'Rancagua','C011':'Rancagua','C395':'San Francisco de Mostazal','097':'Longovilo','7187':'El Peumo','PEND-CASABLANCA':'Casablanca','PEND-DONIHUE':'Doñihue'};
 function bodegaDeCentro(c){return CENTRO_BODEGA[String(c||'').trim().toUpperCase()]||null}
 function normBodega(b){
   const s=String(b||'').trim();if(!s)return 'Sin destino';
@@ -841,6 +846,10 @@ function normBodega(b){
   if(x.includes('mostazal')||x.includes('san francisco'))return 'San Francisco de Mostazal';
   if(x.includes('peumo')||x.includes('calera'))return 'El Peumo';
   if(x.includes('longovilo'))return 'Longovilo';
+  // Agrosuper las nombra "Planta de Alimentos X"; en pantalla usamos solo la ciudad.
+  // Se acepta con y sin ñ: los documentos vienen de las dos formas.
+  if(x.includes('casablanca'))return 'Casablanca';
+  if(x.includes('doñihue')||x.includes('donihue'))return 'Doñihue';
   if(x.includes('san pablo'))return 'San Pablo';
   if(x.includes('lo miranda'))return 'Lo Miranda';
   return s;
@@ -3089,7 +3098,8 @@ function formLeerGuia(){
 const HR_PLANTILLA='documentos/plantillas/base_hoja_ruta.docx';
 const HR_BODEGA_TITULO={'Rancagua':'BODEGA CENTRAL - RANCAGUA',
   'San Francisco de Mostazal':'BODEGA SAN FRANCISCO - SAN FRANCISCO DE MOSTAZAL',
-  'El Peumo':'BODEGA EL PEUMO - LA CALERA','Longovilo':'BODEGA LONGOVILO - LONGOVILO'};
+  'El Peumo':'BODEGA EL PEUMO - LA CALERA','Longovilo':'BODEGA LONGOVILO - LONGOVILO',
+  'Casablanca':'PLANTA DE ALIMENTOS - CASABLANCA','Doñihue':'PLANTA DE ALIMENTOS - DOÑIHUE'};
 /* Formato aprobado por Jefe el 04-08-2026. Los margenes viven en el sectPr de la
    plantilla base: si se cambian alli, HR_MARGEN_LAT tiene que seguirlos o la tabla
    deja de calzar con el ancho util. */
