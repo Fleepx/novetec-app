@@ -1624,7 +1624,24 @@ function leerItems(cont,conPrecio=true){
    igual suma fuerte, distinta no descarta (parciales son lo normal; una línea de OC puede
    consumir varias líneas de cotización en cascada: caso 9 = 3 + 6). 3) BODEGA — filtro duro
    solo en cotizaciones XLSX (vienen de SAP del cliente); en nuestros PDF es observación manual
-   y pesa poco. 4) NOMBRE — el más débil, solo desempate. La RECENCIA ordena la búsqueda. */
+   y pesa poco. 4) NOMBRE — el más débil, solo desempate. La RECENCIA ordena la búsqueda.
+
+   VENTANA TEMPORAL (Jefe, 04-08-2026) — SEGUNDA PUERTA, tan dura como el código.
+   Entre la emisión de la cotización y la emisión de la OC pasa SIEMPRE el mismo mes, y como
+   mucho el mes inmediatamente anterior. Una cotización de hace tres meses NO es candidata:
+   si el cliente no compró dentro de esa ventana, esa oferta ya venció y lo que llegue después
+   nació de otra cotización. Por eso el desfase de meses dejó de ser puntaje (antes solo sumaba
+   +12/+6) y pasó a ser FILTRO: delta 0 (mismo mes) o 1 (mes anterior) entran; el resto queda
+   fuera del pool. Dentro de la ventana, la cercanía en días sigue puntuando.
+   Si falta la fecha en la OC o en la cotización, la puerta no se aplica (no se descarta a ciegas).
+   Como todo filtro de pool, gobierna solo las búsquedas FUTURAS: lo ya adjudicado se conserva. */
+const ADJ_MESES_ATRAS=1;                                    // 0 = mismo mes · 1 = admite el mes anterior
+function mesIdx(f){const m=/^(\d{4})-(\d{2})/.exec(String(f||''));return m?(+m[1])*12+(+m[2]-1):null}
+/* delta de meses entre la OC y la cotización. null = no se puede calcular → no se filtra. */
+function desfaseMeses(oc,c){const a=mesIdx(oc.fecha_emision),b=mesIdx(c.fecha);
+  return (a===null||b===null)?null:a-b}
+function dentroVentana(oc,c){const d=desfaseMeses(oc,c);
+  return d===null||(d>=0&&d<=ADJ_MESES_ATRAS)}
 function adjRegistros(){return DB[ARCH.adj].data.registros}
 function adjDescartes(){return DB[ARCH.adj].data.descartes}
 function consumosDeLinea(cotId,idx){return adjRegistros().filter(r=>r.cot===cotId&&r.cot_idx===idx)}
@@ -1640,11 +1657,12 @@ function simNombre(a,b){a=normProd(a);b=normProd(b);if(!a||!b)return 0;if(a===b)
   if(a.includes(b)||b.includes(a))return .92;
   const ta=new Set(a.split(' ')),tb=new Set(b.split(' '));let inter=0;ta.forEach(t=>{if(tb.has(t))inter++});
   const uni=new Set([...ta,...tb]).size;return uni?inter/uni:0}
-function candidatosParaLinea(oc,li){
+function candidatosParaLinea(oc,li,ignorarVentana=false){
   const out=[];
   DB[ARCH.cot].data.cotizaciones.forEach(c=>{
     if(c.estado!=='abierta')return;                                    // cerradas y rechazadas fuera del pool
     if(String(c.fecha||'')>String(oc.fecha_emision||'9999-12-31'))return; // posterior a la OC: imposible
+    if(!ignorarVentana&&!dentroVentana(oc,c))return;                   // PUERTA: mismo mes o el anterior
     const esXlsx=/^COT-XLSX/i.test(String(c.id));
     c.items.forEach((it,i)=>{
       if(saldoLinea(c,i)<=0)return;
@@ -1658,7 +1676,7 @@ function candidatosParaLinea(oc,li){
       const sc=50+(precioOk?30:0)
         +((+li.cantidad||0)===(+it.cantidad||0)?10:0)
         +(it.bodega?(esXlsx?10:4):0)
-        +(dias>=0&&dias<=15?12:dias<=45?6:0)
+        +(dias>=0&&dias<=15?12:dias<=45?8:5)   // dentro de la ventana la cercanía solo matiza
         +Math.round(simNombre(li.producto,it.producto)*6);
       out.push({sc,precioOk,cot:c,idx:i,it});
     });
@@ -1743,8 +1761,14 @@ function celdaAdjOC(o,li,oi){
   if(lineaSinCotizacion(o.folio,oi))
     return `<span class="chip">sin cotización</span> <button class="btn mini sec" onclick="adjQuitarLinea('${fe}',${oi})">Deshacer</button>`;
   const cands=candidatosParaLinea(o,li);
-  if(!cands.length)
-    return `<span class="chip rojo">sin match</span> <button class="btn mini sec" onclick="adjSinCotizacion('${fe}',${oi})" title="Confirma que esta línea no nació de una cotización del sistema">Sin cotización</button>`;
+  if(!cands.length){
+    // Distinguir "no existe" de "existe pero quedó fuera de la ventana": son problemas distintos.
+    const viejos=candidatosParaLinea(o,li,true).filter(cd=>!dentroVentana(o,cd.cot));
+    const tit=viejos.length
+      ? `Hay ${viejos.length} línea(s) con el mismo código en cotizaciones anteriores a la ventana (COT ${[...new Set(viejos.map(v=>v.cot.folio))].slice(0,3).join(', ')}). Quedan fuera: entre cotización y OC pasa el mismo mes o el anterior.`
+      : 'No hay ninguna cotización abierta con este código y saldo disponible.';
+    return `<span class="chip rojo" title="${esc(tit)}">sin match${viejos.length?' (fuera de ventana)':''}</span> <button class="btn mini sec" onclick="adjSinCotizacion('${fe}',${oi})" title="Confirma que esta línea no nació de una cotización del sistema">Sin cotización</button>`;
+  }
   const cd=cands[0],c=cd.cot;
   const dif=!cd.precioOk?` · precio distinto: ${clp(+li.precio_unitario||0)} en la OC vs ${clp(+cd.it.precio_unitario||0)} cotizado`:'';
   return `<span class="chip ambar" title="${esc(cd.it.producto)} · ${fFecha(c.fecha)} · saldo ${num(saldoLinea(c,cd.idx))}${dif}">sugerido: COT ${esc(c.folio)}${!cd.precioOk?' (revisar precio)':''}</span>
