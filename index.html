@@ -2902,8 +2902,12 @@ function hgParsearGuia(lineas){
     if(obs.length)g.observaciones=obs[0];
   }
   if(!g.destino_texto&&g.observaciones)g.destino_texto=hgPrimeraCol(g.observaciones);
-  if(!g.chofer)g.avisos.push('Sin chofer en el documento');
-  if(!g.patente)g.avisos.push('Sin patente en el documento');
+  // Los retiros no traen chofer ni patente: el cliente manda a alguien distinto cada vez
+  // y no es dato nuestro. No es un error, es la señal de que esa guía va a un Resumen de
+  // Retiros. Solo se avisa como dato faltante cuando falta UNO de los dos, que sí es raro.
+  if(!g.chofer&&!g.patente)g.avisos.push('Sin chofer ni patente: es lo normal en un retiro del cliente');
+  else if(!g.chofer)g.avisos.push('Trae patente pero no chofer: revísalo');
+  else if(!g.patente)g.avisos.push('Trae chofer pero no patente: revísalo');
 
   const mNeto=/Monto Neto\s{2,}\$\s?([\d.]+)/i.exec(todo);   if(mNeto)g.neto=hgNum(mNeto[1]);
   const mIva=/IVA\s*19%\s{2,}\$\s?([\d.]+)/i.exec(todo);     if(mIva)g.iva=hgNum(mIva[1]);
