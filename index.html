@@ -2187,6 +2187,7 @@ function rGuias(){
   const hrs=[...DB[ARCH.hr].data.hojas].reverse();
   const ocsAct=DB[ARCH.oc].data.ordenes.filter(o=>ocEstado(o)!=='despachada');
   return `
+  ${formLeerGuia()}
   ${formPendiente('guias_despacho','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${listaPend('guias_despacho')}
   ${(()=>{ // Hojas de ruta que quedaron SIN guías (p. ej. tras eliminar todas): no aparecerían
@@ -2795,6 +2796,287 @@ function cargarXLSX(){
    y volvemos a comprimir. La fidelidad no depende de reproducir bien el formato, depende de
    no tocarlo. Es el mismo procedimiento que usaba generar_hoja_ruta.py, portado al navegador
    para que el proceso sea autónomo. */
+/* ═══ Lectura y parseo de la GUÍA DE DESPACHO de Facto ═══
+   Este archivo es el que se pega en la app. Se prueba aquí primero contra los PDF reales.
+   pdf.js no entrega líneas: entrega fragmentos sueltos con su posición. Hay que rearmar
+   las líneas agrupando por coordenada Y y ordenando por X, o cualquier regex falla. */
+
+/* Agrupa los fragmentos de una página en líneas de texto con columnas separadas. */
+function hgLineasDePagina(items){
+  const filas=new Map();
+  items.forEach(it=>{
+    const t=String(it.str||''); if(!t.trim())return;
+    const y=Math.round(it.transform[5]), x=it.transform[4];
+    const k=[...filas.keys()].find(v=>Math.abs(v-y)<=2);   // tolerancia: la misma línea
+    (filas.get(k==null?filas.set(y,[]).get(y):filas.get(k))||filas.get(y)).push({x,t});
+  });
+  return [...filas.entries()].sort((a,b)=>b[0]-a[0]).map(([y,fs])=>{
+    fs.sort((a,b)=>a.x-b.x);
+    // Separador doble cuando hay un salto grande en X: distingue columnas de palabras.
+    let s='';let px=null;
+    fs.forEach(f=>{ if(px!==null) s+=(f.x-px>12?'  ':' '); s+=f.t; px=f.x+f.t.length*4.6 });
+    return {y,texto:s.replace(/\s+$/,'')};
+  });
+}
+
+const hgNum=t=>+String(t||'').replace(/\./g,'').replace(/[^\d-]/g,'')||0;
+const hgFechaISO=t=>{const m=/(\d{2})-(\d{2})-(\d{4})/.exec(t||'');return m?`${m[3]}-${m[2]}-${m[1]}`:null};
+
+/* Un campo con su etiqueta. OJO: Facto usa DOS plantillas. En una, los campos van en la
+   columna izquierda ("Chofer Nombre   GABRIEL VALENZUELA"); en la otra van en la derecha y
+   la línea empieza con otro campo ("CREDITO 30 DIAS   Transportista Patente VDRL-74").
+   Por eso la etiqueta se busca EN CUALQUIER PARTE de la línea, no anclada al inicio, y el
+   separador puede ser un solo espacio. El valor termina donde empieza la columna siguiente. */
+function hgCampo(lineas,etiqueta){
+  const re=new RegExp(etiqueta+'\\s+([^\\s].*?)(?:\\s{2,}|$)','i');
+  for(const l of lineas){const m=re.exec(l.texto); if(m&&m[1].trim())return m[1].trim()}
+  return null;
+}
+const hgPrimeraCol=t=>String(t||'').split(/\s{2,}/)[0].trim()||null;
+
+/* Línea de producto: NOMBRE [DESCRIPCION]  N UN  $precio ... $total
+   El ancla es "<cantidad> <unidad>" seguido de un monto: es lo único que no varía. */
+const HG_RE_ITEM=/^(.*?)\s{2,}(\d+(?:[.,]\d+)?)\s*([A-ZÑ]{2,4})\s+\$\s?([\d.]+)\b.*?\$\s?([\d.]+)\s*$/;
+
+function hgParsearGuia(lineas){
+  const txt=lineas.map(l=>l.texto);
+  const todo=txt.join('\n');
+  const g={numero:null,fecha:null,cliente:null,rut_cliente:null,patente:null,chofer:null,
+           oc:null,fecha_oc:null,destino_texto:null,observaciones:null,
+           items:[],neto:0,iva:0,total:0,avisos:[]};
+
+  const mN=/N\s*[ºo°]\s*(\d{3,})/i.exec(todo);            if(mN)g.numero=mN[1];
+  const mF=/Fecha:\s*(\d{2}-\d{2}-\d{4})/i.exec(todo);    if(mF)g.fecha=hgFechaISO(mF[1]);
+  g.cliente=hgCampo(lineas,'Señor\\(es\\)');
+  const mR=/RUT\s{2,}([\d.]+-[\dkK])/.exec(todo);         if(mR)g.rut_cliente=mR[1];
+  g.patente=hgCampo(lineas,'Transportista Patente');
+  g.chofer=hgCampo(lineas,'Chofer Nombre');
+
+  // Referencia a la OC: "Orden de compra  4500973765  27-07-2026  BODEGA CENTRAL"
+  const mOC=/Orden de compra\s{2,}(\d{6,})(?:\s{2,}(\d{2}-\d{2}-\d{4}))?(?:\s{2,}(.+?))?(?:\s{2,}\S*)?$/im.exec(todo);
+  // El destino sale de la columna "Razón ref."; hay que cortar antes de que se cuele la
+  // columna de montos que viene a la derecha ("BODEGA CENTRAL    Monto Exento").
+  if(mOC){g.oc=mOC[1];g.fecha_oc=hgFechaISO(mOC[2]);g.destino_texto=hgPrimeraCol(mOC[3])}
+
+  const iObs=txt.findIndex(t=>/^OBSERVACIONES/i.test(t.trim()));
+  if(iObs>=0){
+    const obs=txt.slice(iObs+1).map(t=>t.trim())
+      .filter(t=>t&&!/Timbre|Resoluci|Verifique|Monto|IVA|Total|www\./i.test(t));
+    if(obs.length)g.observaciones=obs[0];
+  }
+  if(!g.destino_texto&&g.observaciones)g.destino_texto=hgPrimeraCol(g.observaciones);
+  if(!g.chofer)g.avisos.push('Sin chofer en el documento');
+  if(!g.patente)g.avisos.push('Sin patente en el documento');
+
+  const mNeto=/Monto Neto\s{2,}\$\s?([\d.]+)/i.exec(todo);   if(mNeto)g.neto=hgNum(mNeto[1]);
+  const mIva=/IVA\s*19%\s{2,}\$\s?([\d.]+)/i.exec(todo);     if(mIva)g.iva=hgNum(mIva[1]);
+  const mTot=/^\s*Total\s{2,}\$\s?([\d.]+)/im.exec(todo);    if(mTot)g.total=hgNum(mTot[1]);
+
+  // Ítems: entre el encabezado de la tabla y la fila de referencias
+  let ini=txt.findIndex(t=>/Servicio\/Producto/i.test(t));
+  let fin=txt.findIndex(t=>/^\s*Documento ref\./i.test(t));
+  if(ini<0)ini=0; if(fin<0)fin=txt.length;
+  for(let i=ini+1;i<fin;i++){
+    const m=HG_RE_ITEM.exec(txt[i]); if(!m)continue;
+    const izq=m[1].trim();
+    // El nombre y la descripción vienen separados por dos o más espacios
+    const part=izq.split(/\s{2,}/);
+    g.items.push({nombre_guia:part[0].trim(),descripcion:part.slice(1).join(' ').trim()||null,
+      cantidad:+String(m[2]).replace(',','.'),unidad:m[3],
+      precio_unitario:hgNum(m[4]),total:hgNum(m[5])});
+  }
+
+  // Cuadraturas: no corregimos, avisamos
+  if(!g.numero)g.avisos.push('No pude leer el número de la guía');
+  if(!g.fecha)g.avisos.push('No pude leer la fecha');
+  if(!g.items.length)g.avisos.push('No encontré líneas de producto');
+  g.items.forEach(it=>{
+    if(Math.abs(it.cantidad*it.precio_unitario-it.total)>1)
+      g.avisos.push(`${it.nombre_guia}: cantidad x precio no da el total de la línea`);
+  });
+  const suma=g.items.reduce((s,i)=>s+i.total,0);
+  if(g.neto&&Math.abs(suma-g.neto)>1)g.avisos.push(`La suma de las líneas (${suma}) no cuadra con el neto (${g.neto})`);
+  if(g.neto&&g.iva&&Math.abs(Math.round(g.neto*0.19)-g.iva)>2)g.avisos.push('El IVA no es el 19% del neto');
+  return g;
+}
+
+/* Empareja las líneas de la guía contra las de la OC referenciada.
+   La guía NO trae código: el ancla es el PRECIO UNITARIO, que en Facto sale de la misma OC.
+   Nombre solo como desempate. Lo que no queda seguro se marca y lo revisa Jefe. */
+function hgResolverContraOC(guia,oc){
+  const nrm=t=>String(t||'').toUpperCase().replace(/Ñ/g,'N').replace(/[^A-Z0-9]/g,'');
+  const usados=new Set();
+  guia.items.forEach(it=>{
+    it.codigo=null;it.producto=null;it.match=null;
+    if(!oc){it.match='sin_oc';return}
+    const libres=oc.items.map((x,ix)=>({x,ix})).filter(o=>!usados.has(o.ix));
+    let c=libres.filter(o=>Math.abs((+o.x.precio_unitario||0)-it.precio_unitario)<=1);
+    if(c.length>1){
+      const porNom=c.filter(o=>nrm(o.x.producto)===nrm(it.nombre_guia));
+      if(porNom.length===1)c=porNom;
+      else{
+        const porCant=c.filter(o=>(+o.x.cantidad||0)===it.cantidad);
+        if(porCant.length===1)c=porCant;
+      }
+    }
+    if(c.length===1){
+      it.codigo=c[0].x.codigo;it.producto=c[0].x.producto;it.match='precio';
+      usados.add(c[0].ix);return;
+    }
+    const nom=libres.filter(o=>nrm(o.x.producto)===nrm(it.nombre_guia));
+    if(nom.length===1){
+      it.codigo=nom[0].x.codigo;it.producto=nom[0].x.producto;it.match='nombre';
+      usados.add(nom[0].ix);return;
+    }
+    it.match=c.length>1?'ambiguo':'sin_match';
+  });
+  return guia;
+}
+
+/* ── Lectura del PDF en el navegador ────────────────────────────────────────
+   pdf.js ya viene en lib/. No entrega líneas: entrega fragmentos con coordenadas,
+   por eso hgLineasDePagina() los reagrupa antes de que ninguna regex los toque. */
+let _pdfjsProm=null;
+function cargarPdfJs(){
+  if(_pdfjsProm)return _pdfjsProm;
+  _pdfjsProm=import('./lib/pdf.min.mjs').then(m=>{
+    m.GlobalWorkerOptions.workerSrc='./lib/pdf.worker.min.mjs';return m;
+  }).catch(e=>{_pdfjsProm=null;throw new Error('No pude cargar el lector de PDF: '+e.message)});
+  return _pdfjsProm;
+}
+async function lineasDelPDF(file){
+  const pdfjs=await cargarPdfJs();
+  const doc=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+  let out=[];
+  for(let i=1;i<=doc.numPages;i++){
+    const c=await (await doc.getPage(i)).getTextContent();
+    out=out.concat(hgLineasDePagina(c.items));
+  }
+  return out;
+}
+let _gLeida=null;
+async function leerGuiaPDF(inp){
+  const file=inp.files&&inp.files[0]; if(!file)return;
+  velo(true,'Leyendo la guía…');
+  try{
+    const h=await huella(file);
+    const ya=(DB[ARCH.arch].data.archivos||[]).find(a=>a.hash===h);
+    if(ya&&ya.estado==='procesado'){velo(false);toast(`Ese archivo ya fue procesado (${ya.nombre}).`);inp.value='';return}
+    const lineas=await lineasDelPDF(file);
+    if(!lineas.length)throw new Error('el PDF no tiene texto, parece escaneado');
+    const g=hgParsearGuia(lineas);
+    if(DB[ARCH.guias].data.guias.some(x=>String(x.numero)===String(g.numero)))
+      throw new Error(`la guía N°${g.numero} ya está cargada`);
+    const oc=DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===String(g.oc));
+    hgResolverContraOC(g,oc);
+    g.destino=normBodega(g.destino_texto||'');
+    if(!BODEGAS_ORDEN.includes(g.destino)){g.avisos.push(`Destino no reconocido: "${g.destino_texto||''}"`);g.destino=''}
+    if(!oc)g.avisos.push(`La OC ${g.oc||'(sin folio)'} no está en el sistema: la guía quedará marcada como pendiente`);
+    _gLeida={g,oc,file,hash:h};
+    velo(false);render();
+    setTimeout(()=>{const e=document.getElementById('gl-panel');if(e)e.scrollIntoView({behavior:'smooth',block:'center'})},60);
+  }catch(e){velo(false);toast('No pude leer la guía: '+e.message)}
+  inp.value='';
+}
+function cancelarGuiaLeida(){_gLeida=null;render()}
+function glSet(i,campo,v){if(_gLeida)_gLeida.g.items[i][campo]=v}
+function glCab(campo,v){if(_gLeida)_gLeida.g[campo]=v}
+/* Panel de revisión. Jefe pidió revisar SIEMPRE antes de guardar: una cantidad mal
+   leída entra al inventario y a la OC, y desandarlo cuesta más que mirarlo. */
+function panelGuiaLeida(){
+  if(!_gLeida)return '';
+  const g=_gLeida.g, oc=_gLeida.oc;
+  const MATCH={precio:['verde','emparejada por precio con la OC'],nombre:['ambar','emparejada solo por nombre'],
+    ambiguo:['rojo','varias líneas de la OC calzan: elige tú'],sin_match:['rojo','no calza con ninguna línea de la OC'],
+    sin_oc:['rojo','la OC no está en el sistema']};
+  const opciones=it=>{
+    const usados=g.items.filter(x=>x!==it&&x.codigo).map(x=>x.codigo);
+    const ls=(oc?oc.items:[]).map(x=>`<option value="${esc(x.codigo)}"${it.codigo===x.codigo?' selected':''}${usados.includes(x.codigo)?' disabled':''}>${esc(x.producto)} · ${num(x.cantidad)} @ ${clp(x.precio_unitario)}</option>`).join('');
+    return `<option value="">— sin asignar —</option>${ls}<option value="__nuevo__"${it.codigo==='__nuevo__'?' selected':''}>No está en la OC: usar el nombre de la guía</option>`;
+  };
+  return `<div id="gl-panel" class="form" style="border:2px solid var(--ambar);border-radius:10px;padding:14px;margin:12px 0">
+    <b style="font-size:15px">Revisar la guía N°${esc(g.numero||'?')} antes de guardar</b>
+    <p class="small muted">Lo que confirmes descuenta inventario y suma al despachado de la OC. La fecha de envío no se pide: la toma cuando la asignes a una Hoja de Ruta o a un Resumen de Retiros.</p>
+    ${g.avisos.length?`<div class="chip ambar" style="display:block;white-space:normal;margin:8px 0">${g.avisos.map(esc).join(' · ')}</div>`:''}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+      <div><label>N° Guía</label><input value="${esc(g.numero||'')}" onchange="glCab('numero',this.value)"></div>
+      <div><label>Fecha</label><input type="date" value="${esc(g.fecha||'')}" onchange="glCab('fecha',this.value)"></div>
+      <div><label>Folio OC</label><input value="${esc(g.oc||'')}" onchange="glCab('oc',this.value)"></div>
+      <div><label>Destino</label><select onchange="glCab('destino',this.value)"><option value="">— elegir —</option>
+        ${BODEGAS_ORDEN.map(b=>`<option value="${esc(b)}"${g.destino===b?' selected':''}>${esc(b)}</option>`).join('')}</select></div>
+      <div><label>Chofer</label><input value="${esc(g.chofer||'')}" onchange="glCab('chofer',this.value)"></div>
+      <div><label>Patente</label><input value="${esc(g.patente||'')}" onchange="glCab('patente',this.value)"></div>
+    </div>
+    <table style="margin-top:10px"><tr><th>Producto en la guía</th><th class="num">Cant.</th><th class="num">Precio</th><th>Producto del sistema</th></tr>
+    ${g.items.map((it,i)=>{const m=MATCH[it.match]||MATCH.sin_match;return `<tr>
+      <td class="trunc" title="${esc(it.nombre_guia)}">${esc(it.nombre_guia)}<br><span class="chip ${m[0]} small" title="${esc(m[1])}">${esc(it.match||'—')}</span></td>
+      <td class="num"><input style="width:70px" value="${esc(String(it.cantidad))}" onchange="glSet(${i},'cantidad',+this.value||0)"></td>
+      <td class="num mono">${clp(it.precio_unitario)}</td>
+      <td><select onchange="glSet(${i},'codigo',this.value)">${opciones(it)}</select></td></tr>`}).join('')}
+    </table>
+    <div class="small muted" style="margin-top:6px">Neto ${clp(g.neto)} · IVA ${clp(g.iva)} · Total ${clp(g.total)}</div>
+    <div class="acciones" style="margin-top:10px">
+      <button class="btn" onclick="guardarGuiaLeida()">Guardar la guía</button>
+      <button class="btn sec" onclick="cancelarGuiaLeida()">Cancelar</button>
+    </div></div>`;
+}
+async function guardarGuiaLeida(){
+  if(!_gLeida)return;
+  const g=_gLeida.g, oc=_gLeida.oc, file=_gLeida.file, hash=_gLeida.hash;
+  if(!g.numero||!/^\d{4}-\d{2}-\d{2}$/.test(g.fecha||'')){toast('Faltan el número o la fecha de la guía.');return}
+  if(!g.destino){toast('Elige el destino: sin bodega la guía no puede entrar a un documento.');return}
+  const sin=g.items.filter(i=>!i.codigo);
+  if(sin.length){toast(`Falta asignar ${sin.length} línea(s) a un producto del sistema.`);return}
+  if(!await confirmar({titulo:`Guardar la guía N°${g.numero}`,
+    texto:`Se descontarán ${g.items.length} línea(s) del inventario y se sumarán al despachado de la OC ${g.oc}.\nQuedará sin fecha de envío hasta que la asignes a una Hoja de Ruta o a un Resumen de Retiros.`,
+    confirmar:'Guardar'}))return;
+  velo(true,'Guardando la guía…');
+  try{
+    const inv=DB[ARCH.inv].data, items=[];
+    g.items.forEach(it=>{
+      let cod=it.codigo, nom;
+      if(cod==='__nuevo__'){const q=invProdDe(it.nombre_guia,it.unidad);cod=q.codigo;nom=q.nombre}
+      else{const oi=(oc?oc.items:[]).find(x=>x.codigo===cod);nom=oi?oi.producto:it.nombre_guia}
+      items.push({producto:nom,codigo:cod,nombre_guia:it.nombre_guia,cantidad:it.cantidad,
+                  unidad:it.unidad,precio_unitario:it.precio_unitario,marca:it.descripcion||null});
+      const p=invProdDe(nom,it.unidad);
+      p.cantidad=(+p.cantidad||0)-it.cantidad;
+      inv.movimientos.push({fecha:g.fecha,tipo:'salida',codigo:p.codigo,producto:p.nombre,
+        cantidad:it.cantidad,referencia:`Guía N°${g.numero} · OC ${g.oc}`});
+      if(oc){const oi=oc.items.find(x=>x.codigo===cod);
+        if(oi)oi.cantidad_despachada=(+oi.cantidad_despachada||0)+it.cantidad}
+    });
+    if(oc)oc.guias=[...new Set([...(oc.guias||[]),String(g.numero)])];
+    const ruta=await subirDocumento('guias_despacho',file,`GD_${g.numero}.pdf`);
+    DB[ARCH.guias].data.guias.push({numero:String(g.numero),fecha:g.fecha,fecha_envio:null,
+      oc:String(g.oc||''),folio_oc:String(g.oc||''),destino:g.destino,
+      cliente:g.cliente||'Agricola Super Ltda',chofer:g.chofer||null,patente:g.patente||null,
+      items,neto:g.neto,iva:g.iva,total:g.total,hoja_ruta:null,hoja_tipo:null,
+      archivo:ruta,conforme:false,discrepancias:[],
+      notas:oc?null:`Cargada sin OC en el sistema: falta registrar la OC ${g.oc}.`});
+    const A=DB[ARCH.arch].data.archivos, reg=A.find(a=>a.hash===hash);
+    if(reg){reg.estado='procesado';reg.ruta=ruta;reg.referencia=String(g.numero)}
+    else A.push({hash,nombre:file.name,tipo:'guias_despacho',ruta,estado:'procesado',
+      fecha:hoyISO(),referencia:String(g.numero)});
+    await guardarMaestroSiNuevo();
+    await guardarArchivo(ARCH.inv,`Guía N°${g.numero}: salida de ${g.items.length} producto(s)`);
+    if(oc)await guardarArchivo(ARCH.oc,`OC ${g.oc}: despachada la guía N°${g.numero}`);
+    await guardarArchivo(ARCH.arch,`Guía N°${g.numero} registrada`);
+    await guardarArchivo(ARCH.guias,`Guía N°${g.numero} leída del PDF y cargada`);
+    _gLeida=null;
+    toast(`Guía N°${g.numero} cargada. Asígnala a una Hoja de Ruta o a un Resumen de Retiros.`);
+    render();
+  }catch(e){if(e.message!=='conflicto')toast('Error al guardar: '+e.message)}
+  velo(false);
+}
+function formLeerGuia(){
+  return `<details class="form" open><summary>Cargar guía de despacho desde el PDF</summary><div class="inner">
+    <p class="small muted" style="margin-top:10px">Sube el PDF de Facto y la app lo lee sola: folio, fecha, chofer, destino, OC y las líneas de producto, emparejadas contra la OC por precio. Después revisas y confirmas. No pide fecha de envío: esa la define el documento al que la asignes.</p>
+    <input type="file" accept=".pdf" onchange="leerGuiaPDF(this)">
+  </div></details>
+  ${panelGuiaLeida()}`;
+}
+
 const HR_PLANTILLA='documentos/plantillas/base_hoja_ruta.docx';
 const HR_BODEGA_TITULO={'Rancagua':'BODEGA CENTRAL - RANCAGUA',
   'San Francisco de Mostazal':'BODEGA SAN FRANCISCO - SAN FRANCISCO DE MOSTAZAL',
@@ -2937,8 +3219,8 @@ async function generarDocumento(tipo,numero){
   if(sinItems.length){toast(`La guía N°${sinItems[0].numero} no tiene productos cargados: no puedo armar la tabla.`);return}
   if((hoja.estado||'borrador')==='cerrada'&&!await confirmar({
       titulo:'El documento ya está cerrado',
-      cuerpo:`${lbl} N°${numero} está cerrado. Regenerarlo reemplaza el archivo de un despacho ya cumplido. ¿Continuar?`,
-      ok:'Regenerar igual',peligro:true}))return;
+      texto:`${lbl} N°${numero} está cerrado. Regenerarlo reemplaza el archivo de un despacho ya cumplido. ¿Continuar?`,
+      confirmar:'Regenerar igual',peligro:true}))return;
   const fecha=hoja.fecha_envio||hoja.fecha;
   if(!fecha){toast('La hoja no tiene fecha de envío.');return}
   const destinos=BODEGAS_ORDEN.filter(d=>guias.some(g=>normBodega(g.destino||'')===d));
