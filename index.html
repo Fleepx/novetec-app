@@ -2807,18 +2807,26 @@ function hgLineasDePagina(items){
   items.forEach(it=>{
     const t=String(it.str||''); if(!t.trim())return;
     const y=Math.round(it.transform[5]), x=it.transform[4];
-    const k=[...filas.keys()].find(v=>Math.abs(v-y)<=2);   // tolerancia: la misma línea
-    (filas.get(k==null?filas.set(y,[]).get(y):filas.get(k))||filas.get(y)).push({x,t});
+    const alto=Math.abs(it.transform[0])||Math.abs(it.height)||8;   // ~ tamaño de letra
+    const ancho=(+it.width)||t.length*alto*0.5;                     // pdf.js sí trae el ancho real
+    let k=[...filas.keys()].find(v=>Math.abs(v-y)<=Math.max(2,alto*0.3));
+    if(k==null){k=y;filas.set(k,[])}
+    filas.get(k).push({x,t,ancho,alto});
   });
   return [...filas.entries()].sort((a,b)=>b[0]-a[0]).map(([y,fs])=>{
     fs.sort((a,b)=>a.x-b.x);
-    // Separador doble cuando hay un salto grande en X: distingue columnas de palabras.
-    let s='';let px=null;
-    fs.forEach(f=>{ if(px!==null) s+=(f.x-px>12?'  ':' '); s+=f.t; px=f.x+f.t.length*4.6 });
+    /* Un hueco grande entre fragmentos es un CAMBIO DE COLUMNA y se marca con dos
+       espacios; uno chico es apenas la separación entre palabras. El umbral va contra
+       el tamaño de letra, no contra un número fijo: un espacio mide ~0,3 del alto y un
+       salto de columna es varias veces eso. */
+    let s='',px=null,ph=8;
+    fs.forEach(f=>{
+      if(px!==null){const hueco=f.x-px; s+=hueco>ph*0.6?'  ':(hueco>ph*0.12?' ':'')}
+      s+=f.t; px=f.x+f.ancho; ph=f.alto;
+    });
     return {y,texto:s.replace(/\s+$/,'')};
   });
 }
-
 const hgNum=t=>+String(t||'').replace(/\./g,'').replace(/[^\d-]/g,'')||0;
 const hgFechaISO=t=>{const m=/(\d{2})-(\d{2})-(\d{4})/.exec(t||'');return m?`${m[3]}-${m[2]}-${m[1]}`:null};
 
@@ -2963,6 +2971,7 @@ async function leerGuiaPDF(inp){
     const ya=(DB[ARCH.arch].data.archivos||[]).find(a=>a.hash===h);
     if(ya&&ya.estado==='procesado'){velo(false);toast(`Ese archivo ya fue procesado (${ya.nombre}).`);inp.value='';return}
     const lineas=await lineasDelPDF(file);
+    window._lineasGuia=lineas;   // para diagnosticar: copiar desde la consola si algo falla
     if(!lineas.length)throw new Error('el PDF no tiene texto, parece escaneado');
     const g=hgParsearGuia(lineas);
     if(DB[ARCH.guias].data.guias.some(x=>String(x.numero)===String(g.numero)))
