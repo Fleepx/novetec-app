@@ -1193,6 +1193,7 @@ async function emitirCotizacion(){
     DB[ARCH.cot].data.cotizaciones.push({
       id:'COT-APP-'+folio,folio,fecha:hoyISO(),cliente:cl.nombre,estado:'abierta',
       prueba:true,origen:'app',neto,iva,total,archivo:ruta,
+      contacto_nombre:_cotN.contacto_nombre||null,
       contacto_email:_cotN.contacto_email,contacto_fono:_cotN.contacto_fono,
       validez:_cotN.validez,observaciones:datos.observaciones,
       /* La bodega por línea es CONFIABLE aquí: la eligió Jefe al cotizar, no se dedujo de un
@@ -1215,17 +1216,46 @@ async function emitirCotizacion(){
     render();
   }catch(e){velo(false);if(e.message!=='conflicto')toast('No se pudo emitir: '+e.message)}
 }
-/* Abre Outlook con destinatario, asunto y cuerpo listos. No puede adjuntar: ningún navegador
-   permite que una página adjunte archivos al correo. El PDF se arrastra a mano. */
+/* Abre Outlook con destinatario, asunto y cuerpo listos.
+   El cuerpo es una CARTA DE PRESENTACIÓN, corta y formal: los productos, cantidades, precios
+   y totales ya van en el PDF y repetirlos en el correo solo agrega ruido y una fuente más
+   que puede quedar desactualizada.
+   No adjunta el archivo: ningún navegador permite que una página adjunte algo al correo, es
+   una restricción de seguridad. Para eso está compartirCotizacion(). */
 function correoCotizacion(id){
   const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id); if(!c)return;
-  const para=c.contacto_email||'';
-  const asunto=`Cotización N° ${c.folio} - Novetec SPA`;
-  const cuerpo=`Estimados,\n\nAdjunto cotización N° ${c.folio} del ${fFecha(c.fecha)} por un total de ${clp(c.total||0)} IVA incluido.\n\n`
-    +c.items.map(i=>`- ${i.producto}: ${i.cantidad} ${i.unidad||'UN'} a ${clp(i.precio_unitario)}`).join('\n')
-    +`\n\nValidez de la oferta: ${c.validez||'7 DIAS'}.\n\nQuedamos atentos.\n\nNovetec SPA\nnovetec@novetec.cl`;
-  location.href=`mailto:${encodeURIComponent(para)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
-  toast('Se abrió el correo. Adjunta el PDF antes de enviar.');
+  const v=(DB[ARCH.conf].data.vendedor)||{};
+  const saludo=c.contacto_nombre?`Estimado(a) ${c.contacto_nombre}:`:'Estimados:';
+  const cuerpo=[saludo,'',
+    `Junto con saludar, adjuntamos la cotización N° ${c.folio} del ${fFecha(c.fecha)} para su revisión.`,
+    '','Quedamos atentos a sus comentarios.','','Saludos cordiales,','',
+    v.nombre||'Comercializadora Novetec','NOVETEC SPA',v.email||'novetec@novetec.cl'].join('\n');
+  location.href=`mailto:${encodeURIComponent(c.contacto_email||'')}`
+    +`?subject=${encodeURIComponent(`Cotización N° ${c.folio} - Novetec SPA`)}`
+    +`&body=${encodeURIComponent(cuerpo)}`;
+  toast('Se abrió el correo. Recuerda adjuntar el PDF antes de enviar.');
+}
+/* Vía alternativa que SÍ puede llevar el archivo: el menú de compartir del sistema. En
+   Windows con Edge o Chrome incluye las apps de correo. No está en todos los equipos, por
+   eso el botón solo aparece cuando el navegador declara que puede compartir archivos. */
+const puedeCompartirPDF=()=>{
+  try{return !!(navigator.canShare&&navigator.canShare({files:[new File([new Blob([1])],'x.pdf',{type:'application/pdf'})]}))}
+  catch(e){return false}
+};
+async function compartirCotizacion(id){
+  const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id); if(!c||!c.archivo)return;
+  velo(true,'Preparando el archivo…');
+  try{
+    const buf=await bajarBinarioRepo(c.archivo);
+    const f=new File([buf],`COT_${c.folio}.pdf`,{type:'application/pdf'});
+    velo(false);
+    await navigator.share({files:[f],title:`Cotización N° ${c.folio}`,
+      text:`Cotización N° ${c.folio} del ${fFecha(c.fecha)} - Novetec SPA`});
+  }catch(e){
+    velo(false);
+    if(e&&e.name==='AbortError')return;                 // el usuario cerró el menú
+    toast('No se pudo compartir: '+(e.message||e.name)+'. Usa el botón de correo y adjunta el PDF.');
+  }
 }
 /* Archivar las pruebas: cierra las cotizaciones de prueba Y SUELTA sus adjudicaciones, para
    que las líneas de OC vuelvan a quedar libres y se adjudiquen a la cotización real. */
@@ -2334,6 +2364,7 @@ function rCot(){
       ${c.estado==='cerrada'?`<button class="btn mini sec" onclick="reabrirCot('${esc(c.id)}')">Reabrir</button>`:''}
       <button class="btn mini sec" onclick="panelRecot('${esc(c.id)}')" title="Corregir la fecha y declarar a qué cotización reemplaza"><i class="fa-solid fa-rotate"></i> Recotización</button>
       ${c.origen==='app'?`<button class="btn mini sec" onclick="correoCotizacion('${esc(c.id)}')" title="Abre Outlook con el destinatario y el texto listos. El PDF hay que adjuntarlo a mano."><i class="fa-solid fa-envelope"></i> Enviar por correo</button>`:''}
+      ${c.origen==='app'&&c.archivo&&puedeCompartirPDF()?`<button class="btn mini sec" onclick="compartirCotizacion('${esc(c.id)}')" title="Abre el menú de compartir del sistema CON el PDF adjunto"><i class="fa-solid fa-share-nodes"></i> Compartir con el PDF</button>`:''}
       </div><div id="rc-${esc(c.id)}"></div><div class="acciones">
       ${c.estado==='rechazada'?`<button class="btn mini sec" onclick="deshacerRechazoCot('${esc(c.id)}')">Deshacer el rechazo</button>`:''}
       <button class="btn mini peligro" onclick="borrarCot('${esc(c.id)}')">Eliminar</button>
