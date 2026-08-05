@@ -1024,6 +1024,27 @@ function xlsxEscribirNumero(xml,fila,colLetra,valor){
   return xml.replace(bloque,nuevo);
 }
 
+/* Busca rastros NUESTROS dentro del archivo del cliente. Una planilla que ya pasó por
+   nosotros puede traer notas internas pegadas —códigos NOV, folios de cotización, precios
+   de referencia— y si se reenvía así, el cliente ve información que no le corresponde.
+   La app tiene prohibido tocar nada fuera de la columna de precio, así que no las borra:
+   AVISA, con la celda exacta, para que Jefe decida antes de mandar el archivo.
+   El patrón busca códigos NOV y menciones a Novetec, que en un archivo del cliente no
+   tienen por qué aparecer en el cuerpo de la planilla. */
+const PL_RASTRO=/NOV-\d{3,}|novetec|lista de precios/i;
+function plNotasInternas(wb){
+  const XLSXlib=window.XLSX, out=[];
+  wb.SheetNames.forEach(nombre=>{
+    const ws=wb.Sheets[nombre]; if(!ws||!ws['!ref'])return;
+    Object.keys(ws).forEach(ref=>{
+      if(ref[0]==='!')return;
+      const cel=ws[ref]; if(!cel||cel.t!=='s')return;
+      const t=String(cel.v||'');
+      if(t.length>25&&PL_RASTRO.test(t))out.push({hoja:nombre,ref,texto:t});
+    });
+  });
+  return out;
+}
 /* Lee la hoja CONSOLIDADO devolviendo una línea por fila con datos. */
 function plLeerConsolidado(wb){
   const XLSXlib=window.XLSX;
@@ -1074,7 +1095,7 @@ async function cargarPlanilla(inp){
     });
     const cl=clientes()[0]||{};
     _pl={file,buf,hoja,filas,cliente:cl.nombre||'',contacto_nombre:'',validez:'7 DIAS',
-         obsDespacho:'',obsEditada:false};
+         obsDespacho:'',obsEditada:false,notas:plNotasInternas(wb)};
     velo(false);render();
     setTimeout(()=>{const e=document.getElementById('pl-panel');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})},60);
   }catch(e){velo(false);toast('No pude leer la planilla: '+e.message)}
@@ -1098,6 +1119,9 @@ function panelPlanilla(){
   return `<div id="pl-panel" class="form" style="border:2px solid var(--ambar);border-radius:10px;padding:14px;margin:12px 0">
     <b style="font-size:15px">Planilla del cliente · ${esc(_pl.file.name)}</b>
     <p class="small muted">Los precios que pongas aquí se escriben en la columna PROV4 del MISMO archivo y te lo devuelvo completado. Dejar una línea en blanco significa NO COTIZAR ese producto: así lo entiende la planilla.</p>
+    ${(_pl.notas||[]).length?`<div class="chip rojo" style="display:block;white-space:normal;margin:8px 0;padding:10px">
+      <b>Este archivo trae ${_pl.notas.length} nota(s) internas nuestras.</b> Vienen de una vez anterior en que se trabajó esta planilla, no las agregó la app. Si se lo mandas así al cliente, va a ver información que no le corresponde. Bórralas en Excel antes de enviar:
+      <ul style="margin:6px 0 0 18px">${_pl.notas.map(n=>`<li><b>${esc(n.hoja)} ${esc(n.ref)}</b>: ${esc(n.texto.slice(0,90))}${n.texto.length>90?'…':''}</li>`).join('')}</ul></div>`:''}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">
       <div><label>Cliente</label><select onchange="plSet('cliente',this.value)">
         ${clientes().map(c=>`<option value="${esc(c.nombre)}"${_pl.cliente===c.nombre?' selected':''}>${esc(c.corto)}</option>`).join('')}</select></div>
@@ -1135,6 +1159,11 @@ async function generarPlanilla(){
   if(sinCod.length&&!await confirmar({titulo:'Productos fuera del maestro',
     texto:`${sinCod.length} línea(s) cotizadas no calzan con el maestro: ${sinCod.map(f=>f.nombre).join(', ')}.\nSe escriben igual en el Excel, pero no van a emparejar solas cuando llegue la OC.`,
     confirmar:'Continuar'}))return;
+  const avisoNotas=(_pl.notas||[]).length;
+  if(avisoNotas&&!await confirmar({titulo:'El archivo trae notas internas',peligro:true,
+    texto:`Este Excel conserva ${avisoNotas} nota(s) nuestras en ${_pl.notas.map(n=>n.ref).join(', ')}. `
+      +`La app no las toca ni las borra. Si lo envías así, el cliente las va a leer.\n¿Generar igual?`,
+    confirmar:'Generar igual'}))return;
   const conf=DB[ARCH.conf].data, n=+conf.proxima_cotizacion_prueba||31, folio='P'+n;
   velo(true,'Completando la planilla…');
   try{
@@ -1180,7 +1209,9 @@ async function generarPlanilla(){
     await guardarArchivo(ARCH.cot,`Planilla ${folio} cotizada desde la app (prueba)`);
     _pl=null;
     bajarBlob(blob,nombre);
-    toast(`${folio}: ${cot.length} línea(s) cotizadas por ${clp(neto)}. Excel descargado.`);
+    toast(avisoNotas
+      ? `${folio} generado, pero el Excel conserva ${avisoNotas} nota(s) internas: bórralas antes de enviarlo.`
+      : `${folio}: ${cot.length} línea(s) cotizadas por ${clp(neto)}. Excel descargado.`);
     render();
   }catch(e){velo(false);if(e.message!=='conflicto')toast('No se pudo generar: '+e.message)}
 }
