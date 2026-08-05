@@ -1973,8 +1973,15 @@ function consolidarOC(items){
    absorbido debe seguir reconociéndose. Por eso `codigos_cliente.agrosuper` admite texto (un solo
    código, el caso normal) o lista (producto fusionado). Esto NO contradice el caso "papelero":
    ahí un mismo SAP apunta a dos productos distintos; acá un producto reúne varios SAP. */
-function sapsDe(p){const v=(p.codigos_cliente||{}).agrosuper;
-  return v==null?[]:(Array.isArray(v)?v:[v]).map(String).filter(Boolean)}
+/* Los códigos SAP se guardan por GRUPO, no por cliente: Agrosuper y Sopraval usan el mismo
+   sistema aunque tengan RUT distintos, así que un código significa lo mismo para ambos.
+   Se leen todos los grupos porque hoy existe uno solo; si algún día entra un cliente con
+   otro maestro de materiales, hay que filtrar por el grupo_sap del documento en curso. */
+function sapsDe(p){
+  const cc=p.codigos_cliente||{};
+  return Object.values(cc).flatMap(v=>v==null?[]:(Array.isArray(v)?v:[v]))
+    .map(String).map(x=>x.trim()).filter(Boolean);
+}
 /* Resolución contra el maestro: lo inequívoco se resuelve solo, lo dudoso queda para Jefe */
 function resolverItems(items){
   const prods=DB[ARCH.prod].data.productos;
