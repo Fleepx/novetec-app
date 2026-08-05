@@ -282,7 +282,7 @@ a{color:var(--texto)}
 const LSKEY='novetec_cfg';
 let cfg=null;
 let DB={}; // path -> {data, sha}
-const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json',prod:'data/productos.json',sin:'data/sinonimos.json',psap:'data/pendientes_sap.json',arch:'data/archivos.json',hprec:'data/historial_precios.json',adj:'data/adjudicaciones.json',bod:'data/bodegas.json'};
+const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json',prod:'data/productos.json',sin:'data/sinonimos.json',psap:'data/pendientes_sap.json',arch:'data/archivos.json',hprec:'data/historial_precios.json',adj:'data/adjudicaciones.json',bod:'data/bodegas.json',cli:'data/clientes.json'};
 
 const b64dec=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,'')),c=>c.charCodeAt(0)));
 function b64enc(s){const b=new TextEncoder().encode(s);let r='';for(let i=0;i<b.length;i+=8192)r+=String.fromCharCode(...b.subarray(i,i+8192));return btoa(r)}
@@ -293,7 +293,7 @@ async function gh(path,opts={}){
   if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(`${r.status}: ${e.message||'error de GitHub'}`)}
   return r.json();
 }
-const ESTRUCTURAS_BASE={'data/cotizaciones.json':{cotizaciones:[]},'data/ordenes_compra.json':{ordenes:[]},
+const ESTRUCTURAS_BASE={'data/cotizaciones.json':{cotizaciones:[]},'data/clientes.json':{clientes:[]},'data/ordenes_compra.json':{ordenes:[]},
  'data/historial_precios.json':{observaciones:[]},
  'data/guias_despacho.json':{guias:[]},'data/inventario.json':{productos:[],movimientos:[]},
  'data/pendientes.json':{pendientes:[]},'data/hojas_ruta.json':{hojas:[]},
@@ -319,6 +319,8 @@ function normalizarDatos(p,d){
     c.items.forEach(i=>{i.producto=i.producto||'';i.cantidad=+i.cantidad||0;i.precio_unitario=+i.precio_unitario||0})})}
   if(p===ARCH.adj){arr('registros');arr('descartes')}
   if(p===ARCH.bod){arr('bodegas');arr('excepcionales')}
+  if(p===ARCH.cli){arr('clientes');d.clientes.forEach(c=>{c.contactos=c.contactos||[];c.bodegas=c.bodegas||[];
+    c.contactos.forEach(k=>{k.emails=k.emails||[];k.telefonos=k.telefonos||[]})})}
   if(p===ARCH.guias){arr('guias');d.guias.forEach(g=>{g.items=g.items||[];
     g.oc=g.oc||g.folio_oc||'';g.folio_oc=g.folio_oc||g.oc||'';g.discrepancias=g.discrepancias||[];
     if(g.hoja_ruta)g.hoja_tipo=HR_TIPOS[g.hoja_tipo]?g.hoja_tipo:'ruta';
@@ -830,6 +832,385 @@ function hojaDeGuia(g){
   if(!g||!g.hoja_ruta)return null;
   return DB[ARCH.hr].data.hojas.find(h=>String(h.numero)===String(g.hoja_ruta)&&hrTipo(h)===hrTipoGuia(g))||null;
 }
+/* ═══ PDF de COTIZACIÓN ═══
+   Reproduce el documento que hoy emite Facto. Una cotización NO es un DTE: no lleva timbre
+   del SII ni folio tributario, por eso podemos emitirla nosotros sin problema legal.
+
+   COLORES: medidos sobre la COT 831 real, no elegidos a ojo.
+   - Texto #333333. Facto NO usa negro puro, y por eso le imprime bien en la oficina: al no
+     ser negro neutro, el driver lo compone con los demás cartuchos en vez de mandarlo al
+     canal negro, que está muerto. Es exactamente el código que usa Facto.
+   - Nombre de la empresa #274C7B · recuadro "COTIZACIÓN" en rojo · líneas #BBBBBB.
+   - Fondos: Facto deja TODO blanco salvo el encabezado de la tabla, en #F9F9F9.
+   OJO: esto vale para el PDF. La hoja de ruta es un Word y allá seguimos con #000033, que es
+   el tono que Jefe verificó imprimiendo la tira de prueba desde Word.
+
+   COLUMNAS: se revisaron las 58 cotizaciones del repositorio. 'Dsc/Rcrg' e 'Imp. Esp.' están
+   vacías en todas, así que se eliminan. 'Afec. IVA' dice siempre SI y se conserva por pedido
+   de Jefe. 'Validez oferta' va como observación, igual que en Facto. */
+const TINTA=[0x33,0x33,0x33], AZUL=[0x27,0x4C,0x7B], ROJO=[0xCC,0x00,0x00],
+      LINEA=[0xBB,0xBB,0xBB], FONDO=[0xF9,0xF9,0xF9];
+const EMPRESA={
+  nombre:'NOVETEC SPA', rut:'RUT: 77.717.888-1',
+  giro:'Com. Art. Ferretería, Const, EPP, Menaje, Art. Eléctricos y Papelería',
+  dir:'Casa Matriz: Camino a Melipilla # 7786, Cerrillos, Santiago',
+  fono:'Fono: 233411168', email:'Email: novetec@novetec.cl', web:'http://www.novetec.cl'};
+
+function cotizacionPDF(jsPDFCtor,cot,logoB64){
+  const doc=new jsPDFCtor({unit:'mm',format:'letter'});
+  const W=215.9, H=279.4, M=15, AN=W-2*M;
+  const tinta=()=>doc.setTextColor(...TINTA);
+  const linea=()=>doc.setDrawColor(...LINEA);
+  tinta(); linea();
+
+  /* ── Encabezado ── */
+  let y=14;
+  if(logoB64){try{doc.addImage(logoB64,'JPEG',M,y-2,21,22.7)}catch(e){}}
+  const xT=M+25;
+  doc.setTextColor(...AZUL).setFont('helvetica','bold').setFontSize(12).text(EMPRESA.nombre,xT,y+2);
+  tinta().setFont('helvetica','normal').setFontSize(7.2);
+  let yy=y+6.5;
+  doc.splitTextToSize(EMPRESA.giro,80).forEach(l=>{doc.text(l,xT,yy);yy+=3.2});
+  [EMPRESA.dir,EMPRESA.fono,EMPRESA.email,EMPRESA.web].forEach(t=>{doc.text(t,xT,yy);yy+=3.2});
+
+  const bx=W-M-56, bw=56;
+  doc.setDrawColor(...ROJO).setLineWidth(0.5).rect(bx,y-3,bw,17);
+  doc.setTextColor(...ROJO).setFont('helvetica','bold').setFontSize(8.5)
+     .text(EMPRESA.rut,bx+bw/2,y+2,{align:'center'});
+  doc.setFontSize(11).text('COTIZACIÓN',bx+bw/2,y+7.5,{align:'center'});
+  doc.setFontSize(12).text('N° '+cot.folio,bx+bw/2,y+13,{align:'center'});
+  linea().setLineWidth(0.3).rect(bx,y+17,bw,7);
+  tinta().setFont('helvetica','normal').setFontSize(8.5)
+     .text('Fecha: '+fFecha(cot.fecha),bx+bw/2,y+21.7,{align:'center'});
+
+  /* ── Bloque del cliente: sin relleno, como Facto ── */
+  y=Math.max(yy,y+24)+5;
+  const hCli=17;
+  doc.setLineWidth(0.3).rect(M,y,AN,hCli);
+  const dato=(et,va,x,yl)=>{
+    doc.setFont('helvetica','bold').setFontSize(7.5).text(et,x,yl);
+    doc.setFont('helvetica','normal').setFontSize(8).text(String(va||''),x+27,yl);
+  };
+  /* El NOMBRE del comprador no va en el PDF: en la cotización de Facto tampoco aparece.
+     En la app sirve como llave para rellenar su correo y su teléfono, y ahí se queda.
+     De cada uno se imprime UNO solo, el marcado como principal. */
+  dato('Señor(es)',cot.cliente,M+3,y+5);             dato('RUT',cot.rut_cliente,M+AN/2,y+5);
+  dato('Teléfono',cot.contacto_fono,M+3,y+10);       dato('Email Cliente',cot.contacto_email,M+AN/2,y+10);
+  dato('Vendedor',cot.vendedor,M+3,y+15);            dato('Email Vendedor',cot.vendedor_email,M+AN/2,y+15);
+
+  /* ── Tabla de ítems, de alto fijo ── */
+  y+=hCli+6;
+  const Y_BLOQUES=184;
+  const COL=[{t:'Servicio/Producto',w:66,a:'left'},{t:'Descripción',w:40,a:'left'},
+             {t:'Cant.',w:15,a:'right'},{t:'Valor',w:23,a:'right'},
+             {t:'Afec. IVA',w:17,a:'center'},{t:'Total',w:24.9,a:'right'}];
+  const xCol=[];{let x=M;COL.forEach(c=>{xCol.push(x);x+=c.w})}
+  const px=i=>COL[i].a==='right'?xCol[i]+COL[i].w-2:(COL[i].a==='center'?xCol[i]+COL[i].w/2:xCol[i]+2);
+  const al=i=>COL[i].a==='right'?'right':(COL[i].a==='center'?'center':'left');
+  const encabezado=()=>{
+    doc.setFillColor(...FONDO).setLineWidth(0.3);
+    COL.forEach((c,i)=>doc.rect(xCol[i],y,c.w,7,'FD'));
+    doc.setFont('helvetica','bold').setFontSize(7.8);
+    COL.forEach((c,i)=>doc.text(c.t,px(i),y+4.6,{align:al(i)}));
+    y+=7;
+  };
+  encabezado();
+  let neto=0;
+  cot.items.forEach(it=>{
+    const tot=(+it.cantidad||0)*(+it.precio_unitario||0); neto+=tot;
+    const nom=doc.splitTextToSize(String(it.producto||''),COL[0].w-4);
+    const des=doc.splitTextToSize(String(it.descripcion||''),COL[1].w-4);
+    const alto=Math.max(7,3.4*Math.max(nom.length,des.length)+3.6);
+    if(y+alto>Y_BLOQUES){
+      doc.setLineWidth(0.3).rect(M,y,AN,Y_BLOQUES-y);
+      doc.addPage(); tinta(); linea(); y=18; encabezado();
+    }
+    doc.setLineWidth(0.3);
+    COL.forEach((c,i)=>doc.rect(xCol[i],y,c.w,alto));
+    doc.setFont('helvetica','normal').setFontSize(7.8);
+    [nom,des,`${it.cantidad} ${it.unidad||'UN'}`,clp(it.precio_unitario),'SI',clp(tot)]
+      .forEach((txt,i)=>(Array.isArray(txt)?txt:[txt])
+        .forEach((l,k)=>doc.text(String(l),px(i),y+4.4+k*3.4,{align:al(i)})));
+    y+=alto;
+  });
+  if(y<Y_BLOQUES)doc.setLineWidth(0.3).rect(M,y,AN,Y_BLOQUES-y);
+
+  /* ── Observaciones y totales, anclados bajo la tabla ── */
+  const iva=Math.round(neto*0.19), total=neto+iva;
+  const yB=Y_BLOQUES+5, wTot=70, wObs=AN-wTot-5, xt=W-M-wTot;
+  const filas=[['Moneda','PESO CHILENO',false],['Monto Neto',clp(neto),false],
+               ['Monto Exento',clp(0),false],['IVA 19%',clp(iva),false],['Total',clp(total),true]];
+  const hBloque=7+filas.length*6.6;
+  doc.setLineWidth(0.3).rect(M,yB,wObs,hBloque);
+  doc.line(M,yB+7,M+wObs,yB+7);
+  doc.setFont('helvetica','bold').setFontSize(8).text('Observaciones',M+3,yB+4.8);
+  doc.setFont('helvetica','normal').setFontSize(7.8);
+  let yo=yB+11.8;
+  const obs=[].concat(cot.validez?[`VALIDEZ OFERTA ${cot.validez}`]:[],cot.observaciones||[]);
+  obs.forEach(o=>doc.splitTextToSize(String(o),wObs-6)
+    .forEach(l=>{if(yo<yB+hBloque-1.5){doc.text(l,M+3,yo);yo+=3.8}}));
+  let yt=yB;
+  doc.setLineWidth(0.3).rect(xt,yt,wTot,7);
+  doc.setFont('helvetica','bold').setFontSize(8).text('Resumen',xt+3,yt+4.8);
+  yt+=7;
+  filas.forEach(([et,va,neg])=>{
+    doc.setLineWidth(0.3).rect(xt,yt,wTot,6.6);
+    doc.setFont('helvetica',neg?'bold':'normal').setFontSize(neg?9:8);
+    doc.text(et,xt+3,yt+4.6); doc.text(String(va),W-M-3,yt+4.6,{align:'right'});
+    yt+=6.6;
+  });
+
+  /* ── Pie ── */
+  const yPie=H-12;
+  doc.setLineWidth(0.3).line(M,yPie-4,W-M,yPie-4);
+  doc.setFont('helvetica','normal').setFontSize(6.8);
+  doc.text('Documento no tributario. Precios en pesos chilenos, afectos a IVA.',M,yPie);
+  doc.text(EMPRESA.web,W-M,yPie,{align:'right'});
+  return {doc,neto,iva,total};
+}
+
+
+/* ══════════════════ EMISIÓN DE COTIZACIONES ══════════════════
+   La app pasa a emitir cotizaciones, hasta hoy hechas en Facto. Una cotización NO es un DTE
+   (sin timbre SII ni folio tributario), así que podemos emitirla nosotros.
+
+   MODO PRUEBA (Jefe, 04-08-2026): mientras se prueba, Facto sigue emitiendo en paralelo. Por
+   eso las de la app llevan folio "P31", "P32"… con correlativo propio: no chocan con la serie
+   real y se reconocen de un vistazo. Al archivarlas se cierran Y se sueltan sus adjudicaciones,
+   devolviendo las líneas de OC a "sin adjudicar" para asignarlas a la cotización de Facto
+   correcta. Sin ese paso, una prueba dejaría consumido un saldo que no consumió de verdad. */
+const COT_PDF_CDN='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+let _jspdfProm=null;
+function cargarJsPDF(){
+  if(window.jspdf&&window.jspdf.jsPDF)return Promise.resolve(window.jspdf.jsPDF);
+  if(_jspdfProm)return _jspdfProm;
+  _jspdfProm=new Promise((ok,mal)=>{
+    const s=document.createElement('script'); s.src=COT_PDF_CDN;
+    s.onload=()=>ok(window.jspdf.jsPDF);
+    s.onerror=()=>{_jspdfProm=null;mal(new Error('No se pudo cargar el generador de PDF. Revisa la conexión.'))};
+    document.head.appendChild(s);
+  });
+  return _jspdfProm;
+}
+let _logoB64=null;
+async function logoCotizacion(){
+  if(_logoB64!==null)return _logoB64;
+  try{
+    const buf=await bajarBinarioRepo('documentos/plantillas/logo_hoja_ruta.jpeg');
+    let bin=''; const a=new Uint8Array(buf);
+    for(let i=0;i<a.length;i+=8192)bin+=String.fromCharCode(...a.subarray(i,i+8192));
+    _logoB64='data:image/jpeg;base64,'+btoa(bin);
+  }catch(e){_logoB64=''}          // sin logo el documento igual sale
+  return _logoB64;
+}
+const clientes=()=>((DB[ARCH.cli]&&DB[ARCH.cli].data.clientes)||[])
+  .slice().sort((a,b)=>(+a.orden||99)-(+b.orden||99));
+const clientePorNombre=n=>clientes().find(c=>c.nombre===n||c.corto===n)||null;
+const contactoPrincipal=(lista)=>{const l=lista||[];return (l.find(x=>x.principal)||l[0]||{}).valor||''};
+
+/* Últimos precios del historial. Se muestran los DOS: lo que ofertamos y lo que el cliente
+   efectivamente compró. La app NO propone un precio sola — cotizar es decisión comercial. */
+function ultimoPrecio(codigo,fuente){
+  const H=DB[ARCH.hprec].data;
+  const arr=fuente==='oc'?(H.observaciones||[]):(H.cotizaciones||[]);
+  const c=arr.filter(x=>x.codigo===codigo&&+x.precio>0)
+    .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
+  return c.length?{precio:+c[0].precio,fecha:c[0].fecha,ref:c[0].folio_oc||c[0].folio||''}:null;
+}
+
+let _cotN=null;
+function nuevaCotizacion(){
+  const cl=clientes()[0]||{};
+  _cotN={cliente:cl.nombre||'',contacto_nombre:'',contacto_email:'',contacto_fono:'',
+         validez:'7 DIAS',observaciones:'',items:[{producto:'',codigo:'',descripcion:'',cantidad:1,precio:''}]};
+  render();
+  setTimeout(()=>{const e=document.getElementById('cn-panel');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})},60);
+}
+function cancelarCotizacion(){_cotN=null;render()}
+function cnSet(campo,v){if(!_cotN)return;_cotN[campo]=v;
+  if(campo==='cliente'||campo==='contacto_nombre')cnAutorrelleno();render()}
+function cnItem(i,campo,v){if(!_cotN)return;_cotN.items[i][campo]=v;
+  if(campo==='producto'){const m=prodMaestro(v);_cotN.items[i].codigo=m?m.codigo:''}
+  render()}
+function cnAgregar(){_cotN.items.push({producto:'',codigo:'',descripcion:'',cantidad:1,precio:''});render()}
+function cnQuitar(i){_cotN.items.splice(i,1);if(!_cotN.items.length)cnAgregar();else render()}
+function cnPrecio(i,fuente){
+  const it=_cotN.items[i]; if(!it.codigo){toast('Elige primero el producto.');return}
+  const p=ultimoPrecio(it.codigo,fuente);
+  if(!p){toast(`Sin precio previo ${fuente==='oc'?'adjudicado':'ofertado'} para ese producto.`);return}
+  it.precio=p.precio; render();
+}
+/* El NOMBRE del comprador es único: al calzar se rellenan su correo y su teléfono
+   principales. Si no calza, los tres campos quedan libres para escribir a mano. */
+function cnAutorrelleno(){
+  const cl=clientePorNombre(_cotN.cliente); if(!cl)return;
+  const k=(cl.contactos||[]).find(x=>x.nombre===_cotN.contacto_nombre);
+  if(!k)return;
+  _cotN.contacto_email=contactoPrincipal(k.emails);
+  _cotN.contacto_fono=contactoPrincipal(k.telefonos);
+}
+/* La estrellita: fija cuál correo o teléfono se imprime por defecto de aquí en adelante. */
+async function cnPrincipal(tipo,valor){
+  const cl=clientePorNombre(_cotN.cliente); if(!cl)return;
+  const k=(cl.contactos||[]).find(x=>x.nombre===_cotN.contacto_nombre); if(!k)return;
+  (k[tipo]||[]).forEach(x=>x.principal=(x.valor===valor));
+  try{await guardarArchivo(ARCH.cli,`${k.nombre}: ${tipo==='emails'?'correo':'teléfono'} principal ${valor}`);
+    toast('Marcado como principal.');render()}
+  catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+}
+function panelCotizacion(){
+  if(!_cotN)return '';
+  const cl=clientePorNombre(_cotN.cliente)||{};
+  const cont=(cl.contactos||[]).find(x=>x.nombre===_cotN.contacto_nombre);
+  const conf=DB[ARCH.conf].data;
+  const folio='P'+(conf.proxima_cotizacion_prueba||31);
+  const prods=DB[ARCH.prod].data.productos;
+  const opc=(lista,tipo,valor)=>{
+    if(!cont||!(cont[tipo]||[]).length)return '';
+    return (cont[tipo]||[]).map(x=>`<button class="btn mini ${x.valor===valor?'':'sec'}" title="${x.principal?'Es el principal':'Marcar como principal'}" onclick="cnPrincipal('${tipo}','${esc(x.valor)}')"><i class="fa-${x.principal?'solid':'regular'} fa-star"></i> ${esc(x.valor)}</button>`).join(' ');
+  };
+  const neto=_cotN.items.reduce((s,i)=>s+(+i.cantidad||0)*(+i.precio||0),0);
+  return `<div id="cn-panel" class="form" style="border:2px solid var(--ambar);border-radius:10px;padding:14px;margin:12px 0">
+    <b style="font-size:15px">Nueva cotización <span class="chip ambar">PRUEBA · ${esc(folio)}</span></b>
+    <p class="small muted">Folio de prueba, con correlativo aparte: no toca la serie de Facto. Al archivar las pruebas se cierran y sueltan sus adjudicaciones.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">
+      <div><label>Cliente</label><select onchange="cnSet('cliente',this.value)">
+        ${clientes().map(c=>`<option value="${esc(c.nombre)}"${_cotN.cliente===c.nombre?' selected':''}>${esc(c.corto)}${c.rut==='PENDIENTE'?' (datos pendientes)':''}</option>`).join('')}
+      </select></div>
+      <div><label>Comprador</label>
+        <input list="cn-compradores" value="${esc(_cotN.contacto_nombre)}" placeholder="Escribe el nombre" onchange="cnSet('contacto_nombre',this.value)">
+        <datalist id="cn-compradores">${(cl.contactos||[]).map(k=>`<option value="${esc(k.nombre)}">`).join('')}</datalist>
+      </div>
+      <div><label>Validez</label><input value="${esc(_cotN.validez)}" onchange="cnSet('validez',this.value)"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:6px">
+      <div><label>Email cliente</label><input value="${esc(_cotN.contacto_email)}" onchange="cnSet('contacto_email',this.value)">
+        <div class="small" style="margin-top:4px">${opc(cont,'emails',_cotN.contacto_email)}</div></div>
+      <div><label>Teléfono</label><input value="${esc(_cotN.contacto_fono)}" onchange="cnSet('contacto_fono',this.value)">
+        <div class="small" style="margin-top:4px">${opc(cont,'telefonos',_cotN.contacto_fono)}</div></div>
+    </div>
+    <datalist id="cn-prods">${prods.map(p=>`<option value="${esc(p.nombre)}">`).join('')}</datalist>
+    <table style="margin-top:10px"><tr><th>Producto</th><th>Descripción</th><th class="num">Cant.</th><th>Precio unitario</th><th></th></tr>
+    ${_cotN.items.map((it,i)=>{
+      const oc=it.codigo?ultimoPrecio(it.codigo,'oc'):null, co=it.codigo?ultimoPrecio(it.codigo,'cot'):null;
+      return `<tr>
+      <td><input list="cn-prods" style="width:100%" value="${esc(it.producto)}" onchange="cnItem(${i},'producto',this.value)">
+        <span class="small ${it.codigo?'muted':''}">${it.producto?(it.codigo?esc(it.codigo):'<span class="chip rojo">no está en el maestro</span>'):''}</span></td>
+      <td><input style="width:100%" value="${esc(it.descripcion)}" onchange="cnItem(${i},'descripcion',this.value)"></td>
+      <td class="num"><input style="width:70px" value="${esc(String(it.cantidad))}" onchange="cnItem(${i},'cantidad',+this.value||0)"></td>
+      <td><input style="width:110px" value="${esc(String(it.precio))}" onchange="cnItem(${i},'precio',+this.value||0)">
+        <div class="small" style="margin-top:4px">
+          <button class="btn mini sec" ${oc?'':'disabled'} onclick="cnPrecio(${i},'oc')" title="${oc?`Adjudicado el ${fFecha(oc.fecha)} en la OC ${esc(oc.ref)}`:'Sin precio adjudicado previo'}">OC ${oc?clp(oc.precio):'—'}</button>
+          <button class="btn mini sec" ${co?'':'disabled'} onclick="cnPrecio(${i},'cot')" title="${co?`Ofertado el ${fFecha(co.fecha)} en ${esc(co.ref)}`:'Sin precio ofertado previo'}">Cot ${co?clp(co.precio):'—'}</button>
+        </div></td>
+      <td><button class="btn mini sec" onclick="cnQuitar(${i})" title="Quitar la línea"><i class="fa-solid fa-xmark"></i></button></td></tr>`}).join('')}
+    </table>
+    <button class="btn mini sec" style="margin-top:6px" onclick="cnAgregar()"><i class="fa-solid fa-plus"></i> Agregar línea</button>
+    <label style="margin-top:10px">Observaciones (una por línea)</label>
+    <textarea rows="3" onchange="cnSet('observaciones',this.value)">${esc(_cotN.observaciones)}</textarea>
+    <div class="small muted" style="margin-top:6px">Neto ${clp(neto)} · IVA ${clp(Math.round(neto*0.19))} · Total ${clp(neto+Math.round(neto*0.19))}</div>
+    <div class="acciones" style="margin-top:10px">
+      <button class="btn" onclick="emitirCotizacion()"><i class="fa-solid fa-file-pdf"></i> Generar y guardar</button>
+      <button class="btn sec" onclick="cancelarCotizacion()">Cancelar</button>
+    </div></div>`;
+}
+async function emitirCotizacion(){
+  if(!_cotN)return;
+  const cl=clientePorNombre(_cotN.cliente);
+  if(!cl){toast('Elige el cliente.');return}
+  if(cl.rut==='PENDIENTE'&&!await confirmar({titulo:'Datos del cliente incompletos',
+    texto:`${cl.corto} todavía tiene el RUT y la dirección como PENDIENTE. La cotización saldría con esos marcadores impresos. ¿Continuar igual?`,
+    confirmar:'Continuar',peligro:true}))return;
+  const items=_cotN.items.filter(i=>i.producto&&+i.cantidad>0&&+i.precio>0);
+  if(!items.length){toast('Necesitas al menos una línea con producto, cantidad y precio.');return}
+  const sinCod=items.filter(i=>!i.codigo);
+  if(sinCod.length&&!await confirmar({titulo:'Productos fuera del maestro',
+    texto:`${sinCod.length} línea(s) no calzan con ningún producto del maestro: ${sinCod.map(i=>i.producto).join(', ')}.\nSe cotizarán igual, pero al llegar la OC no van a emparejar solas.`,
+    confirmar:'Cotizar igual'}))return;
+  const conf=DB[ARCH.conf].data;
+  const n=+conf.proxima_cotizacion_prueba||31, folio='P'+n;
+  velo(true,'Generando la cotización…');
+  try{
+    const jsPDF=await cargarJsPDF();
+    const datos={folio,fecha:hoyISO(),cliente:cl.nombre,rut_cliente:cl.rut,
+      contacto_email:_cotN.contacto_email,contacto_fono:_cotN.contacto_fono,
+      vendedor:(conf.vendedor||{}).nombre||'Comercializadora Novetec',
+      vendedor_email:(conf.vendedor||{}).email||'novetec@novetec.cl',
+      validez:_cotN.validez,
+      observaciones:String(_cotN.observaciones||'').split('\n').map(s=>s.trim()).filter(Boolean),
+      items:items.map(i=>({producto:i.producto,descripcion:i.descripcion,
+        cantidad:+i.cantidad,unidad:'UN',precio_unitario:+i.precio}))};
+    const {doc,neto,iva,total}=cotizacionPDF(jsPDF,datos,await logoCotizacion());
+    const blob=doc.output('blob');
+    const nombre=`COT_${folio}.pdf`, ruta='documentos/cotizaciones/'+nombre;
+    await subirBinario(ruta,blob,`Cotización ${folio} (prueba) emitida desde la app`);
+    DB[ARCH.cot].data.cotizaciones.push({
+      id:'COT-APP-'+folio,folio,fecha:hoyISO(),cliente:cl.nombre,estado:'abierta',
+      prueba:true,origen:'app',neto,iva,total,archivo:ruta,
+      contacto_email:_cotN.contacto_email,contacto_fono:_cotN.contacto_fono,
+      validez:_cotN.validez,observaciones:datos.observaciones,
+      items:items.map(i=>({producto:i.producto,codigo:i.codigo||null,
+        nombre_cliente:i.descripcion||null,cantidad:+i.cantidad,unidad:'UN',precio_unitario:+i.precio})),
+      notas:'Emitida desde la app en modo PRUEBA. Al archivar las pruebas se cierra y suelta sus adjudicaciones.'});
+    const H=DB[ARCH.hprec].data;
+    items.forEach(i=>{if(i.codigo)H.cotizaciones.push({codigo:i.codigo,codigo_sap:null,
+      producto:i.producto,fecha:hoyISO(),folio,precio:+i.precio,origen:'cotizacion',folio_oc:folio})});
+    H.actualizado=hoyISO();
+    conf.proxima_cotizacion_prueba=n+1;
+    await guardarArchivo(ARCH.hprec,`Precios ofertados de la cotización ${folio}`);
+    await guardarArchivo(ARCH.conf,`Próxima cotización de prueba: P${n+1}`);
+    await guardarArchivo(ARCH.cot,`Cotización ${folio} emitida desde la app (prueba)`);
+    _cotN=null;
+    bajarBlob(blob,nombre);                       // bajarBlob cierra el velo
+    toast(`Cotización ${folio} generada por ${clp(total)}. Descargada y guardada.`);
+    render();
+  }catch(e){velo(false);if(e.message!=='conflicto')toast('No se pudo emitir: '+e.message)}
+}
+/* Abre Outlook con destinatario, asunto y cuerpo listos. No puede adjuntar: ningún navegador
+   permite que una página adjunte archivos al correo. El PDF se arrastra a mano. */
+function correoCotizacion(id){
+  const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id); if(!c)return;
+  const para=c.contacto_email||'';
+  const asunto=`Cotización N° ${c.folio} - Novetec SPA`;
+  const cuerpo=`Estimados,\n\nAdjunto cotización N° ${c.folio} del ${fFecha(c.fecha)} por un total de ${clp(c.total||0)} IVA incluido.\n\n`
+    +c.items.map(i=>`- ${i.producto}: ${i.cantidad} ${i.unidad||'UN'} a ${clp(i.precio_unitario)}`).join('\n')
+    +`\n\nValidez de la oferta: ${c.validez||'7 DIAS'}.\n\nQuedamos atentos.\n\nNovetec SPA\nnovetec@novetec.cl`;
+  location.href=`mailto:${encodeURIComponent(para)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+  toast('Se abrió el correo. Adjunta el PDF antes de enviar.');
+}
+/* Archivar las pruebas: cierra las cotizaciones de prueba Y SUELTA sus adjudicaciones, para
+   que las líneas de OC vuelvan a quedar libres y se adjudiquen a la cotización real. */
+async function archivarPruebas(){
+  const C=DB[ARCH.cot].data.cotizaciones.filter(c=>c.prueba&&c.estado!=='cerrada');
+  if(!C.length){toast('No hay cotizaciones de prueba abiertas.');return}
+  const ids=new Set(C.map(c=>c.id));
+  const A=DB[ARCH.adj].data;
+  const sueltas=A.registros.filter(r=>ids.has(r.cot));
+  if(!await confirmar({titulo:'Archivar las cotizaciones de prueba',
+    texto:`Se cerrarán ${C.length} cotización(es) de prueba${sueltas.length?` y se soltarán ${sueltas.length} adjudicación(es), dejando esas líneas de OC libres para asignarlas a la cotización real.`:'.'}\nEl correlativo de prueba vuelve a P31.`,
+    confirmar:'Archivar'}))return;
+  velo(true,'Archivando…');
+  try{
+    A.registros=A.registros.filter(r=>!ids.has(r.cot));
+    C.forEach(c=>{c.estado='cerrada';
+      c.notas=(c.notas?c.notas+' ':'')+`Archivada el ${hoyISO()} al cerrar las pruebas.`});
+    DB[ARCH.conf].data.proxima_cotizacion_prueba=31;
+    if(sueltas.length)await guardarArchivo(ARCH.adj,'Sueltas las adjudicaciones de las cotizaciones de prueba');
+    await guardarArchivo(ARCH.conf,'Correlativo de prueba reiniciado en P31');
+    await guardarArchivo(ARCH.cot,`Archivadas ${C.length} cotización(es) de prueba`);
+    toast(`${C.length} prueba(s) archivadas${sueltas.length?`, ${sueltas.length} línea(s) de OC liberadas`:''}.`);
+    render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+function formCotizacion(){
+  const pruebas=DB[ARCH.cot].data.cotizaciones.filter(c=>c.prueba&&c.estado!=='cerrada').length;
+  return `<div style="margin:10px 0">
+    <button class="btn" onclick="nuevaCotizacion()"><i class="fa-solid fa-file-circle-plus"></i> Nueva cotización (prueba)</button>
+    ${pruebas?`<button class="btn sec" onclick="archivarPruebas()" title="Cierra las pruebas y suelta sus adjudicaciones"><i class="fa-solid fa-box-archive"></i> Archivar ${pruebas} prueba(s)</button>`:''}
+  </div>${panelCotizacion()}`;
+}
+
 /* ══════ BODEGAS: una sola fuente ══════
    Todo sale de data/bodegas.json. Antes la lista estaba repetida en cuatro constantes del
    código y agregar una bodega obligaba a tocarlas todas — se olvidaba una y el sistema
@@ -1839,6 +2220,7 @@ function rCot(){
     .sort((a,b)=>String(b[0].fecha||'').localeCompare(String(a[0].fecha||''))||b[1]-a[1])
     .map(x=>x[0]);
   return `${dlProd()}
+  ${formCotizacion()}
   ${formPendiente('cotizaciones','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${listaPend('cotizaciones')}
   ${cs.length?barraFichas():''}
@@ -1895,6 +2277,7 @@ function rCot(){
         <button class="btn mini peligro" onclick="rechazarCot('${esc(c.id)}')">Cliente la rechazó</button>`:''}
       ${c.estado==='cerrada'?`<button class="btn mini sec" onclick="reabrirCot('${esc(c.id)}')">Reabrir</button>`:''}
       <button class="btn mini sec" onclick="panelRecot('${esc(c.id)}')" title="Corregir la fecha y declarar a qué cotización reemplaza"><i class="fa-solid fa-rotate"></i> Recotización</button>
+      ${c.origen==='app'?`<button class="btn mini sec" onclick="correoCotizacion('${esc(c.id)}')" title="Abre Outlook con el destinatario y el texto listos. El PDF hay que adjuntarlo a mano."><i class="fa-solid fa-envelope"></i> Enviar por correo</button>`:''}
       </div><div id="rc-${esc(c.id)}"></div><div class="acciones">
       ${c.estado==='rechazada'?`<button class="btn mini sec" onclick="deshacerRechazoCot('${esc(c.id)}')">Deshacer el rechazo</button>`:''}
       <button class="btn mini peligro" onclick="borrarCot('${esc(c.id)}')">Eliminar</button>
