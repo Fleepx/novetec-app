@@ -1044,15 +1044,21 @@ function plLeerConsolidado(wb){
   return {hoja,filas};
 }
 
-/* Cada celda con fórmula guarda además su último resultado calculado. Si solo se pide
-   "recalcular al abrir", queda a criterio del programa hacerlo: LibreOffice lo ignora, y no
-   podemos verificar qué hace cada Excel del cliente. Así que se borra el valor cacheado de
-   toda celda que tenga fórmula: sin resultado guardado, cualquier programa está OBLIGADO a
-   calcularlo. Es lo que evita que el archivo llegue diciendo "NO COTIZA" al lado de un
-   precio ya puesto. */
-function plBorrarCache(xml){
-  return xml.replace(/<c\s[^>]*?>(?:(?!<\/c>)[\s\S])*?<\/c>/g,c=>
-    /<f[\s>]/.test(c)?c.replace(/<v>[\s\S]*?<\/v>/,''):c);
+/* Lo ÚNICO que se escribe en el archivo del cliente es la columna de precio. Sus fórmulas
+   no se tocan: quedan byte a byte iguales (verificado sobre las 402 del archivo).
+   Hay un solo matiz, y conviene tenerlo claro: cada celda con fórmula guarda además el
+   ÚLTIMO RESULTADO calculado. Ese resultado no es la fórmula, es una copia de la respuesta.
+   Si se deja, el cliente abre el archivo y ve " NO COTIZA" al lado de un precio ya puesto,
+   porque la copia quedó vieja. Pedir "recalcular al abrir" no basta: LibreOffice lo ignora
+   y no sabemos qué hará cada Excel. Así que se borra esa copia SOLO en las filas donde
+   escribimos precio, para que esas se recalculen sí o sí. La fórmula queda intacta y el
+   resto del archivo ni se mira. Se comprobó que no hay totales generales que dependan de
+   estas filas, así que ninguna otra celda queda desactualizada. */
+function plBorrarCache(xml,filas){
+  const set=new Set((filas||[]).map(String));
+  return xml.replace(/<row[^>]*\sr="(\d+)"[^>]*(?:\/>|>[\s\S]*?<\/row>)/g,(bloque,r)=>
+    set.has(r)?bloque.replace(/<c\s[^>]*?>(?:(?!<\/c>)[\s\S])*?<\/c>/g,c=>
+      /<f[\s>]/.test(c)?c.replace(/<v>[\s\S]*?<\/v>/,''):c):bloque);
 }
 /* Excel guarda el resultado de cada fórmula en caché. Al escribir precios por fuera, la
    columna "Proveedor adjudica" del cliente seguiría mostrando " NO COTIZA" junto a un precio
@@ -1163,7 +1169,7 @@ async function generarPlanilla(){
     const ruta='xl/'+String(mt[1]).replace(/^\//,'').replace(/^xl\//,'');
     let xml=await zip.file(ruta).async('string');
     _pl.filas.forEach(f=>{xml=xlsxEscribirNumero(xml,f.fila,PL_COL.precio,+f.precio>0?+f.precio:null)});
-    xml=plBorrarCache(xml);
+    xml=plBorrarCache(xml,_pl.filas.map(f=>f.fila));
     zip.file(ruta,xml);
     await plForzarRecalculo(zip);
     const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',
