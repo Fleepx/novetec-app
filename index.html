@@ -970,6 +970,234 @@ function cotizacionPDF(jsPDFCtor,cot,logoB64){
 }
 
 
+/* ══════════════════ PLANILLA CONSOLIDADA DEL CLIENTE ══════════════════
+   Agrosuper manda un Excel con lo que necesita cotizar y espera el MISMO archivo de vuelta
+   con nuestros precios en su columna. La app lo lee, deja poner precio línea por línea con
+   los mismos botones de historial, y devuelve el archivo completado.
+
+   POR QUÉ NO SE REGENERA EL EXCEL: el archivo es del cliente y trae sus colores, anchos,
+   celdas combinadas y las columnas de los otros tres proveedores. Reescribirlo con una
+   librería perdería todo eso. En vez de eso se abre el .xlsx como el ZIP que es y se le
+   escriben SOLO las celdas de precio dentro del XML de la hoja. Lo demás no se toca.
+   Mismo criterio que la hoja de ruta: copiar el archivo, no reconstruirlo. */
+const PL_COL={centro:'C',solped:'D',material:'E',nombre:'F',cantidad:'G',unidad:'H',precio:'I'};
+const PL_FILA_ENC=10;                       // fila de encabezados; los datos parten en la 11
+
+const colNum=L=>[...L.toUpperCase()].reduce((n,c)=>n*26+c.charCodeAt(0)-64,0);
+const refCol=r=>String(r).match(/^[A-Z]+/)[0];
+
+/* Escribe un número en una celda del XML de la hoja, respetando el orden de columnas y
+   conservando el estilo que ya tenía esa celda o, si no existía, el de su vecina de arriba. */
+function xlsxEscribirNumero(xml,fila,colLetra,valor){
+  const ref=colLetra+fila, ci=colNum(colLetra);
+  const reFila=new RegExp(`<row[^>]*\\sr="${fila}"[^>]*(?:/>|>[\\s\\S]*?</row>)`);
+  const mFila=reFila.exec(xml);
+  if(!mFila)return xml;                                  // fila inexistente: no inventamos
+  let bloque=mFila[0];
+  /* OJO con el cuantificador: si el segundo [^>]* es GOLOSO, en una celda vacía
+     <c r="I11" s="9"/> se traga la barra, calza con la rama ">…</c>" y el match se extiende
+     hasta el </c> de la celda siguiente que sí tenga contenido. Resultado: al reemplazar se
+     borran las celdas intermedias, incluidas las fórmulas del cliente. Con [^>]*? cierra en
+     la primera oportunidad y cada celda queda acotada a sí misma. */
+  const celdas=[...bloque.matchAll(/<c\s[^>]*r="([A-Z]+\d+)"[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g)];
+  const existente=celdas.find(c=>c[1]===ref);
+  // estilo: el de la celda misma, o el de otra celda de la misma columna en el archivo
+  let s='';
+  const conS=existente?existente[0]:null;
+  const mS=conS&&/\ss="(\d+)"/.exec(conS);
+  if(mS)s=` s="${mS[1]}"`;
+  else{
+    // Estilo de otra celda de precio YA LLENA, no de una del encabezado: si se copia el de
+    // arriba, los precios nuevos salen con otro formato de número que los existentes.
+    const otra=new RegExp(`<c\\s[^>]*r="${colLetra}(\\d+)"[^>]*\\ss="(\\d+)"[^>]*>\\s*<v>`).exec(xml);
+    if(otra&&+otra[1]>PL_FILA_ENC)s=` s="${otra[2]}"`;
+  }
+  const nueva=valor==null||valor===''?'':`<c r="${ref}"${s}><v>${+valor}</v></c>`;
+  let nuevo;
+  if(existente)nuevo=bloque.replace(existente[0],nueva);
+  else{
+    const sig=celdas.find(c=>colNum(refCol(c[1]))>ci);
+    if(sig)nuevo=bloque.replace(sig[0],nueva+sig[0]);
+    else if(/\/>$/.test(bloque))nuevo=bloque.replace(/\/>$/,`>${nueva}</row>`);
+    else nuevo=bloque.replace(/<\/row>$/,nueva+'</row>');
+  }
+  return xml.replace(bloque,nuevo);
+}
+
+/* Lee la hoja CONSOLIDADO devolviendo una línea por fila con datos. */
+function plLeerConsolidado(wb){
+  const XLSXlib=window.XLSX;
+  const hoja=wb.SheetNames.find(n=>/CONSOLIDADO/i.test(n))||wb.SheetNames[0];
+  const ws=wb.Sheets[hoja];
+  const cel=(c,f)=>{const v=ws[c+f];return v==null?null:(v.w!=null&&v.t==='s'?v.w:v.v)};
+  const rango=XLSXlib.utils.decode_range(ws['!ref']);
+  const filas=[];
+  for(let f=PL_FILA_ENC+1;f<=rango.e.r+1;f++){
+    const nombre=cel(PL_COL.nombre,f);
+    if(nombre==null||String(nombre).trim()==='')continue;
+    filas.push({fila:f,centro:cel(PL_COL.centro,f),solped:cel(PL_COL.solped,f),
+      material:cel(PL_COL.material,f)==null?null:String(cel(PL_COL.material,f)).trim(),
+      nombre:String(nombre).trim(),cantidad:+cel(PL_COL.cantidad,f)||0,
+      unidad:cel(PL_COL.unidad,f)||'UN',
+      precio_original:cel(PL_COL.precio,f),precio:''});
+  }
+  return {hoja,filas};
+}
+
+/* Cada celda con fórmula guarda además su último resultado calculado. Si solo se pide
+   "recalcular al abrir", queda a criterio del programa hacerlo: LibreOffice lo ignora, y no
+   podemos verificar qué hace cada Excel del cliente. Así que se borra el valor cacheado de
+   toda celda que tenga fórmula: sin resultado guardado, cualquier programa está OBLIGADO a
+   calcularlo. Es lo que evita que el archivo llegue diciendo "NO COTIZA" al lado de un
+   precio ya puesto. */
+function plBorrarCache(xml){
+  return xml.replace(/<c\s[^>]*?>(?:(?!<\/c>)[\s\S])*?<\/c>/g,c=>
+    /<f[\s>]/.test(c)?c.replace(/<v>[\s\S]*?<\/v>/,''):c);
+}
+/* Excel guarda el resultado de cada fórmula en caché. Al escribir precios por fuera, la
+   columna "Proveedor adjudica" del cliente seguiría mostrando " NO COTIZA" junto a un precio
+   ya puesto. Borrar la cadena de cálculo y pedir recálculo al abrir obliga a Excel a rehacer
+   las fórmulas. Sin esto el archivo llega al cliente contradiciéndose a sí mismo. */
+async function plForzarRecalculo(zip){
+  zip.remove('xl/calcChain.xml');
+  const f=zip.file('xl/workbook.xml'); if(!f)return;
+  let x=await f.async('string');
+  if(/<calcPr\b/.test(x))x=x.replace(/<calcPr\b[^>]*\/>/,'<calcPr calcId="0" fullCalcOnLoad="1"/>');
+  else x=x.replace('</workbook>','<calcPr calcId="0" fullCalcOnLoad="1"/></workbook>');
+  zip.file('xl/workbook.xml',x);
+}
+
+let _pl=null;
+async function cargarPlanilla(inp){
+  const file=inp.files&&inp.files[0]; if(!file)return;
+  velo(true,'Leyendo la planilla…');
+  try{
+    const XLSXlib=await cargarXLSX();
+    const buf=await file.arrayBuffer();
+    const wb=XLSXlib.read(new Uint8Array(buf),{type:'array'});
+    const {hoja,filas}=plLeerConsolidado(wb);
+    if(!filas.length)throw new Error('no encontré líneas de producto en la hoja CONSOLIDADO');
+    // Resolver contra el maestro: primero por código SAP, que es lo confiable; el nombre solo si falla
+    filas.forEach(f=>{
+      const P=DB[ARCH.prod].data.productos;
+      let p=f.material?P.find(x=>sapsDe(x).includes(String(f.material))):null;
+      if(!p)p=prodMaestro(f.nombre);
+      f.codigo=p?p.codigo:null;
+      f.producto=p?p.nombre:f.nombre;
+      f.bodega=bodegaDeCentro(f.centro)||'';
+    });
+    const cl=clientes()[0]||{};
+    _pl={file,buf,hoja,filas,cliente:cl.nombre||'',contacto_nombre:'',validez:'7 DIAS',
+         obsDespacho:'',obsEditada:false};
+    velo(false);render();
+    setTimeout(()=>{const e=document.getElementById('pl-panel');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})},60);
+  }catch(e){velo(false);toast('No pude leer la planilla: '+e.message)}
+  inp.value='';
+}
+function cancelarPlanilla(){_pl=null;render()}
+function plSet(c,v){if(!_pl)return;_pl[c]=v;render()}
+function plFila(i,c,v){if(!_pl)return;_pl.filas[i][c]=v;render()}
+function plPrecio(i,fuente){
+  const f=_pl.filas[i];
+  if(!f.codigo){toast('Esa línea no calza con ningún producto del maestro.');return}
+  const p=ultimoPrecio(f.codigo,fuente);
+  if(!p){toast(`Sin precio previo ${fuente==='oc'?'adjudicado':'ofertado'} para ${f.producto}.`);return}
+  f.precio=p.precio;render();
+}
+function panelPlanilla(){
+  if(!_pl)return '';
+  const conCot=_pl.filas.filter(f=>+f.precio>0);
+  const neto=conCot.reduce((s,f)=>s+(+f.precio)*(+f.cantidad||0),0);
+  const cl=clientePorNombre(_pl.cliente)||{};
+  return `<div id="pl-panel" class="form" style="border:2px solid var(--ambar);border-radius:10px;padding:14px;margin:12px 0">
+    <b style="font-size:15px">Planilla del cliente · ${esc(_pl.file.name)}</b>
+    <p class="small muted">Los precios que pongas aquí se escriben en la columna PROV4 del MISMO archivo y te lo devuelvo completado. Dejar una línea en blanco significa NO COTIZAR ese producto: así lo entiende la planilla.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">
+      <div><label>Cliente</label><select onchange="plSet('cliente',this.value)">
+        ${clientes().map(c=>`<option value="${esc(c.nombre)}"${_pl.cliente===c.nombre?' selected':''}>${esc(c.corto)}</option>`).join('')}</select></div>
+      <div><label>Comprador</label><input list="cn-compradores" value="${esc(_pl.contacto_nombre)}" onchange="plSet('contacto_nombre',this.value)">
+        <datalist id="cn-compradores">${(cl.contactos||[]).map(k=>`<option value="${esc(k.nombre)}">`).join('')}</datalist></div>
+      <div><label>Condición / validez</label><input list="cn-cond" value="${esc(_pl.validez)}" onchange="plSet('validez',this.value)">
+        <datalist id="cn-cond">${CONDICIONES.map(x=>`<option value="${esc(x)}">`).join('')}</datalist></div>
+    </div>
+    <table style="margin-top:10px"><tr><th>Producto solicitado</th><th>Bodega</th><th class="num">Cant.</th><th>Precio unitario</th></tr>
+    ${_pl.filas.map((f,i)=>{
+      const oc=f.codigo?ultimoPrecio(f.codigo,'oc'):null, co=f.codigo?ultimoPrecio(f.codigo,'cot'):null;
+      return `<tr${+f.precio>0?'':' style="opacity:.62"'}>
+        <td class="trunc" title="${esc(f.nombre)}">${esc(f.nombre)}<br>
+          <span class="small ${f.codigo?'muted':''}">${f.codigo?esc(f.codigo):'<span class="chip rojo">fuera del maestro</span>'}${f.material?' · SAP '+esc(f.material):''}</span></td>
+        <td class="small">${esc(f.bodega||f.centro||'—')}</td>
+        <td class="num">${num(f.cantidad)} ${esc(f.unidad)}</td>
+        <td><input style="width:110px" placeholder="sin cotizar" value="${f.precio===''?'':esc(String(f.precio))}" onchange="plFila(${i},'precio',this.value===''?'':(+this.value||0))">
+          <div class="small" style="margin-top:4px">
+            <button class="btn mini sec" ${oc?'':'disabled'} onclick="plPrecio(${i},'oc')" title="${oc?`Adjudicado el ${fFecha(oc.fecha)} en la OC ${esc(oc.ref)}`:'Sin precio adjudicado previo'}">OC ${oc?clp(oc.precio):'—'}</button>
+            <button class="btn mini sec" ${co?'':'disabled'} onclick="plPrecio(${i},'cot')" title="${co?`Ofertado el ${fFecha(co.fecha)} en ${esc(co.ref)}`:'Sin precio ofertado previo'}">Cot ${co?clp(co.precio):'—'}</button>
+          </div></td></tr>`}).join('')}
+    </table>
+    <div class="small muted" style="margin-top:8px">${conCot.length} de ${_pl.filas.length} línea(s) cotizadas · neto ${clp(neto)}</div>
+    <div class="acciones" style="margin-top:10px">
+      <button class="btn" onclick="generarPlanilla()"><i class="fa-solid fa-file-excel"></i> Generar y descargar el Excel</button>
+      <button class="btn sec" onclick="cancelarPlanilla()">Cancelar</button>
+    </div></div>`;
+}
+async function generarPlanilla(){
+  if(!_pl)return;
+  const cot=_pl.filas.filter(f=>+f.precio>0);
+  if(!cot.length){toast('No hay ninguna línea con precio.');return}
+  const cl=clientePorNombre(_pl.cliente); if(!cl){toast('Elige el cliente.');return}
+  const sinCod=cot.filter(f=>!f.codigo);
+  if(sinCod.length&&!await confirmar({titulo:'Productos fuera del maestro',
+    texto:`${sinCod.length} línea(s) cotizadas no calzan con el maestro: ${sinCod.map(f=>f.nombre).join(', ')}.\nSe escriben igual en el Excel, pero no van a emparejar solas cuando llegue la OC.`,
+    confirmar:'Continuar'}))return;
+  const conf=DB[ARCH.conf].data, n=+conf.proxima_cotizacion_prueba||31, folio='P'+n;
+  velo(true,'Completando la planilla…');
+  try{
+    const JSZipLib=await cargarJSZip();
+    const zip=await JSZipLib.loadAsync(_pl.buf);
+    // Ubicar el XML de la hoja: el nombre visible no dice en qué archivo está
+    const wbxml=await zip.file('xl/workbook.xml').async('string');
+    const rels=await zip.file('xl/_rels/workbook.xml.rels').async('string');
+    const mh=new RegExp(`<sheet[^>]*name="${_pl.hoja}"[^>]*r:id="([^"]+)"`).exec(wbxml)
+          ||/<sheet[^>]*r:id="([^"]+)"/.exec(wbxml);
+    const mt=new RegExp(`Id="${mh[1]}"[^>]*Target="([^"]+)"`).exec(rels);
+    const ruta='xl/'+String(mt[1]).replace(/^\//,'').replace(/^xl\//,'');
+    let xml=await zip.file(ruta).async('string');
+    _pl.filas.forEach(f=>{xml=xlsxEscribirNumero(xml,f.fila,PL_COL.precio,+f.precio>0?+f.precio:null)});
+    xml=plBorrarCache(xml);
+    zip.file(ruta,xml);
+    await plForzarRecalculo(zip);
+    const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',
+      mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const nombre=`Cotizacion_${folio}_${fFecha(hoyISO())}.xlsx`;
+    const ruta_repo='documentos/cotizaciones/'+nombre;
+    await subirBinario(ruta_repo,blob,`Planilla cotizada ${folio} (prueba)`);
+    const neto=cot.reduce((s,f)=>s+(+f.precio)*(+f.cantidad||0),0);
+    const iva=Math.round(neto*0.19);
+    DB[ARCH.cot].data.cotizaciones.push({
+      id:'COT-APP-'+folio,folio,fecha:hoyISO(),cliente:cl.nombre,estado:'abierta',
+      prueba:true,origen:'app',formato:'planilla',neto,iva,total:neto+iva,archivo:ruta_repo,
+      contacto_nombre:_pl.contacto_nombre||null,validez:_pl.validez,
+      /* La bodega viene del CENTRO de la planilla, que sale del SAP del cliente:
+         es dato duro por línea, no una deducción de texto libre. */
+      items:cot.map(f=>({producto:f.producto,codigo:f.codigo||null,codigo_sap:f.material||null,
+        nombre_cliente:f.nombre,bodega:f.bodega||null,centro:f.centro==null?null:String(f.centro),
+        cantidad:+f.cantidad,unidad:f.unidad||'UN',precio_unitario:+f.precio})),
+      notas:`Planilla del cliente completada desde la app (prueba). ${_pl.filas.length-cot.length} línea(s) quedaron sin cotizar.`});
+    const H=DB[ARCH.hprec].data;
+    cot.forEach(f=>{if(f.codigo)H.cotizaciones.push({codigo:f.codigo,codigo_sap:f.material||null,
+      producto:f.producto,fecha:hoyISO(),folio,precio:+f.precio,origen:'cotizacion',folio_oc:folio})});
+    H.actualizado=hoyISO();
+    conf.proxima_cotizacion_prueba=n+1;
+    await guardarArchivo(ARCH.hprec,`Precios ofertados de la planilla ${folio}`);
+    await guardarArchivo(ARCH.conf,`Próxima cotización de prueba: P${n+1}`);
+    await guardarArchivo(ARCH.cot,`Planilla ${folio} cotizada desde la app (prueba)`);
+    _pl=null;
+    bajarBlob(blob,nombre);
+    toast(`${folio}: ${cot.length} línea(s) cotizadas por ${clp(neto)}. Excel descargado.`);
+    render();
+  }catch(e){velo(false);if(e.message!=='conflicto')toast('No se pudo generar: '+e.message)}
+}
+
 /* ══════════════════ EMISIÓN DE COTIZACIONES ══════════════════
    La app pasa a emitir cotizaciones, hasta hoy hechas en Facto. Una cotización NO es un DTE
    (sin timbre SII ni folio tributario), así que podemos emitirla nosotros.
@@ -1286,8 +1514,10 @@ function formCotizacion(){
   const pruebas=DB[ARCH.cot].data.cotizaciones.filter(c=>c.prueba&&c.estado!=='cerrada').length;
   return `<div style="margin:10px 0">
     <button class="btn" onclick="nuevaCotizacion()"><i class="fa-solid fa-file-circle-plus"></i> Nueva cotización (prueba)</button>
+    <label class="btn sec" style="cursor:pointer" title="Sube la planilla del cliente, pon los precios y te la devuelvo completada"><i class="fa-solid fa-file-excel"></i> Cotizar planilla del cliente
+      <input type="file" accept=".xlsx,.xlsm" style="display:none" onchange="cargarPlanilla(this)"></label>
     ${pruebas?`<button class="btn sec" onclick="archivarPruebas()" title="Cierra las pruebas y suelta sus adjudicaciones"><i class="fa-solid fa-box-archive"></i> Archivar ${pruebas} prueba(s)</button>`:''}
-  </div>${panelCotizacion()}`;
+  </div>${panelCotizacion()}${panelPlanilla()}`;
 }
 
 /* ══════ BODEGAS: una sola fuente ══════
