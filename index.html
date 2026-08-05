@@ -1018,22 +1018,53 @@ function ultimoPrecio(codigo,fuente){
   return c.length?{precio:+c[0].precio,fecha:c[0].fecha,ref:c[0].folio_oc||c[0].folio||''}:null;
 }
 
+/* El texto de despacho se arma solo con los datos ya elegidos. En las 58 cotizaciones del
+   repositorio esta línea está escrita de veinte formas distintas ("DESP A", "DESPACHO A",
+   "DESPACHOS A", "//", "Y/O", "AT:", "AT.:", "ATENCION"), porque se tipea a mano cada vez.
+   Al componerla queda pareja siempre, y el dato ya vive estructurado en la cotización.
+   Si Jefe la edita a mano, deja de recomponerse: manda lo que él escribió. */
+const CONDICIONES=['7 DIAS','7 DIAS HABILES','HASTA AGOTAR STOCK','PRODUCTO A PEDIDO',
+                   'ENTREGA INMEDIATA','3 DIAS HABILES','A CONVENIR'];
+function cnTextoDespacho(){
+  if(!_cotN||_cotN.obsEditada)return;
+  const bs=[...new Set(_cotN.items.map(i=>i.bodega).filter(Boolean))];
+  const ord=bodegasOrden();
+  bs.sort((a,b)=>ord.indexOf(a)-ord.indexOf(b));
+  const nom=b=>b==='RETIRA CLIENTE'?b:bodegaDespacho(b);
+  let t='';
+  if(bs.length===1)t=bs[0]==='RETIRA CLIENTE'?'RETIRA CLIENTE':'DESP A '+nom(bs[0]);
+  else if(bs.length>1)t='DESP A BODEGAS: '+bs.map(nom).join(' Y/O ');
+  if(_cotN.contacto_nombre)t+=(t?' ':'')+'AT.: '+_cotN.contacto_nombre.toUpperCase();
+  if(_cotN.validez)t+=(t?' ':'')+'VALIDEZ DE PRECIO '+String(_cotN.validez).toUpperCase();
+  _cotN.obsDespacho=t;
+}
 let _cotN=null;
 function nuevaCotizacion(){
   const cl=clientes()[0]||{};
+  const bod=(cl.bodegas||[])[0]||'';
   _cotN={cliente:cl.nombre||'',contacto_nombre:'',contacto_email:'',contacto_fono:'',
-         validez:'7 DIAS',observaciones:'',items:[{producto:'',codigo:'',descripcion:'',cantidad:1,precio:''}]};
+         validez:'7 DIAS',bodegaDefecto:bod,observaciones:'',obsDespacho:'',obsEditada:false,
+         items:[{producto:'',codigo:'',descripcion:'',cantidad:1,precio:'',bodega:bod}]};
+  cnTextoDespacho();
   render();
   setTimeout(()=>{const e=document.getElementById('cn-panel');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})},60);
 }
 function cancelarCotizacion(){_cotN=null;render()}
 function cnSet(campo,v){if(!_cotN)return;_cotN[campo]=v;
-  if(campo==='cliente'||campo==='contacto_nombre')cnAutorrelleno();render()}
+  if(campo==='cliente'){const c=clientePorNombre(v);_cotN.bodegaDefecto=((c&&c.bodegas)||[])[0]||'';
+    _cotN.items.forEach(i=>i.bodega=_cotN.bodegaDefecto)}
+  if(campo==='bodegaDefecto')_cotN.items.forEach(i=>{if(!i.bodega)i.bodega=v});
+  if(campo==='obsDespacho')_cotN.obsEditada=true;
+  if(campo==='cliente'||campo==='contacto_nombre')cnAutorrelleno();
+  if(campo!=='obsDespacho')cnTextoDespacho();
+  render()}
 function cnItem(i,campo,v){if(!_cotN)return;_cotN.items[i][campo]=v;
   if(campo==='producto'){const m=prodMaestro(v);_cotN.items[i].codigo=m?m.codigo:''}
+  if(campo==='bodega')cnTextoDespacho();
   render()}
-function cnAgregar(){_cotN.items.push({producto:'',codigo:'',descripcion:'',cantidad:1,precio:''});render()}
-function cnQuitar(i){_cotN.items.splice(i,1);if(!_cotN.items.length)cnAgregar();else render()}
+function cnAgregar(){_cotN.items.push({producto:'',codigo:'',descripcion:'',cantidad:1,precio:'',
+  bodega:_cotN.bodegaDefecto||''});cnTextoDespacho();render()}
+function cnQuitar(i){_cotN.items.splice(i,1);if(!_cotN.items.length)cnAgregar();else{cnTextoDespacho();render()}}
 function cnPrecio(i,fuente){
   const it=_cotN.items[i]; if(!it.codigo){toast('Elige primero el producto.');return}
   const p=ultimoPrecio(it.codigo,fuente);
@@ -1081,7 +1112,12 @@ function panelCotizacion(){
         <input list="cn-compradores" value="${esc(_cotN.contacto_nombre)}" placeholder="Escribe el nombre" onchange="cnSet('contacto_nombre',this.value)">
         <datalist id="cn-compradores">${(cl.contactos||[]).map(k=>`<option value="${esc(k.nombre)}">`).join('')}</datalist>
       </div>
-      <div><label>Validez</label><input value="${esc(_cotN.validez)}" onchange="cnSet('validez',this.value)"></div>
+      <div><label>Condición / validez</label>
+        <input list="cn-cond" value="${esc(_cotN.validez)}" onchange="cnSet('validez',this.value)">
+        <datalist id="cn-cond">${CONDICIONES.map(x=>`<option value="${esc(x)}">`).join('')}</datalist></div>
+      <div><label>Bodega por defecto</label><select onchange="cnSet('bodegaDefecto',this.value)">
+        ${((cl.bodegas)||[]).concat('RETIRA CLIENTE').map(b=>`<option value="${esc(b)}"${_cotN.bodegaDefecto===b?' selected':''}>${esc(b)}</option>`).join('')}
+      </select></div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:6px">
       <div><label>Email cliente</label><input value="${esc(_cotN.contacto_email)}" onchange="cnSet('contacto_email',this.value)">
@@ -1090,13 +1126,17 @@ function panelCotizacion(){
         <div class="small" style="margin-top:4px">${opc(cont,'telefonos',_cotN.contacto_fono)}</div></div>
     </div>
     <datalist id="cn-prods">${prods.map(p=>`<option value="${esc(p.nombre)}">`).join('')}</datalist>
-    <table style="margin-top:10px"><tr><th>Producto</th><th>Descripción</th><th class="num">Cant.</th><th>Precio unitario</th><th></th></tr>
+    <p class="small muted" style="margin-top:10px">La bodega va por línea: una misma cotización puede despachar a varias, y el precio cambia según la distancia (peajes y bencina).</p>
+    <table><tr><th>Producto</th><th>Descripción</th><th>Bodega</th><th class="num">Cant.</th><th>Precio unitario</th><th></th></tr>
     ${_cotN.items.map((it,i)=>{
       const oc=it.codigo?ultimoPrecio(it.codigo,'oc'):null, co=it.codigo?ultimoPrecio(it.codigo,'cot'):null;
       return `<tr>
       <td><input list="cn-prods" style="width:100%" value="${esc(it.producto)}" onchange="cnItem(${i},'producto',this.value)">
         <span class="small ${it.codigo?'muted':''}">${it.producto?(it.codigo?esc(it.codigo):'<span class="chip rojo">no está en el maestro</span>'):''}</span></td>
       <td><input style="width:100%" value="${esc(it.descripcion)}" onchange="cnItem(${i},'descripcion',this.value)"></td>
+      <td><select onchange="cnItem(${i},'bodega',this.value)">
+        ${((cl.bodegas)||[]).concat('RETIRA CLIENTE').map(b=>`<option value="${esc(b)}"${it.bodega===b?' selected':''}>${esc(b)}</option>`).join('')}
+      </select></td>
       <td class="num"><input style="width:70px" value="${esc(String(it.cantidad))}" onchange="cnItem(${i},'cantidad',+this.value||0)"></td>
       <td><input style="width:110px" value="${esc(String(it.precio))}" onchange="cnItem(${i},'precio',+this.value||0)">
         <div class="small" style="margin-top:4px">
@@ -1106,7 +1146,10 @@ function panelCotizacion(){
       <td><button class="btn mini sec" onclick="cnQuitar(${i})" title="Quitar la línea"><i class="fa-solid fa-xmark"></i></button></td></tr>`}).join('')}
     </table>
     <button class="btn mini sec" style="margin-top:6px" onclick="cnAgregar()"><i class="fa-solid fa-plus"></i> Agregar línea</button>
-    <label style="margin-top:10px">Observaciones (una por línea)</label>
+    <label style="margin-top:10px">Texto de despacho ${_cotN.obsEditada?'<span class="chip ambar small">editado a mano</span>':'<span class="chip small">se arma solo</span>'}</label>
+    <input value="${esc(_cotN.obsDespacho)}" onchange="cnSet('obsDespacho',this.value)">
+    ${_cotN.obsEditada?`<button class="btn mini sec" style="margin-top:4px" onclick="_cotN.obsEditada=false;cnTextoDespacho();render()">Volver al texto automático</button>`:''}
+    <label style="margin-top:10px">Otras observaciones (una por línea)</label>
     <textarea rows="3" onchange="cnSet('observaciones',this.value)">${esc(_cotN.observaciones)}</textarea>
     <div class="small muted" style="margin-top:6px">Neto ${clp(neto)} · IVA ${clp(Math.round(neto*0.19))} · Total ${clp(neto+Math.round(neto*0.19))}</div>
     <div class="acciones" style="margin-top:10px">
@@ -1137,9 +1180,12 @@ async function emitirCotizacion(){
       vendedor:(conf.vendedor||{}).nombre||'Comercializadora Novetec',
       vendedor_email:(conf.vendedor||{}).email||'novetec@novetec.cl',
       validez:_cotN.validez,
-      observaciones:String(_cotN.observaciones||'').split('\n').map(s=>s.trim()).filter(Boolean),
+      observaciones:[].concat(_cotN.obsDespacho?[_cotN.obsDespacho]:[],
+        String(_cotN.observaciones||'').split('\n').map(s=>s.trim()).filter(Boolean)),
       items:items.map(i=>({producto:i.producto,descripcion:i.descripcion,
         cantidad:+i.cantidad,unidad:'UN',precio_unitario:+i.precio}))};
+    // 'validez' ya viaja dentro del texto de despacho: no repetirla como observación aparte
+    datos.validez='';
     const {doc,neto,iva,total}=cotizacionPDF(jsPDF,datos,await logoCotizacion());
     const blob=doc.output('blob');
     const nombre=`COT_${folio}.pdf`, ruta='documentos/cotizaciones/'+nombre;
@@ -1149,8 +1195,11 @@ async function emitirCotizacion(){
       prueba:true,origen:'app',neto,iva,total,archivo:ruta,
       contacto_email:_cotN.contacto_email,contacto_fono:_cotN.contacto_fono,
       validez:_cotN.validez,observaciones:datos.observaciones,
+      /* La bodega por línea es CONFIABLE aquí: la eligió Jefe al cotizar, no se dedujo de un
+         texto libre. Para el match vale como la de una cotización XLSX, no como la de un PDF. */
       items:items.map(i=>({producto:i.producto,codigo:i.codigo||null,
-        nombre_cliente:i.descripcion||null,cantidad:+i.cantidad,unidad:'UN',precio_unitario:+i.precio})),
+        nombre_cliente:i.descripcion||null,bodega:i.bodega||null,
+        cantidad:+i.cantidad,unidad:'UN',precio_unitario:+i.precio})),
       notas:'Emitida desde la app en modo PRUEBA. Al archivar las pruebas se cierra y suelta sus adjudicaciones.'});
     const H=DB[ARCH.hprec].data;
     items.forEach(i=>{if(i.codigo)H.cotizaciones.push({codigo:i.codigo,codigo_sap:null,
@@ -1227,6 +1276,7 @@ function bodegas(){
     centros:(b.centros||[]).map(c=>String(c).trim().toUpperCase()),
     claves:(b.claves||[]).concat(b.nombre).map(t=>sinTilde(t)),
     titulo:b.titulo_documento||('BODEGA '+String(b.nombre||'').toUpperCase()),
+    despacho:b.nombre_despacho||b.titulo_documento||String(b.nombre||'').toUpperCase(),
     excepcional:!!b.excepcional}));
   return _bodCache;
 }
@@ -1243,6 +1293,12 @@ function bodegaDeCentro(c){
 function bodegaTitulo(nombre){
   const b=bodegas().find(x=>x.nombre===nombre);
   return b?b.titulo:('BODEGA '+String(nombre||'').toUpperCase());
+}
+/* Cómo se nombra la bodega en la línea de despacho de una cotización. No sirve el título de
+   la hoja de ruta: ahí va "BODEGA LONGOVILO - LONGOVILO" y en la frase quedaría repetido. */
+function bodegaDespacho(nombre){
+  const b=bodegas().find(x=>x.nombre===nombre);
+  return b?b.despacho:String(nombre||'').toUpperCase();
 }
 /* Normaliza cómo viene escrito un destino en un documento. Gana la PRIMERA bodega cuya
    clave aparezca en el texto, por eso el orden del archivo importa. Sin tildes a ambos
