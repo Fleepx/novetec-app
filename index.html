@@ -885,7 +885,7 @@ function cotizacionPDF(jsPDFCtor,cot,logoB64){
 
   /* ── Bloque del cliente: sin relleno, como Facto ── */
   y=Math.max(yy,y+24)+5;
-  const hCli=17;
+  const hCli=22;
   doc.setLineWidth(0.3).rect(M,y,AN,hCli);
   const dato=(et,va,x,yl)=>{
     doc.setFont('helvetica','bold').setFontSize(7.5).text(et,x,yl);
@@ -894,9 +894,12 @@ function cotizacionPDF(jsPDFCtor,cot,logoB64){
   /* El NOMBRE del comprador no va en el PDF: en la cotización de Facto tampoco aparece.
      En la app sirve como llave para rellenar su correo y su teléfono, y ahí se queda.
      De cada uno se imprime UNO solo, el marcado como principal. */
-  dato('Señor(es)',cot.cliente,M+3,y+5);             dato('RUT',cot.rut_cliente,M+AN/2,y+5);
-  dato('Teléfono',cot.contacto_fono,M+3,y+10);       dato('Email Cliente',cot.contacto_email,M+AN/2,y+10);
-  dato('Vendedor',cot.vendedor,M+3,y+15);            dato('Email Vendedor',cot.vendedor_email,M+AN/2,y+15);
+  /* El nombre del comprador vuelve al documento (Jefe, 05-08-2026). Se había sacado para
+     calcar a Facto, pero identifica a quién va dirigida la oferta y eso vale más que el calco. */
+  dato('Señor(es)',cot.cliente,M+3,y+5);              dato('RUT',cot.rut_cliente,M+AN/2,y+5);
+  dato('Contacto',cot.contacto_nombre,M+3,y+10);      dato('Teléfono',cot.contacto_fono,M+AN/2,y+10);
+  dato('Email Cliente',cot.contacto_email,M+3,y+15);  dato('Email Vendedor',cot.vendedor_email,M+AN/2,y+15);
+  dato('Vendedor',cot.vendedor,M+3,y+20);
 
   /* ── Tabla de ítems, de alto fijo ── */
   y+=hCli+6;
@@ -1143,11 +1146,11 @@ function panelPlanilla(){
           <span class="small ${f.codigo?'muted':''}">${f.codigo?esc(f.codigo):'<span class="chip rojo">fuera del maestro</span>'}${f.material?' · SAP '+esc(f.material):''}</span></td>
         <td class="small">${esc(f.bodega||f.centro||'—')}</td>
         <td class="num">${num(f.cantidad)} ${esc(f.unidad)}</td>
-        <td><input style="width:110px" placeholder="sin cotizar" value="${f.precio===''?'':esc(String(f.precio))}" onchange="plFila(${i},'precio',this.value===''?'':(+this.value||0))">
-          <div class="small" style="margin-top:4px">
-            <button class="btn mini sec" ${oc?'':'disabled'} onclick="plPrecio(${i},'oc')" title="${oc?`Adjudicado el ${fFecha(oc.fecha)} en la OC ${esc(oc.ref)}`:'Sin precio adjudicado previo'}">OC ${oc?clp(oc.precio):'—'}</button>
-            <button class="btn mini sec" ${co?'':'disabled'} onclick="plPrecio(${i},'cot')" title="${co?`Ofertado el ${fFecha(co.fecha)} en ${esc(co.ref)}`:'Sin precio ofertado previo'}">Cot ${co?clp(co.precio):'—'}</button>
-          </div></td></tr>`}).join('')}
+        <td><div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap">
+          <input style="width:110px" placeholder="sin cotizar" value="${f.precio===''?'':esc(String(f.precio))}" onchange="plFila(${i},'precio',this.value===''?'':(+this.value||0))">
+          <button class="btn mini sec" ${oc?'':'disabled'} onclick="plPrecio(${i},'oc')" title="${oc?`Adjudicado el ${fFecha(oc.fecha)} en la OC ${esc(oc.ref)}`:'Sin precio adjudicado previo'}">OC ${oc?clp(oc.precio):'—'}</button>
+          <button class="btn mini sec" ${co?'':'disabled'} onclick="plPrecio(${i},'cot')" title="${co?`Ofertado el ${fFecha(co.fecha)} en ${esc(co.ref)}`:'Sin precio ofertado previo'}">Cot ${co?clp(co.precio):'—'}</button>
+        </div></td></tr>`}).join('')}
     </table>
     <div class="small muted" style="margin-top:8px">${conCot.length} de ${_pl.filas.length} línea(s) cotizadas · neto ${clp(neto)}</div>
     <div class="acciones" style="margin-top:10px">
@@ -1280,18 +1283,33 @@ function ultimoPrecio(codigo,fuente){
 const UNIDADES=['UN','MT','KG','LT','ROLLO','CAJA','PAR','JGO','M2','M3','SACO','BOLSA','PQTE','TAMBOR','TON','GL'];
 const CONDICIONES=['7 DIAS','7 DIAS HABILES','HASTA AGOTAR STOCK','PRODUCTO A PEDIDO',
                    'ENTREGA INMEDIATA','3 DIAS HABILES','A CONVENIR'];
+/* Traduce la condición a texto con fecha cuando se puede: "7 DIAS" dice poco dentro de un mes,
+   "7 DIAS (HASTA EL 12-08-2026)" no deja dudas. Los días hábiles saltan sábados y domingos.
+   Si la condición no habla de días (hasta agotar stock, a convenir), va tal cual. */
+function textoValidez(cond){
+  const t=String(cond||'').toUpperCase().trim();
+  const m=/^(\d+)\s*DIAS(\s*HABILES)?$/.exec(t);
+  if(!m)return t;
+  const habiles=!!m[2], d=new Date(hoyISO()+'T12:00:00');
+  let quedan=+m[1];
+  while(quedan>0){d.setDate(d.getDate()+1);if(!habiles||(d.getDay()!==0&&d.getDay()!==6))quedan--}
+  const iso=d.toISOString().slice(0,10);
+  return `${t} (HASTA EL ${fFecha(iso)})`;
+}
 function cnTextoDespacho(){
   if(!_cotN||_cotN.obsEditada)return;
   const bs=[...new Set(_cotN.items.map(i=>i.bodega).filter(Boolean))];
   const ord=bodegasOrden();
   bs.sort((a,b)=>ord.indexOf(a)-ord.indexOf(b));
   const nom=b=>b==='RETIRA CLIENTE'?b:bodegaDespacho(b);
-  let t='';
-  if(bs.length===1)t=bs[0]==='RETIRA CLIENTE'?'RETIRA CLIENTE':'DESP A '+nom(bs[0]);
-  else if(bs.length>1)t='DESP A BODEGAS: '+bs.map(nom).join(' Y/O ');
-  if(_cotN.contacto_nombre)t+=(t?' ':'')+'AT.: '+_cotN.contacto_nombre.toUpperCase();
-  if(_cotN.validez)t+=(t?' ':'')+'VALIDEZ DE PRECIO '+String(_cotN.validez).toUpperCase();
-  _cotN.obsDespacho=t;
+  /* Tres bloques separados por línea en blanco: destino, a quién va dirigida, y hasta cuándo
+     rige el precio. En una sola línea corrida los tres datos se leían como un párrafo. */
+  const partes=[];
+  if(bs.length===1)partes.push(bs[0]==='RETIRA CLIENTE'?'RETIRA CLIENTE':'DESP A '+nom(bs[0]));
+  else if(bs.length>1)partes.push('DESP A BODEGAS: '+bs.map(nom).join(' Y/O '));
+  if(_cotN.contacto_nombre)partes.push('AT.: '+_cotN.contacto_nombre.toUpperCase());
+  if(_cotN.validez)partes.push('VALIDEZ DE PRECIO '+textoValidez(_cotN.validez));
+  _cotN.obsDespacho=partes.join('\n\n');
 }
 let _cotN=null;
 function nuevaCotizacion(){
@@ -1350,7 +1368,11 @@ function panelCotizacion(){
   const cont=(cl.contactos||[]).find(x=>x.nombre===_cotN.contacto_nombre);
   const conf=DB[ARCH.conf].data;
   const folio='P'+(conf.proxima_cotizacion_prueba||31);
-  const prods=DB[ARCH.prod].data.productos;
+  /* Alfabético: el maestro está ordenado por código NOV, que al buscar un producto no
+     significa nada. El desplegable filtra mientras se escribe, pero el orden importa cuando
+     se abre entero. */
+  const prods=[...DB[ARCH.prod].data.productos]
+    .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
   const opc=(lista,tipo,valor)=>{
     if(!cont||!(cont[tipo]||[]).length)return '';
     return (cont[tipo]||[]).map(x=>`<button class="btn mini ${x.valor===valor?'':'sec'}" title="${x.principal?'Es el principal':'Marcar como principal'}" onclick="cnPrincipal('${tipo}','${esc(x.valor)}')"><i class="fa-${x.principal?'solid':'regular'} fa-star"></i> ${esc(x.valor)}</button>`).join(' ');
@@ -1383,10 +1405,11 @@ function panelCotizacion(){
     <datalist id="cn-unidades">${UNIDADES.map(u=>`<option value="${esc(u)}">`).join('')}</datalist>
     <datalist id="cn-prods">${prods.map(p=>`<option value="${esc(p.nombre)}">`).join('')}</datalist>
     <p class="small muted" style="margin-top:10px">La bodega va por línea: una misma cotización puede despachar a varias, y el precio cambia según la distancia (peajes y bencina).</p>
-    <table><tr><th>Producto</th><th>Descripción</th><th>Bodega</th><th class="num">Cant.</th><th>Unidad</th><th>Precio unitario</th><th></th></tr>
+    <table><tr><th></th><th>Producto</th><th>Descripción</th><th>Bodega</th><th class="num">Cant.</th><th>Unidad</th><th>Precio unitario</th></tr>
     ${_cotN.items.map((it,i)=>{
       const oc=it.codigo?ultimoPrecio(it.codigo,'oc'):null, co=it.codigo?ultimoPrecio(it.codigo,'cot'):null;
       return `<tr>
+      <td><button class="btn mini sec" onclick="cnQuitar(${i})" title="Quitar la línea"><i class="fa-solid fa-xmark"></i></button></td>
       <td><input list="cn-prods" style="width:100%" value="${esc(it.producto)}" onchange="cnItem(${i},'producto',this.value)">
         <span class="small ${it.codigo?'muted':''}">${it.producto?(it.codigo?esc(it.codigo):'<span class="chip rojo">no está en el maestro</span>'):''}</span></td>
       <td><input style="width:100%" value="${esc(it.descripcion)}" onchange="cnItem(${i},'descripcion',this.value)"></td>
@@ -1395,16 +1418,15 @@ function panelCotizacion(){
       </select></td>
       <td class="num"><input style="width:70px" value="${esc(String(it.cantidad))}" onchange="cnItem(${i},'cantidad',+this.value||0)"></td>
       <td><input list="cn-unidades" style="width:80px" value="${esc(it.unidad||'UN')}" onchange="cnItem(${i},'unidad',this.value.toUpperCase().trim()||'UN')"></td>
-      <td><input style="width:110px" value="${esc(String(it.precio))}" onchange="cnItem(${i},'precio',+this.value||0)">
-        <div class="small" style="margin-top:4px">
-          <button class="btn mini sec" ${oc?'':'disabled'} onclick="cnPrecio(${i},'oc')" title="${oc?`Adjudicado el ${fFecha(oc.fecha)} en la OC ${esc(oc.ref)}`:'Sin precio adjudicado previo'}">OC ${oc?clp(oc.precio):'—'}</button>
-          <button class="btn mini sec" ${co?'':'disabled'} onclick="cnPrecio(${i},'cot')" title="${co?`Ofertado el ${fFecha(co.fecha)} en ${esc(co.ref)}`:'Sin precio ofertado previo'}">Cot ${co?clp(co.precio):'—'}</button>
-        </div></td>
-      <td><button class="btn mini sec" onclick="cnQuitar(${i})" title="Quitar la línea"><i class="fa-solid fa-xmark"></i></button></td></tr>`}).join('')}
+      <td><div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap">
+        <input style="width:110px" value="${esc(String(it.precio))}" onchange="cnItem(${i},'precio',+this.value||0)">
+        <button class="btn mini sec" ${oc?'':'disabled'} onclick="cnPrecio(${i},'oc')" title="${oc?`Adjudicado el ${fFecha(oc.fecha)} en la OC ${esc(oc.ref)}`:'Sin precio adjudicado previo'}">OC ${oc?clp(oc.precio):'—'}</button>
+        <button class="btn mini sec" ${co?'':'disabled'} onclick="cnPrecio(${i},'cot')" title="${co?`Ofertado el ${fFecha(co.fecha)} en ${esc(co.ref)}`:'Sin precio ofertado previo'}">Cot ${co?clp(co.precio):'—'}</button>
+      </div></td></tr>`}).join('')}
     </table>
     <button class="btn mini sec" style="margin-top:6px" onclick="cnAgregar()"><i class="fa-solid fa-plus"></i> Agregar línea</button>
     <label style="margin-top:10px">Texto de despacho ${_cotN.obsEditada?'<span class="chip ambar small">editado a mano</span>':'<span class="chip small">se arma solo</span>'}</label>
-    <input value="${esc(_cotN.obsDespacho)}" onchange="cnSet('obsDespacho',this.value)">
+    <textarea rows="5" onchange="cnSet('obsDespacho',this.value)">${esc(_cotN.obsDespacho)}</textarea>
     ${_cotN.obsEditada?`<button class="btn mini sec" style="margin-top:4px" onclick="_cotN.obsEditada=false;cnTextoDespacho();render()">Volver al texto automático</button>`:''}
     <label style="margin-top:10px">Otras observaciones (una por línea)</label>
     <textarea rows="3" onchange="cnSet('observaciones',this.value)">${esc(_cotN.observaciones)}</textarea>
@@ -1433,11 +1455,12 @@ async function emitirCotizacion(){
   try{
     const jsPDF=await cargarJsPDF();
     const datos={folio,fecha:hoyISO(),cliente:cl.nombre,rut_cliente:cl.rut,
+      contacto_nombre:_cotN.contacto_nombre,
       contacto_email:_cotN.contacto_email,contacto_fono:_cotN.contacto_fono,
       vendedor:(conf.vendedor||{}).nombre||'Comercializadora Novetec',
       vendedor_email:(conf.vendedor||{}).email||'novetec@novetec.cl',
       validez:_cotN.validez,
-      observaciones:[].concat(_cotN.obsDespacho?[_cotN.obsDespacho]:[],
+      observaciones:[].concat(String(_cotN.obsDespacho||'').split('\n'),
         String(_cotN.observaciones||'').split('\n').map(s=>s.trim()).filter(Boolean)),
       items:items.map(i=>({producto:i.producto,descripcion:i.descripcion,
         cantidad:+i.cantidad,unidad:i.unidad||'UN',precio_unitario:+i.precio}))};
@@ -2414,7 +2437,9 @@ function filaItem(pre={}){
     <button type="button" onclick="this.parentElement.remove()" title="Quitar">×</button>
   </div>`;
 }
-function dlProd(){return `<datalist id="dl-prod">${DB[ARCH.prod].data.productos.map(p=>`<option value="${esc(p.nombre)}">`).join('')}</datalist>`}
+function dlProd(){return `<datalist id="dl-prod">${[...DB[ARCH.prod].data.productos]
+  .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}))
+  .map(p=>`<option value="${esc(p.nombre)}">`).join('')}</datalist>`}
 function leerItems(cont,conPrecio=true){
   return [...document.querySelectorAll(`#${cont} .item-row`)].map(r=>({
     producto:r.querySelector('.it-prod').value.trim(),
