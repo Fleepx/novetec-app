@@ -233,19 +233,28 @@ details.form .inner{padding:0 16px 16px}
 #setup .card{padding:26px}
 #setup h1{font-size:20px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px}
 a{color:var(--texto)}
-/* En celular una línea de producto no cabe a lo ancho y la tabla no salta sola. Se parte en
-   DOS filas: arriba qué se cotiza (producto, descripción, bodega), abajo cuánto y a qué
-   precio. En pantalla ancha se comporta como una sola fila de siete columnas. */
+/* En celular la línea completa no cabe a lo ancho, y una tabla no salta sola. Se despliega
+   en cinco renglones, dando línea propia a los campos largos:
+       (X) [Producto]
+           [Descripción]
+           [Bodega]
+       [Cant] [Unidad] [Precio]
+       [OC] [Cot]
+   Sobre 820px vuelve a ser una sola fila de ocho columnas. */
 @media (max-width:820px){
-  table.cot-lineas,table.cot-lineas tbody,table.cot-lineas tr,table.cot-lineas td,table.cot-lineas th{display:block;width:auto}
+  table.cot-lineas,table.cot-lineas tbody,table.cot-lineas tr,table.cot-lineas td{display:block;width:auto}
   table.cot-lineas thead{display:none}
-  table.cot-lineas tr.cot-a{border-top:1.5px solid var(--line);padding-top:10px;margin-top:10px;
-    display:grid;grid-template-columns:34px 1fr;gap:6px;align-items:start}
-  table.cot-lineas tr.cot-b{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 0 2px 40px}
   table.cot-lineas td{padding:2px 0;border:none}
   table.cot-lineas td input,table.cot-lineas td select{width:100%}
-  table.cot-lineas tr.cot-b td{flex:0 0 auto}
-  table.cot-lineas tr.cot-b td input{width:88px}
+  table.cot-lineas tr.cot-a{display:grid;grid-template-columns:38px 1fr;gap:6px 8px;
+    border-top:1.5px solid var(--line);padding-top:12px;margin-top:12px}
+  table.cot-lineas tr.cot-a td:nth-child(1){grid-column:1;grid-row:1;align-self:start}
+  table.cot-lineas tr.cot-a td:nth-child(2){grid-column:2;grid-row:1}
+  table.cot-lineas tr.cot-a td:nth-child(n+3){grid-column:1/-1}
+  table.cot-lineas tr.cot-b{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:6px 8px;
+    padding:6px 0 2px}
+  table.cot-lineas tr.cot-b td:nth-child(4){grid-column:1/-1}
+  table.cot-lineas tr.cot-b td:nth-child(4) button{flex:1 1 46%}
   table.cot-lineas td[data-et]::before{content:attr(data-et);display:block;font-size:11px;
     color:var(--muted);margin-bottom:2px}
 }
@@ -1426,7 +1435,7 @@ function panelCotizacion(){
     <datalist id="cn-unidades">${UNIDADES.map(u=>`<option value="${esc(u)}">`).join('')}</datalist>
     <datalist id="cn-prods">${prods.map(p=>`<option value="${esc(p.nombre)}">`).join('')}</datalist>
     <p class="small muted" style="margin-top:10px">La bodega va por línea: una misma cotización puede despachar a varias, y el precio cambia según la distancia (peajes y bencina).</p>
-    <table class="cot-lineas"><thead><tr><th></th><th>Producto</th><th>Descripción</th><th>Bodega</th><th class="num">Cant.</th><th>Unidad</th><th>Precio unitario</th></tr></thead><tbody>
+    <table class="cot-lineas"><thead><tr><th></th><th>Producto</th><th>Descripción</th><th>Bodega</th><th class="num">Cant.</th><th>Unidad</th><th>Precio</th><th></th></tr></thead><tbody>
     ${_cotN.items.map((it,i)=>{
       const oc=it.codigo?ultimoPrecio(it.codigo,'oc'):null, co=it.codigo?ultimoPrecio(it.codigo,'cot'):null;
       return `<tr class="cot-a">
@@ -1439,8 +1448,8 @@ function panelCotizacion(){
       </select></td></tr><tr class="cot-b">
       <td class="num" data-et="Cant."><input style="width:70px" value="${esc(String(it.cantidad))}" onchange="cnItem(${i},'cantidad',+this.value||0)"></td>
       <td data-et="Unidad"><input list="cn-unidades" style="width:80px" value="${esc(it.unidad||'UN')}" onchange="cnItem(${i},'unidad',this.value.toUpperCase().trim()||'UN')"></td>
-      <td data-et="Precio unitario"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <input style="width:110px" value="${esc(String(it.precio))}" onchange="cnItem(${i},'precio',+this.value||0)">
+      <td data-et="Precio"><input style="width:110px" value="${esc(String(it.precio))}" onchange="cnItem(${i},'precio',+this.value||0)"></td>
+      <td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <button class="btn mini sec" ${oc?'':'disabled'} onclick="cnPrecio(${i},'oc')" title="${oc?`Adjudicado el ${fFecha(oc.fecha)} en la OC ${esc(oc.ref)}`:'Sin precio adjudicado previo'}">OC ${oc?clp(oc.precio):'—'}</button>
         <button class="btn mini sec" ${co?'':'disabled'} onclick="cnPrecio(${i},'cot')" title="${co?`Ofertado el ${fFecha(co.fecha)} en ${esc(co.ref)}`:'Sin precio ofertado previo'}">Cot ${co?clp(co.precio):'—'}</button>
       </div></td></tr>`}).join('')}
