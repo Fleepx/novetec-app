@@ -233,6 +233,22 @@ details.form .inner{padding:0 16px 16px}
 #setup .card{padding:26px}
 #setup h1{font-size:20px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px}
 a{color:var(--texto)}
+/* En celular una línea de producto no cabe a lo ancho y la tabla no salta sola. Se parte en
+   DOS filas: arriba qué se cotiza (producto, descripción, bodega), abajo cuánto y a qué
+   precio. En pantalla ancha se comporta como una sola fila de siete columnas. */
+@media (max-width:820px){
+  table.cot-lineas,table.cot-lineas tbody,table.cot-lineas tr,table.cot-lineas td,table.cot-lineas th{display:block;width:auto}
+  table.cot-lineas thead{display:none}
+  table.cot-lineas tr.cot-a{border-top:1.5px solid var(--line);padding-top:10px;margin-top:10px;
+    display:grid;grid-template-columns:34px 1fr;gap:6px;align-items:start}
+  table.cot-lineas tr.cot-b{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 0 2px 40px}
+  table.cot-lineas td{padding:2px 0;border:none}
+  table.cot-lineas td input,table.cot-lineas td select{width:100%}
+  table.cot-lineas tr.cot-b td{flex:0 0 auto}
+  table.cot-lineas tr.cot-b td input{width:88px}
+  table.cot-lineas td[data-et]::before{content:attr(data-et);display:block;font-size:11px;
+    color:var(--muted);margin-bottom:2px}
+}
 </style>
 </head>
 <body>
@@ -1259,6 +1275,11 @@ async function logoCotizacion(){
 }
 const clientes=()=>((DB[ARCH.cli]&&DB[ARCH.cli].data.clientes)||[])
   .slice().sort((a,b)=>(+a.orden||99)-(+b.orden||99));
+/* Un cliente con la lista de bodegas VACÍA no está restringido: se le ofrecen todas. Las
+   razones sociales del grupo cotizan casi siempre desde la oficina central de Rancagua y no
+   siempre ajustan los datos, así que restringir por cliente generaría más problemas que los
+   que resuelve. */
+const bodegasDe=cl=>((cl&&cl.bodegas&&cl.bodegas.length)?cl.bodegas:bodegasOrden());
 const clientePorNombre=n=>clientes().find(c=>c.nombre===n||c.corto===n)||null;
 const contactoPrincipal=(lista)=>{const l=lista||[];return (l.find(x=>x.principal)||l[0]||{}).valor||''};
 
@@ -1314,7 +1335,7 @@ function cnTextoDespacho(){
 let _cotN=null;
 function nuevaCotizacion(){
   const cl=clientes()[0]||{};
-  const bod=(cl.bodegas||[])[0]||'';
+  const bod=bodegasDe(cl)[0]||'';
   _cotN={cliente:cl.nombre||'',contacto_nombre:'',contacto_email:'',contacto_fono:'',
          validez:'7 DIAS',bodegaDefecto:bod,observaciones:'',obsDespacho:'',obsEditada:false,
          items:[{producto:'',codigo:'',descripcion:'',cantidad:1,unidad:'UN',precio:'',bodega:bod}]};
@@ -1324,7 +1345,7 @@ function nuevaCotizacion(){
 }
 function cancelarCotizacion(){_cotN=null;render()}
 function cnSet(campo,v){if(!_cotN)return;_cotN[campo]=v;
-  if(campo==='cliente'){const c=clientePorNombre(v);_cotN.bodegaDefecto=((c&&c.bodegas)||[])[0]||'';
+  if(campo==='cliente'){const c=clientePorNombre(v);_cotN.bodegaDefecto=bodegasDe(c)[0]||'';
     _cotN.items.forEach(i=>i.bodega=_cotN.bodegaDefecto)}
   if(campo==='bodegaDefecto')_cotN.items.forEach(i=>{if(!i.bodega)i.bodega=v});
   if(campo==='obsDespacho')_cotN.obsEditada=true;
@@ -1393,7 +1414,7 @@ function panelCotizacion(){
         <input list="cn-cond" value="${esc(_cotN.validez)}" onchange="cnSet('validez',this.value)">
         <datalist id="cn-cond">${CONDICIONES.map(x=>`<option value="${esc(x)}">`).join('')}</datalist></div>
       <div><label>Bodega por defecto</label><select onchange="cnSet('bodegaDefecto',this.value)">
-        ${((cl.bodegas)||[]).concat('RETIRA CLIENTE').map(b=>`<option value="${esc(b)}"${_cotN.bodegaDefecto===b?' selected':''}>${esc(b)}</option>`).join('')}
+        ${bodegasDe(cl).concat('RETIRA CLIENTE').map(b=>`<option value="${esc(b)}"${_cotN.bodegaDefecto===b?' selected':''}>${esc(b)}</option>`).join('')}
       </select></div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:6px">
@@ -1405,25 +1426,25 @@ function panelCotizacion(){
     <datalist id="cn-unidades">${UNIDADES.map(u=>`<option value="${esc(u)}">`).join('')}</datalist>
     <datalist id="cn-prods">${prods.map(p=>`<option value="${esc(p.nombre)}">`).join('')}</datalist>
     <p class="small muted" style="margin-top:10px">La bodega va por línea: una misma cotización puede despachar a varias, y el precio cambia según la distancia (peajes y bencina).</p>
-    <table><tr><th></th><th>Producto</th><th>Descripción</th><th>Bodega</th><th class="num">Cant.</th><th>Unidad</th><th>Precio unitario</th></tr>
+    <table class="cot-lineas"><thead><tr><th></th><th>Producto</th><th>Descripción</th><th>Bodega</th><th class="num">Cant.</th><th>Unidad</th><th>Precio unitario</th></tr></thead><tbody>
     ${_cotN.items.map((it,i)=>{
       const oc=it.codigo?ultimoPrecio(it.codigo,'oc'):null, co=it.codigo?ultimoPrecio(it.codigo,'cot'):null;
-      return `<tr>
+      return `<tr class="cot-a">
       <td><button class="btn mini sec" onclick="cnQuitar(${i})" title="Quitar la línea"><i class="fa-solid fa-xmark"></i></button></td>
-      <td><input list="cn-prods" style="width:100%" value="${esc(it.producto)}" onchange="cnItem(${i},'producto',this.value)">
+      <td data-et="Producto"><input list="cn-prods" style="width:100%" value="${esc(it.producto)}" onchange="cnItem(${i},'producto',this.value)">
         <span class="small ${it.codigo?'muted':''}">${it.producto?(it.codigo?esc(it.codigo):'<span class="chip rojo">no está en el maestro</span>'):''}</span></td>
-      <td><input style="width:100%" value="${esc(it.descripcion)}" onchange="cnItem(${i},'descripcion',this.value)"></td>
-      <td><select onchange="cnItem(${i},'bodega',this.value)">
-        ${((cl.bodegas)||[]).concat('RETIRA CLIENTE').map(b=>`<option value="${esc(b)}"${it.bodega===b?' selected':''}>${esc(b)}</option>`).join('')}
-      </select></td>
-      <td class="num"><input style="width:70px" value="${esc(String(it.cantidad))}" onchange="cnItem(${i},'cantidad',+this.value||0)"></td>
-      <td><input list="cn-unidades" style="width:80px" value="${esc(it.unidad||'UN')}" onchange="cnItem(${i},'unidad',this.value.toUpperCase().trim()||'UN')"></td>
-      <td><div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap">
+      <td data-et="Descripción"><input style="width:100%" value="${esc(it.descripcion)}" onchange="cnItem(${i},'descripcion',this.value)"></td>
+      <td data-et="Bodega"><select onchange="cnItem(${i},'bodega',this.value)">
+        ${bodegasDe(cl).concat('RETIRA CLIENTE').map(b=>`<option value="${esc(b)}"${it.bodega===b?' selected':''}>${esc(b)}</option>`).join('')}
+      </select></td></tr><tr class="cot-b">
+      <td class="num" data-et="Cant."><input style="width:70px" value="${esc(String(it.cantidad))}" onchange="cnItem(${i},'cantidad',+this.value||0)"></td>
+      <td data-et="Unidad"><input list="cn-unidades" style="width:80px" value="${esc(it.unidad||'UN')}" onchange="cnItem(${i},'unidad',this.value.toUpperCase().trim()||'UN')"></td>
+      <td data-et="Precio unitario"><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <input style="width:110px" value="${esc(String(it.precio))}" onchange="cnItem(${i},'precio',+this.value||0)">
         <button class="btn mini sec" ${oc?'':'disabled'} onclick="cnPrecio(${i},'oc')" title="${oc?`Adjudicado el ${fFecha(oc.fecha)} en la OC ${esc(oc.ref)}`:'Sin precio adjudicado previo'}">OC ${oc?clp(oc.precio):'—'}</button>
         <button class="btn mini sec" ${co?'':'disabled'} onclick="cnPrecio(${i},'cot')" title="${co?`Ofertado el ${fFecha(co.fecha)} en ${esc(co.ref)}`:'Sin precio ofertado previo'}">Cot ${co?clp(co.precio):'—'}</button>
       </div></td></tr>`}).join('')}
-    </table>
+    </tbody></table>
     <button class="btn mini sec" style="margin-top:6px" onclick="cnAgregar()"><i class="fa-solid fa-plus"></i> Agregar línea</button>
     <label style="margin-top:10px">Texto de despacho ${_cotN.obsEditada?'<span class="chip ambar small">editado a mano</span>':'<span class="chip small">se arma solo</span>'}</label>
     <textarea rows="5" onchange="cnSet('obsDespacho',this.value)">${esc(_cotN.obsDespacho)}</textarea>
@@ -3764,6 +3785,12 @@ function hgParsearGuia(lineas){
   g.cliente=hgCampo(lineas,'Señor\\(es\\)');
   const mR=/RUT\s{2,}([\d.]+-[\dkK])/.exec(todo);         if(mR)g.rut_cliente=mR[1];
   g.patente=hgCampo(lineas,'Transportista Patente');
+  /* Facto declara quién traslada: "por cuenta del emisor" = la llevamos nosotros y va a una
+     Hoja de Ruta; "por cuenta del receptor" = la retira el cliente y va a un Resumen de
+     Retiros. Es un dato duro del documento, no una inferencia. */
+  const td=hgCampo(lineas,'Tipo de despacho')||'';
+  g.tipo_despacho=td;
+  g.es_retiro=/por cuenta del receptor/i.test(td)?true:(/por cuenta del emisor/i.test(td)?false:null);
   g.chofer=hgCampo(lineas,'Chofer Nombre');
 
   // Referencia a la OC: "Orden de compra  4500973765  27-07-2026  BODEGA CENTRAL"
@@ -3889,6 +3916,7 @@ async function leerGuiaPDF(inp){
     const oc=DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===String(g.oc));
     hgResolverContraOC(g,oc);
     g.destino=normBodega(g.destino_texto||'');
+    if(g.es_retiro===true)g.avisos.push('El documento dice que la retira el cliente: asígnala a un Resumen de Retiros');
     if(!bodegasOrden().includes(g.destino)){g.avisos.push(`Destino no reconocido: "${g.destino_texto||''}"`);g.destino=''}
     if(!oc)g.avisos.push(`La OC ${g.oc||'(sin folio)'} no está en el sistema: la guía quedará marcada como pendiente`);
     _gLeida={g,oc,file,hash:h};
@@ -3970,7 +3998,10 @@ async function guardarGuiaLeida(){
     DB[ARCH.guias].data.guias.push({numero:String(g.numero),fecha:g.fecha,fecha_envio:null,
       oc:String(g.oc||''),folio_oc:String(g.oc||''),destino:g.destino,
       cliente:g.cliente||'Agricola Super Ltda',chofer:g.chofer||null,patente:g.patente||null,
-      items,neto:g.neto,iva:g.iva,total:g.total,hoja_ruta:null,hoja_tipo:null,
+      items,neto:g.neto,iva:g.iva,total:g.total,hoja_ruta:null,
+      /* Se deja preseleccionado el tipo, pero SIN asignar documento: el número y la fecha
+         los define Jefe al agrupar el viaje. */
+      hoja_tipo:g.es_retiro===true?'retiro':(g.es_retiro===false?'ruta':null),
       archivo:ruta,conforme:false,discrepancias:[],
       notas:oc?null:`Cargada sin OC en el sistema: falta registrar la OC ${g.oc}.`});
     const A=DB[ARCH.arch].data.archivos, reg=A.find(a=>a.hash===hash);
