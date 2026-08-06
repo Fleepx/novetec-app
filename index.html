@@ -901,8 +901,10 @@ function cotizacionPDF(jsPDFCtor,cot,logoB64){
   /* ── Tabla de ítems, de alto fijo ── */
   y+=hCli+6;
   const Y_BLOQUES=184;
-  const COL=[{t:'Servicio/Producto',w:66,a:'left'},{t:'Descripción',w:40,a:'left'},
-             {t:'Cant.',w:15,a:'right'},{t:'Valor',w:23,a:'right'},
+  /* Cantidad necesita ancho: con unidades libres cabe "100 ROLLO" o "1.250 MT", no solo
+     "1 UN". Con 15 mm el texto se salía sobre la columna vecina. */
+  const COL=[{t:'Servicio/Producto',w:63,a:'left'},{t:'Descripción',w:38,a:'left'},
+             {t:'Cant.',w:20,a:'right'},{t:'Valor',w:23,a:'right'},
              {t:'Afec. IVA',w:17,a:'center'},{t:'Total',w:24.9,a:'right'}];
   const xCol=[];{let x=M;COL.forEach(c=>{xCol.push(x);x+=c.w})}
   const px=i=>COL[i].a==='right'?xCol[i]+COL[i].w-2:(COL[i].a==='center'?xCol[i]+COL[i].w/2:xCol[i]+2);
@@ -1012,7 +1014,10 @@ function xlsxEscribirNumero(xml,fila,colLetra,valor){
     const otra=new RegExp(`<c\\s[^>]*r="${colLetra}(\\d+)"[^>]*\\ss="(\\d+)"[^>]*>\\s*<v>`).exec(xml);
     if(otra&&+otra[1]>PL_FILA_ENC)s=` s="${otra[2]}"`;
   }
-  const nueva=valor==null||valor===''?'':`<c r="${ref}"${s}><v>${+valor}</v></c>`;
+  /* Sin precio NO se borra la celda: se deja VACÍA conservando su estilo. Borrarla le quita
+     los bordes y la planilla queda con huecos abiertos en la grilla. Vacía con estilo es lo
+     mismo que ve el cliente en una línea que nadie cotizó. */
+  const nueva=valor==null||valor===''?`<c r="${ref}"${s}/>`:`<c r="${ref}"${s}><v>${+valor}</v></c>`;
   let nuevo;
   if(existente)nuevo=bloque.replace(existente[0],nueva);
   else{
@@ -1269,6 +1274,10 @@ function ultimoPrecio(codigo,fuente){
    "DESPACHOS A", "//", "Y/O", "AT:", "AT.:", "ATENCION"), porque se tipea a mano cada vez.
    Al componerla queda pareja siempre, y el dato ya vive estructurado en la cotización.
    Si Jefe la edita a mano, deja de recomponerse: manda lo que él escribió. */
+/* La unidad no es decorativa: 100 no significa lo mismo en rollos, metros, litros o kilos,
+   y el cliente cotiza y recibe por esa unidad. La lista son las habituales, pero el campo
+   es libre: siempre aparece una unidad que no estaba prevista. */
+const UNIDADES=['UN','MT','KG','LT','ROLLO','CAJA','PAR','JGO','M2','M3','SACO','BOLSA','PQTE','TAMBOR','TON','GL'];
 const CONDICIONES=['7 DIAS','7 DIAS HABILES','HASTA AGOTAR STOCK','PRODUCTO A PEDIDO',
                    'ENTREGA INMEDIATA','3 DIAS HABILES','A CONVENIR'];
 function cnTextoDespacho(){
@@ -1290,7 +1299,7 @@ function nuevaCotizacion(){
   const bod=(cl.bodegas||[])[0]||'';
   _cotN={cliente:cl.nombre||'',contacto_nombre:'',contacto_email:'',contacto_fono:'',
          validez:'7 DIAS',bodegaDefecto:bod,observaciones:'',obsDespacho:'',obsEditada:false,
-         items:[{producto:'',codigo:'',descripcion:'',cantidad:1,precio:'',bodega:bod}]};
+         items:[{producto:'',codigo:'',descripcion:'',cantidad:1,unidad:'UN',precio:'',bodega:bod}]};
   cnTextoDespacho();
   render();
   setTimeout(()=>{const e=document.getElementById('cn-panel');if(e)e.scrollIntoView({behavior:'smooth',block:'start'})},60);
@@ -1308,8 +1317,8 @@ function cnItem(i,campo,v){if(!_cotN)return;_cotN.items[i][campo]=v;
   if(campo==='producto'){const m=prodMaestro(v);_cotN.items[i].codigo=m?m.codigo:''}
   if(campo==='bodega')cnTextoDespacho();
   render()}
-function cnAgregar(){_cotN.items.push({producto:'',codigo:'',descripcion:'',cantidad:1,precio:'',
-  bodega:_cotN.bodegaDefecto||''});cnTextoDespacho();render()}
+function cnAgregar(){_cotN.items.push({producto:'',codigo:'',descripcion:'',cantidad:1,unidad:'UN',
+  precio:'',bodega:_cotN.bodegaDefecto||''});cnTextoDespacho();render()}
 function cnQuitar(i){_cotN.items.splice(i,1);if(!_cotN.items.length)cnAgregar();else{cnTextoDespacho();render()}}
 function cnPrecio(i,fuente){
   const it=_cotN.items[i]; if(!it.codigo){toast('Elige primero el producto.');return}
@@ -1371,9 +1380,10 @@ function panelCotizacion(){
       <div><label>Teléfono</label><input value="${esc(_cotN.contacto_fono)}" onchange="cnSet('contacto_fono',this.value)">
         <div class="small" style="margin-top:4px">${opc(cont,'telefonos',_cotN.contacto_fono)}</div></div>
     </div>
+    <datalist id="cn-unidades">${UNIDADES.map(u=>`<option value="${esc(u)}">`).join('')}</datalist>
     <datalist id="cn-prods">${prods.map(p=>`<option value="${esc(p.nombre)}">`).join('')}</datalist>
     <p class="small muted" style="margin-top:10px">La bodega va por línea: una misma cotización puede despachar a varias, y el precio cambia según la distancia (peajes y bencina).</p>
-    <table><tr><th>Producto</th><th>Descripción</th><th>Bodega</th><th class="num">Cant.</th><th>Precio unitario</th><th></th></tr>
+    <table><tr><th>Producto</th><th>Descripción</th><th>Bodega</th><th class="num">Cant.</th><th>Unidad</th><th>Precio unitario</th><th></th></tr>
     ${_cotN.items.map((it,i)=>{
       const oc=it.codigo?ultimoPrecio(it.codigo,'oc'):null, co=it.codigo?ultimoPrecio(it.codigo,'cot'):null;
       return `<tr>
@@ -1384,6 +1394,7 @@ function panelCotizacion(){
         ${((cl.bodegas)||[]).concat('RETIRA CLIENTE').map(b=>`<option value="${esc(b)}"${it.bodega===b?' selected':''}>${esc(b)}</option>`).join('')}
       </select></td>
       <td class="num"><input style="width:70px" value="${esc(String(it.cantidad))}" onchange="cnItem(${i},'cantidad',+this.value||0)"></td>
+      <td><input list="cn-unidades" style="width:80px" value="${esc(it.unidad||'UN')}" onchange="cnItem(${i},'unidad',this.value.toUpperCase().trim()||'UN')"></td>
       <td><input style="width:110px" value="${esc(String(it.precio))}" onchange="cnItem(${i},'precio',+this.value||0)">
         <div class="small" style="margin-top:4px">
           <button class="btn mini sec" ${oc?'':'disabled'} onclick="cnPrecio(${i},'oc')" title="${oc?`Adjudicado el ${fFecha(oc.fecha)} en la OC ${esc(oc.ref)}`:'Sin precio adjudicado previo'}">OC ${oc?clp(oc.precio):'—'}</button>
@@ -1429,7 +1440,7 @@ async function emitirCotizacion(){
       observaciones:[].concat(_cotN.obsDespacho?[_cotN.obsDespacho]:[],
         String(_cotN.observaciones||'').split('\n').map(s=>s.trim()).filter(Boolean)),
       items:items.map(i=>({producto:i.producto,descripcion:i.descripcion,
-        cantidad:+i.cantidad,unidad:'UN',precio_unitario:+i.precio}))};
+        cantidad:+i.cantidad,unidad:i.unidad||'UN',precio_unitario:+i.precio}))};
     // 'validez' ya viaja dentro del texto de despacho: no repetirla como observación aparte
     datos.validez='';
     const {doc,neto,iva,total}=cotizacionPDF(jsPDF,datos,await logoCotizacion());
@@ -1446,7 +1457,7 @@ async function emitirCotizacion(){
          texto libre. Para el match vale como la de una cotización XLSX, no como la de un PDF. */
       items:items.map(i=>({producto:i.producto,codigo:i.codigo||null,
         nombre_cliente:i.descripcion||null,bodega:i.bodega||null,
-        cantidad:+i.cantidad,unidad:'UN',precio_unitario:+i.precio})),
+        cantidad:+i.cantidad,unidad:i.unidad||'UN',precio_unitario:+i.precio})),
       notas:'Emitida desde la app en modo PRUEBA. Al archivar las pruebas se cierra y suelta sus adjudicaciones.'});
     const H=DB[ARCH.hprec].data;
     items.forEach(i=>{if(i.codigo)H.cotizaciones.push({codigo:i.codigo,codigo_sap:null,
@@ -1468,7 +1479,7 @@ async function emitirCotizacion(){
    que puede quedar desactualizada.
    No adjunta el archivo: ningún navegador permite que una página adjunte algo al correo, es
    una restricción de seguridad. Para eso está compartirCotizacion(). */
-function correoCotizacion(id){
+function correoCotizacion(id,via){
   const c=DB[ARCH.cot].data.cotizaciones.find(x=>x.id===id); if(!c)return;
   const v=(DB[ARCH.conf].data.vendedor)||{};
   const saludo=c.contacto_nombre?`Estimado(a) ${c.contacto_nombre}:`:'Estimados:';
@@ -1476,8 +1487,27 @@ function correoCotizacion(id){
     `Junto con saludar, adjuntamos la cotización N° ${c.folio} del ${fFecha(c.fecha)} para su revisión.`,
     '','Quedamos atentos a sus comentarios.','','Saludos cordiales,','',
     v.nombre||'Comercializadora Novetec','NOVETEC SPA',v.email||'novetec@novetec.cl'].join('\n');
-  location.href=`mailto:${encodeURIComponent(c.contacto_email||'')}`
-    +`?subject=${encodeURIComponent(`Cotización N° ${c.folio} - Novetec SPA`)}`
+  const asunto=`Cotización N° ${c.folio} - Novetec SPA`;
+  const para=c.contacto_email||'';
+  if(via==='web'){
+    // Outlook en el navegador: no pasa por el programa instalado, así que da igual cuántos
+    // Outlook tenga el equipo. Es la salida cuando el sistema abre el que no corresponde.
+    window.open(`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(para)}`
+      +`&subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`,'_blank');
+    toast('Se abrió Outlook en el navegador. Adjunta el PDF antes de enviar.');
+    return;
+  }
+  if(via==='copiar'){
+    navigator.clipboard.writeText(`Para: ${para}\nAsunto: ${asunto}\n\n${cuerpo}`)
+      .then(()=>toast('Texto copiado: pégalo en el correo que quieras.'))
+      .catch(()=>toast('No se pudo copiar. Selecciona el texto a mano.'));
+    return;
+  }
+  /* mailto abre el programa que Windows tenga como predeterminado para correo. La página no
+     puede elegir cuál: es una decisión del sistema, no del navegador. Si abre el Outlook
+     equivocado, se arregla en Windows (Configuración → Aplicaciones predeterminadas → Correo)
+     o se usa el botón de Outlook web, que no toca el programa instalado. */
+  location.href=`mailto:${encodeURIComponent(para)}?subject=${encodeURIComponent(asunto)}`
     +`&body=${encodeURIComponent(cuerpo)}`;
   toast('Se abrió el correo. Recuerda adjuntar el PDF antes de enviar.');
 }
@@ -2618,7 +2648,9 @@ function rCot(){
         <button class="btn mini peligro" onclick="rechazarCot('${esc(c.id)}')">Cliente la rechazó</button>`:''}
       ${c.estado==='cerrada'?`<button class="btn mini sec" onclick="reabrirCot('${esc(c.id)}')">Reabrir</button>`:''}
       <button class="btn mini sec" onclick="panelRecot('${esc(c.id)}')" title="Corregir la fecha y declarar a qué cotización reemplaza"><i class="fa-solid fa-rotate"></i> Recotización</button>
-      ${c.origen==='app'?`<button class="btn mini sec" onclick="correoCotizacion('${esc(c.id)}')" title="Abre Outlook con el destinatario y el texto listos. El PDF hay que adjuntarlo a mano."><i class="fa-solid fa-envelope"></i> Enviar por correo</button>`:''}
+      ${c.origen==='app'?`<button class="btn mini sec" onclick="correoCotizacion('${esc(c.id)}')" title="Abre el programa de correo predeterminado de Windows. El PDF hay que adjuntarlo a mano."><i class="fa-solid fa-envelope"></i> Enviar por correo</button>
+      <button class="btn mini sec" onclick="correoCotizacion('${esc(c.id)}','web')" title="Abre Outlook en el navegador, sin pasar por el programa instalado"><i class="fa-solid fa-globe"></i> Outlook web</button>
+      <button class="btn mini sec" onclick="correoCotizacion('${esc(c.id)}','copiar')" title="Copia destinatario, asunto y cuerpo para pegarlos donde quieras"><i class="fa-solid fa-copy"></i> Copiar texto</button>`:''}
       ${c.origen==='app'&&c.archivo&&puedeCompartirPDF()?`<button class="btn mini sec" onclick="compartirCotizacion('${esc(c.id)}')" title="Abre el menú de compartir del sistema CON el PDF adjunto"><i class="fa-solid fa-share-nodes"></i> Compartir con el PDF</button>`:''}
       </div><div id="rc-${esc(c.id)}"></div><div class="acciones">
       ${c.estado==='rechazada'?`<button class="btn mini sec" onclick="deshacerRechazoCot('${esc(c.id)}')">Deshacer el rechazo</button>`:''}
