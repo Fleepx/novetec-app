@@ -1410,7 +1410,7 @@ function panelCotizacion(){
   const neto=_cotN.items.reduce((s,i)=>s+(+i.cantidad||0)*(+i.precio||0),0);
   return `<div id="cn-panel" class="form" style="border:2px solid var(--ambar);border-radius:10px;padding:14px;margin:12px 0">
     <b style="font-size:15px">Nueva cotización <span class="chip ambar">PRUEBA · ${esc(folio)}</span></b>
-    <p class="small muted">Folio de prueba, con correlativo aparte: no toca la serie de Facto. Al archivar las pruebas se cierran y sueltan sus adjudicaciones.</p>
+    <p class="small muted">Folio de prueba, con correlativo aparte: no toca la serie de Facto. Las cotizaciones de prueba NO participan del match: nunca se adjudica una OC contra ellas.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">
       <div><label>Cliente</label><select onchange="cnSet('cliente',this.value)">
         ${clientes().map(c=>`<option value="${esc(c.nombre)}"${_cotN.cliente===c.nombre?' selected':''}>${esc(c.corto)}${c.rut==='PENDIENTE'?' (datos pendientes)':''}</option>`).join('')}
@@ -1595,7 +1595,7 @@ async function archivarPruebas(){
   const A=DB[ARCH.adj].data;
   const sueltas=A.registros.filter(r=>ids.has(r.cot));
   if(!await confirmar({titulo:'Archivar las cotizaciones de prueba',
-    texto:`Se cerrarán ${C.length} cotización(es) de prueba${sueltas.length?` y se soltarán ${sueltas.length} adjudicación(es), dejando esas líneas de OC libres para asignarlas a la cotización real.`:'.'}\nEl correlativo de prueba vuelve a P31.`,
+    texto:`Se cerrarán ${C.length} cotización(es) de prueba.${sueltas.length?`\nAdemás se soltarán ${sueltas.length} adjudicación(es) antiguas hechas contra ellas, de antes de que las pruebas quedaran fuera del match.`:''}\nEl correlativo de prueba vuelve a P31.`,
     confirmar:'Archivar'}))return;
   velo(true,'Archivando…');
   try{
@@ -2525,6 +2525,11 @@ function candidatosParaLinea(oc,li,ignorarVentana=false){
   const out=[];
   DB[ARCH.cot].data.cotizaciones.forEach(c=>{
     if(c.estado!=='abierta')return;                                    // cerradas y rechazadas fuera del pool
+    /* Las cotizaciones de PRUEBA no participan NUNCA del match (Jefe, 09-08-2026). Son de
+       prueba justamente para no interferir con la operación: si compiten por una OC real,
+       ensucian la adjudicacion y consumen saldos que no existen. Antes se dejaban competir y
+       se soltaban al archivarlas; eso estaba mal, el dano ya estaba hecho mientras tanto. */
+    if(c.prueba===true)return;
     if(String(c.fecha||'')>String(oc.fecha_emision||'9999-12-31'))return; // posterior a la OC: imposible
     if(!ignorarVentana&&!dentroVentana(oc,c))return;                   // PUERTA: mismo mes o el anterior
     const esXlsx=/^COT-XLSX/i.test(String(c.id));
