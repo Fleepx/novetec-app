@@ -315,7 +315,23 @@ function b64enc(s){const b=new TextEncoder().encode(s);let r='';for(let i=0;i<b.
 async function gh(path,opts={}){
   const r=await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/${path}`,{
     ...opts,headers:{'Authorization':'Bearer '+cfg.token,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',...(opts.headers||{})}});
-  if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(`${r.status}: ${e.message||'error de GitHub'}`)}
+  if(!r.ok){
+    const e=await r.json().catch(()=>({}));
+    /* GitHub responde en inglés y con su propio vocabulario. Un "422: sha wasn't supplied"
+       no le dice nada a quien está cargando una guía: se traduce a qué pasó y qué hacer. */
+    const t=String(e.message||'');
+    const claro=
+      r.status===401?'El token de GitHub no es válido o expiró. Vuelve a ingresarlo en Ajustes.':
+      r.status===403?(/rate limit/i.test(t)?'GitHub está limitando las peticiones. Espera unos minutos y reintenta.'
+                     :'El token no tiene permisos para esta operación.'):
+      r.status===404?'No encontré ese archivo en el repositorio.':
+      r.status===409?'conflicto':
+      (r.status===422&&/sha/i.test(t))?'Ese documento ya existe en el repositorio y no se pudo reemplazar. Reintenta; si vuelve a fallar, avísame.':
+      r.status===422?('GitHub rechazó la operación: '+t):
+      r.status>=500?'GitHub está con problemas en este momento. Reintenta en unos minutos.':
+      `${r.status}: ${t||'error de GitHub'}`;
+    throw new Error(claro);
+  }
   return r.json();
 }
 const ESTRUCTURAS_BASE={'data/cotizaciones.json':{cotizaciones:[]},'data/clientes.json':{clientes:[]},'data/ordenes_compra.json':{ordenes:[]},
@@ -382,10 +398,19 @@ async function guardarArchivo(p,msg){
     throw e;
   }
 }
+/* GitHub exige el 'sha' de la versión anterior para reemplazar un archivo que ya existe; sin
+   él responde 422 "sha wasn't supplied". Pasaba al reintentar una carga que fallo despues de
+   subir el PDF, o al recargar un documento con nombre fijo (OC_xxx.pdf, GD_xxx.pdf): el
+   archivo ya estaba en el repositorio y el segundo intento moria con un error de GitHub que
+   no dice nada al usuario. Se consulta el sha antes de subir, igual que subirBinario. */
 async function subirDocumento(carpeta,file,nombreFijo){
   const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file)});
   const ruta=`documentos/${carpeta}/${nombreFijo||(Date.now()+'_'+file.name.replace(/[^\w.\-]/g,'_'))}`;
-  await gh(`contents/${ruta}`,{method:'PUT',body:JSON.stringify({message:`Documento: ${file.name}`,content:b64})});
+  let sha=null;
+  try{const j=await gh(`contents/${encodeURI(ruta)}?t=${Date.now()}`);sha=j.sha}catch(_){}
+  const cuerpo={message:`Documento: ${file.name}`,content:b64};
+  if(sha)cuerpo.sha=sha;
+  await gh(`contents/${encodeURI(ruta)}`,{method:'PUT',body:JSON.stringify(cuerpo)});
   return ruta;
 }
 async function borrarArchivoRepo(p,msg){
