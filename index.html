@@ -330,7 +330,10 @@ async function gh(path,opts={}){
       r.status===422?('GitHub rechazó la operación: '+t):
       r.status>=500?'GitHub está con problemas en este momento. Reintenta en unos minutos.':
       `${r.status}: ${t||'error de GitHub'}`;
-    throw new Error(claro);
+    const err=new Error(claro);
+    err.status=r.status;              // el texto se traduce; el código NO se pierde
+    err.githubMessage=t;
+    throw err;
   }
   return r.json();
 }
@@ -392,7 +395,10 @@ async function guardarArchivo(p,msg){
     const j=await gh(`contents/${p}`,{method:'PUT',body:JSON.stringify({message:msg,content:b64enc(JSON.stringify(DB[p].data,null,2)),sha:DB[p].sha})});
     DB[p].sha=j.content.sha;
   }catch(e){
-    if(e.message.startsWith('409')||e.message.startsWith('422')){
+    /* Un 409/422 al guardar un JSON significa que el sha quedó viejo: otro guardado se
+       adelantó. Se compara el CÓDIGO, no el texto: traducir los mensajes rompió la
+       comparación anterior, que buscaba que el texto empezara con '409'. */
+    if(e.status===409||e.status===422){
       toast('Atención: otro usuario guardó cambios. Recargando datos…');await cargarTodo();render();throw new Error('conflicto');
     }
     throw e;
@@ -2409,8 +2415,14 @@ async function guardarOCLeida(){
         const p=d.productos.find(x=>x.codigo===cod);
         if(p){p.codigos_cliente=p.codigos_cliente||{};if(!p.codigos_cliente.agrosuper)p.codigos_cliente.agrosuper=r.codigo_sap}
       }
-      return {producto:r.producto,codigo:cod,codigo_sap:r.codigo_sap,cantidad:r.cantidad,
-              unidad:r.unidad,precio_unitario:r.precio,cantidad_comprada:0,cantidad_despachada:0};
+      /* Se arma un objeto NUEVO campo por campo. Antes se arrastraban propiedades sueltas de
+         la línea leída (opciones, ref y demás), que apuntan a objetos del maestro y del propio
+         DOM: al serializar a JSON el recorrido se cerraba sobre sí mismo y GitHub nunca
+         llegaba a recibir nada. Solo viajan datos planos. */
+      return {producto:String(r.producto||''),codigo:cod,
+              codigo_sap:r.codigo_sap?String(r.codigo_sap):null,
+              cantidad:+r.cantidad||0,unidad:String(r.unidad||'UN'),
+              precio_unitario:+r.precio||0,cantidad_comprada:0,cantidad_despachada:0};
     });
     const ruta=`documentos/ordenes_compra/OC_${o.folio}.pdf`;
     await subirDocumento('ordenes_compra',o.archivo,`OC_${o.folio}.pdf`);
