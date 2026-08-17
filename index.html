@@ -2915,10 +2915,17 @@ let ocFiltro='';
    cargado o del reporte SAP del cliente: la fuente del archivo no cambia cómo se trata una OC
    (Jefe, 22-07-2026). Cada ítem lleva `ref`, el objeto donde se escriben las compras, para que
    registrar una compra funcione igual en ambos casos. */
+/* Arma la lista que ve la pantalla mezclando las OC reales con las del reporte SAP.
+   OJO: 'ref' apunta al registro original para poder editarlo desde la vista, y por eso esta
+   funcion NO PUEDE tocar los datos de DB. Antes hacia o.items.forEach(i=>{i.ref=i}), que
+   modificaba los items REALES y dejaba cada uno apuntandose a si mismo: desde el momento en
+   que se abria la pestana de OC, cualquier intento de guardar reventaba con "Converting
+   circular structure to JSON". El error aparecia al guardar una OC, pero la causa era solo
+   haber MIRADO la lista antes. Ahora se copian los items y la referencia vive en la copia. */
 function ordenesUnificadas(){
   const reales=DB[ARCH.oc].data.ordenes.map(o=>{
-    o.items.forEach(i=>{i.ref=i});
-    return Object.assign(Object.create(null),o,{origen:'oc',ref:o});
+    const items=(o.items||[]).map(i=>Object.assign(Object.create(null),i,{ref:i}));
+    return Object.assign(Object.create(null),o,{items,origen:'oc',ref:o});
   });
   const folios=new Set(reales.map(o=>String(o.folio)));
   const porFolio={};
