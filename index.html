@@ -3289,8 +3289,13 @@ function moverGuia(numero){
   const box=document.getElementById('mv-'+numero);
   if(box.innerHTML){box.innerHTML='';return}
   const hojas=DB[ARCH.hr].data.hojas.filter(h=>hrClave(h)!==hrClaveGuia(g));
+  /* Primero las Hojas de Ruta y despues los Resumenes de Retiro, y dentro de cada grupo la
+     mas reciente arriba (Jefe, 17-08-2026). Antes se ordenaba por el nombre del tipo, y como
+     'retiro' va antes que 'ruta' en el alfabeto, los retiros quedaban primero sin que nadie
+     lo hubiera decidido. El orden se fija con un peso explicito, no con el alfabeto. */
+  const pesoTipo=h=>hrTipo(h)==='ruta'?0:1;
   const abiertas=hojas.filter(h=>(h.estado||'borrador')==='borrador')
-    .sort((a,b)=>hrTipo(a).localeCompare(hrTipo(b))||(+b.numero)-(+a.numero));
+    .sort((a,b)=>pesoTipo(a)-pesoTipo(b)||(+b.numero)-(+a.numero));
 
   box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:10px">
     <b>Mover la guía N°${esc(numero)} a otro documento</b>
