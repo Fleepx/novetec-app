@@ -3363,6 +3363,9 @@ function tarjetaGuia(g){
       ${g.conforme?'':`<button class="btn mini" onclick="conformarGuia('${esc(g.numero)}')" title="El despacho salió tal como dice la guía"><i class="fa-solid fa-check"></i> Guía conforme</button>`}
       <button class="btn mini sec" onclick="rectificarGuia('${esc(g.numero)}')" title="Hubo productos que no se pudieron despachar"><i class="fa-solid fa-rotate-left"></i> Rectificar${g.conforme?'':' guía'}</button>
       <button class="btn mini sec" onclick="moverGuia('${esc(g.numero)}')" title="Cambiar esta guía de viaje (hoja de ruta)"><i class="fa-solid fa-arrows-turn-to-dots"></i> Mover de hoja</button>
+      ${/* Descargar el PDF original de Facto, igual que en las OC (Jefe, 20-08-2026).
+           Se baja con el nombre Guia_N.pdf, no con el nombre largo del DTE. */''}
+      ${g.archivo?`<button class="btn mini sec" onclick="descargarArchivo('${esc(g.archivo)}','Guia_${esc(g.numero)}.pdf')" title="Descargar el PDF de la guía N°${esc(g.numero)}"><i class="fa-solid fa-download"></i> Descargar guía</button>`:''}
     </div>
     <div id="mv-${esc(g.numero)}"></div>
     <div id="rg-${esc(g.numero)}"></div>
