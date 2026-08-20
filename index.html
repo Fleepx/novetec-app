@@ -2446,10 +2446,32 @@ async function guardarOCLeida(){
     await guardarArchivo(ARCH.arch,`Registro de archivos: OC ${o.folio}`);
     // Match automático contra las cotizaciones abiertas (Jefe, 31-07-2026)
     const nueva=DB[ARCH.oc].data.ordenes.find(x=>String(x.folio)===String(o.folio));
+    /* Guías que ya se habían cargado apuntando a esta OC cuando todavía no existía en el
+       sistema (Jefe, 20-08-2026). Se les imputa aquí lo despachado y su compra implícita.
+       El inventario NO se toca: el ingreso y la salida ya se registraron al cargar la guía. */
+    let recon=0;
+    if(nueva){
+      for(const g of DB[ARCH.guias].data.guias.filter(x=>String(x.oc||x.folio_oc||'')===String(o.folio))){
+        for(const it of (g.items||[])){
+          const oi=nueva.items.find(x=>x.codigo===it.codigo)
+                ||nueva.items.find(x=>String(x.producto).trim().toUpperCase()===String(it.producto).trim().toUpperCase());
+          if(!oi)continue;
+          oi.cantidad_despachada=(+oi.cantidad_despachada||0)+(+it.cantidad||0);
+          oi.cantidad_comprada=Math.max(+oi.cantidad_comprada||0,+oi.cantidad_despachada||0);
+        }
+        nueva.guias=[...new Set([...(nueva.guias||[]),String(g.numero)])];
+        if(g.notas)g.notas=g.notas.replace(/Cargada sin OC en el sistema: falta registrar la OC \d+\.?\s*/,'').trim()||null;
+        recon++;
+      }
+      if(recon){
+        await guardarArchivo(ARCH.oc,`OC ${o.folio}: ${recon} guía(s) ya cargada(s) reconciliada(s)`);
+        await guardarArchivo(ARCH.guias,`Guía(s) de la OC ${o.folio}: OC registrada`);
+      }
+    }
     const res=nueva?adjudicarOCAuto(nueva):{auto:0,sug:0,sin:0};
     if(res.auto)await guardarArchivo(ARCH.adj,`OC ${o.folio}: ${res.auto} línea(s) adjudicada(s) automáticamente a cotización`);
     ocLeida=null;
-    toast(`Orden de compra ${o.folio} cargada`+(res.auto?` · ${res.auto} línea(s) adjudicada(s) a cotización`:'')+(res.sug?` · ${res.sug} por confirmar`:''));
+    toast(`Orden de compra ${o.folio} cargada`+(recon?` · ${recon} guía(s) ya cargada(s) reconciliada(s)`:'')+(res.auto?` · ${res.auto} línea(s) adjudicada(s) a cotización`:'')+(res.sug?` · ${res.sug} por confirmar`:''));
     render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
@@ -4182,11 +4204,27 @@ async function guardarGuiaLeida(){
       items.push({producto:nom,codigo:cod,nombre_guia:it.nombre_guia,cantidad:it.cantidad,
                   unidad:it.unidad,precio_unitario:it.precio_unitario,marca:it.descripcion||null});
       const p=invProdDe(nom,it.unidad);
+      /* COMPRA IMPLÍCITA AL DESPACHAR (Jefe, 24-07-2026; reafirmado 20-08-2026).
+         Si algo sale por guía es porque se compró: sin esto el inventario acumulaba salidas
+         sin su ingreso y el stock caía a negativo. Se ingresa solo lo que falte para cubrir
+         la salida — una compra ya registrada antes no se vuelve a ingresar. La guía sin OC en
+         el sistema también ingresa: la mercadería existió igual. Cuando la OC se cargue
+         después, se imputa la compra sin volver a tocar bodega. */
+      const oi=oc?oc.items.find(x=>x.codigo===cod):null;
+      const compSinUsar=oi?Math.max((+oi.cantidad_comprada||0)-(+oi.cantidad_despachada||0),0):0;
+      const falta=Math.max(it.cantidad-compSinUsar,0);
+      if(falta>0){
+        p.cantidad=(+p.cantidad||0)+falta;
+        inv.movimientos.push({fecha:g.fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,
+          cantidad:falta,referencia:`Compra implícita al despachar · Guía N°${g.numero}`});
+      }
       p.cantidad=(+p.cantidad||0)-it.cantidad;
       inv.movimientos.push({fecha:g.fecha,tipo:'salida',codigo:p.codigo,producto:p.nombre,
         cantidad:it.cantidad,referencia:`Guía N°${g.numero} · OC ${g.oc}`});
-      if(oc){const oi=oc.items.find(x=>x.codigo===cod);
-        if(oi)oi.cantidad_despachada=(+oi.cantidad_despachada||0)+it.cantidad}
+      if(oi){
+        oi.cantidad_despachada=(+oi.cantidad_despachada||0)+it.cantidad;
+        oi.cantidad_comprada=Math.max(+oi.cantidad_comprada||0,+oi.cantidad_despachada||0);
+      }
     });
     if(oc)oc.guias=[...new Set([...(oc.guias||[]),String(g.numero)])];
     const ruta=await subirDocumento('guias_despacho',file,`GD_${g.numero}.pdf`);
