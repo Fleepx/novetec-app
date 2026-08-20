@@ -3266,7 +3266,8 @@ function tarjetaGuia(g){
     ${hayFalta?`<div style="margin-top:10px"><button class="btn mini" style="background:none;border:1.5px solid var(--rojo);color:var(--rojo)" onclick="compraFaltante('${esc(g.numero)}',this)"><i class="fa-solid fa-cart-plus"></i> Ingresar compra faltante</button>
       <div id="cf-${esc(g.numero)}"></div></div>`:''}
     ${(g.rectificaciones||[]).length?`<div class="small" style="margin-top:10px;border-left:3px solid var(--ambar);padding-left:9px">
-      ${g.rectificaciones.map(r=>`<div><b>Rectificada ${fFecha(r.fecha)}</b> — ${r.items.map(x=>`${esc(x.producto)} <span class="mono">−${num(x.cantidad)}</span> (${x.motivo==='merma'?'perdido o roto':'quedó en bodega'})`).join(' · ')}${r.nota?` · ${esc(r.nota)}`:''}</div>`).join('')}
+      ${g.rectificaciones.map((r,ri)=>`<div><b>Rectificada ${fFecha(r.fecha)}</b> — ${r.items.map(x=>`${esc(x.producto)} <span class="mono">−${num(x.cantidad)}</span> (${x.motivo==='merma'?'perdido o roto':'quedó en bodega'})`).join(' · ')}${r.nota?` · ${esc(r.nota)}`:''}
+        <button class="btn mini sec" style="margin-left:6px" onclick="anularRectificacion('${esc(g.numero)}',${ri})" title="Deshacer esta rectificación y dejar la guía como estaba"><i class="fa-solid fa-arrow-rotate-left"></i> Anular</button></div>`).join('')}
     </div>`:''}
     <div class="acciones" style="margin-top:10px">
       ${g.conforme?'':`<button class="btn mini" onclick="conformarGuia('${esc(g.numero)}')" title="El despacho salió tal como dice la guía"><i class="fa-solid fa-check"></i> Guía conforme</button>`}
@@ -3469,18 +3470,114 @@ async function guardarRectificacion(numero){
         inv.movimientos.push({fecha,tipo:'salida',codigo:p.codigo,producto:p.nombre,cantidad:f.cant,
           referencia:`Merma: producto perdido o roto (guía N°${numero})`});
       }
-      detalle.push({codigo:it.codigo,producto:it.producto,cantidad:f.cant,motivo:f.motivo});
+      // `item_ref` e `ix` se guardan para poder ANULAR la rectificación después: si la línea
+      // queda en cero sale de la guía, y sin esta copia no habría cómo reconstruirla con su
+      // unidad y su precio (su campo `cantidad` ya viene descontado y no se usa al restaurar).
+      // `ix` devuelve la línea a su posición original dentro de la guía.
+      detalle.push({codigo:it.codigo,producto:it.producto,cantidad:f.cant,motivo:f.motivo,
+        ix:f.ix,item_ref:JSON.parse(JSON.stringify(it))});
     }
     // 4. Ítems que quedaron en cero se sacan de la guía
     g.items=g.items.filter(i=>(+i.cantidad||0)>0);
     g.rectificaciones=g.rectificaciones||[];
-    g.rectificaciones.push({fecha,items:detalle,nota});
+    g.rectificaciones.push({fecha,items:detalle,nota,conforme_previo:!!g.conforme});
     g.conforme=true;g.fecha_conforme=fecha;
     await guardarArchivo(ARCH.guias,`Guía N°${numero} rectificada`);
     if(o)await guardarArchivo(ARCH.oc,`OC ${folio}: rectificación de la guía N°${numero}`);
     await guardarArchivo(ARCH.inv,`Inventario: rectificación de la guía N°${numero}`);
     const merma=detalle.filter(d=>d.motivo==='merma').reduce((s,d)=>s+d.cantidad,0);
     toast(`Guía N°${numero} rectificada`+(merma>0?` · ${num(merma)} como merma, vuelven a estar por comprar`:''));
+    render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+/* ===== Anular una rectificación (Jefe, 20-08-2026) =====
+   Rectificar es fácil de hacer mal: el campo pide lo que NO se despachó y es natural escribir
+   lo que SÍ se entregó. Antes había que pedir la corrección a mano; ahora cada rectificación
+   listada en la tarjeta trae su botón para deshacerla.
+   Deshace EXACTAMENTE los cuatro efectos de `guardarRectificacion`, en orden inverso:
+     1. Las unidades vuelven a la línea de la guía (o la línea se reconstruye desde `item_ref`
+        si había quedado en cero y salió de la guía).
+     2. La OC vuelve a contarlas como despachadas; si el motivo fue merma, también como compradas.
+     3. Inventario: se compensa el movimiento original con su inverso. NUNCA se borra el
+        movimiento anterior — el historial de bodega no se reescribe, se contrapesa. En el caso
+        "merma" el original eran dos movimientos de neto cero, así que el reverso también lo es.
+     4. El registro sale de `rectificaciones` y la guía recupera su estado de conformidad previo.
+   Las rectificaciones hechas antes de esta versión no guardan `item_ref` ni `conforme_previo`:
+   la línea se reconstruye desde la OC o el maestro y la conformidad se deja como está. */
+async function anularRectificacion(numero,idx){
+  const g=DB[ARCH.guias].data.guias.find(x=>String(x.numero)===String(numero));
+  if(!g||!(g.rectificaciones||[])[idx])return;
+  const r=g.rectificaciones[idx];
+  const det=(r.items||[]).map(x=>`${x.producto} +${num(x.cantidad)}`).join(' · ');
+  const merma=(r.items||[]).filter(x=>x.motivo==='merma').reduce((s,x)=>s+(+x.cantidad||0),0);
+  const ok=await confirmar({titulo:`Anular la rectificación del ${fFecha(r.fecha)}`,
+    texto:`La guía N°${numero} vuelve a quedar como estaba antes de rectificarla: ${det}.\n`+
+      `La OC ${g.oc||g.folio_oc||'(sin OC)'} las contará otra vez como despachadas`+
+      (merma>0?`, y las ${num(merma)} unidades dadas por perdidas dejan de estar por comprar.`:'.')+
+      `\nEl movimiento de bodega no se borra: se registra su inverso.`,
+    confirmar:'Anular rectificación',peligro:true});
+  if(!ok)return;
+  const folio=g.oc||g.folio_oc;
+  const o=DB[ARCH.oc].data.ordenes.find(x=>String(x.folio)===String(folio));
+  const fecha=hoyISO();
+  velo(true,'Anulando rectificación…');
+  try{
+    const inv=DB[ARCH.inv].data;
+    for(const x of (r.items||[])){
+      const cant=+x.cantidad||0;
+      if(cant<=0)continue;
+      // 1. Las unidades vuelven a la guía
+      let it=g.items.find(i=>x.codigo&&i.codigo===x.codigo)
+           ||g.items.find(i=>String(i.producto).trim().toUpperCase()===String(x.producto).trim().toUpperCase());
+      if(it)it.cantidad=(+it.cantidad||0)+cant;
+      else{
+        const oi=o&&(o.items.find(i=>i.codigo===x.codigo)
+                   ||o.items.find(i=>String(i.producto).trim().toUpperCase()===String(x.producto).trim().toUpperCase()));
+        const m=x.codigo?DB[ARCH.prod].data.productos.find(p=>p.codigo===x.codigo):null;
+        it=Object.assign({producto:x.producto,codigo:x.codigo||null,nombre_guia:x.producto,
+              unidad:(oi&&oi.unidad)||(m&&m.unidad)||'UN',
+              precio_unitario:(oi&&oi.precio_unitario)||null,marca:null},
+            x.item_ref||{},{cantidad:cant});
+        const pos=Number.isInteger(x.ix)?Math.min(x.ix,g.items.length):g.items.length;
+        g.items.splice(pos,0,it);
+      }
+      // 2. La OC vuelve a contarlas como despachadas (y compradas, si fueron merma)
+      if(o){
+        const oi=o.items.find(i=>i.codigo===x.codigo)
+              ||o.items.find(i=>String(i.producto).trim().toUpperCase()===String(x.producto).trim().toUpperCase());
+        if(oi){
+          oi.cantidad_despachada=(+oi.cantidad_despachada||0)+cant;
+          if(x.motivo==='merma')oi.cantidad_comprada=(+oi.cantidad_comprada||0)+cant;
+        }
+      }
+      // 3. Inventario: se compensa con el movimiento inverso, sin tocar el original
+      let p=x.codigo?inv.productos.find(i=>i.codigo===x.codigo):null;
+      if(!p){
+        const m=x.codigo?DB[ARCH.prod].data.productos.find(i=>i.codigo===x.codigo):null;
+        p=m?{codigo:m.codigo,nombre:m.nombre,cantidad:0,unidad:m.unidad||'UN'}:invProdDe(x.producto,it.unidad);
+        if(m)inv.productos.push(p);
+      }
+      p.cantidad-=cant;
+      inv.movimientos.push({fecha,tipo:'salida',codigo:p.codigo,producto:p.nombre,cantidad:cant,
+        referencia:`Anulación de la rectificación de la guía N°${numero}`});
+      if(x.motivo==='merma'){
+        p.cantidad+=cant;
+        inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:cant,
+          referencia:`Anulación de la merma de la guía N°${numero}`});
+      }
+    }
+    // 4. Fuera el registro y vuelve la conformidad que había antes
+    g.rectificaciones.splice(idx,1);
+    if(!g.rectificaciones.length)delete g.rectificaciones;
+    if(typeof r.conforme_previo==='boolean'){
+      g.conforme=r.conforme_previo;
+      if(!g.conforme)delete g.fecha_conforme;
+    }
+    await guardarArchivo(ARCH.guias,`Guía N°${numero}: rectificación anulada`);
+    if(o)await guardarArchivo(ARCH.oc,`OC ${folio}: anulada la rectificación de la guía N°${numero}`);
+    await guardarArchivo(ARCH.inv,`Inventario: anulada la rectificación de la guía N°${numero}`);
+    toast(`Rectificación anulada · la guía N°${numero} vuelve a su estado anterior`);
     render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
