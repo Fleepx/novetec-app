@@ -1722,6 +1722,43 @@ function stockDeCodigo(codigo,nombre){
   if(!p&&nombre)p=invProdDe(nombre,null,false);
   return p?(+p.cantidad||0):0;
 }
+/* Guías despachadas contra un folio DESPUÉS de la foto del reporte SAP (Jefe, 20-08-2026).
+   El `por_entregar` del reporte ya viene descontado de todo lo que entregamos hasta la fecha en
+   que se descargó, así que restar nuestras guías otra vez sería contar doble. Solo hay que
+   descontar las guías cargadas después de esa fecha, hasta que llegue un reporte nuevo.
+   El emparejamiento va por código Y por nombre: el reporte del cliente y nuestra guía pueden
+   traer el mismo producto con nombres distintos (y, si el maestro tiene un duplicado, hasta con
+   códigos distintos). Devuelve folio -> [{codigo, prod, cant}] para ir descontando. */
+function despachadoTrasReporte(){
+  const meta=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{};
+  const corte=meta.actualizado;
+  const m={};
+  if(!corte)return m;
+  for(const g of DB[ARCH.guias].data.guias){
+    if(!(g.fecha>corte))continue;
+    const folio=String(g.oc||g.folio_oc||'');
+    if(!folio)continue;
+    for(const it of (g.items||[])){
+      (m[folio]=m[folio]||[]).push({codigo:it.codigo||null,prod:normProd(it.producto||''),
+        cant:+it.cantidad||0});
+    }
+  }
+  return m;
+}
+/* Consume del mapa lo que corresponda a un registro SAP, sin pasarse de su saldo. */
+function tomarDespachoPost(post,folio,cod,producto,tope){
+  const arr=post[folio];
+  if(!arr||tope<=0)return 0;
+  const np=normProd(producto||'');
+  let usa=0;
+  for(const e of arr){
+    if(usa>=tope)break;
+    if(!((cod&&e.codigo===cod)||(e.prod&&e.prod===np)))continue;
+    const t=Math.min(e.cant,tope-usa);
+    e.cant-=t;usa+=t;
+  }
+  return usa;
+}
 /* Líneas CONFIRMADAS: ítems de OC activas + registros Pendientes SAP.
    Si el doc_compras de un registro SAP ya existe como OC cargada, manda la OC (se omite el registro). */
 function lineasConfirmadas(){
@@ -1740,13 +1777,22 @@ function lineasConfirmadas(){
     });
   });
   const psap=((DB[ARCH.psap]&&DB[ARCH.psap].data.registros)||[]).filter(r=>!folios.has(String(r.doc_compras||'')));
+  const post=despachadoTrasReporte();
   psap.forEach(r=>{
     const total=+r.cantidad||0;
-    const pendiente=+r.por_entregar||0;
-    const porComprar=Math.max(total-(+r.cantidad_comprada||0),0);
+    const folio=String(r.doc_compras||'');
+    const cod=r.codigo||codigoDeItem(r.producto,null);
+    /* Lo que el cliente ya nos recibió en esta línea. Es compra hecha: si salió por una guía,
+       se compró. Sin esto el Panel pedía comprar el total del documento aunque estuviera casi
+       entregado (detergente: pedía 3640 cuando faltaban 1806). */
+    const entregado=Math.max(total-(+r.por_entregar||0),0);
+    const usa=tomarDespachoPost(post,folio,cod,r.producto,+r.por_entregar||0);
+    const pendiente=Math.max((+r.por_entregar||0)-usa,0);
+    const comprado=Math.max(+r.cantidad_comprada||0,entregado+usa);
+    const porComprar=Math.max(total-comprado,0);
     if(pendiente<=0&&porComprar<=0)return;
-    lineas.push({origen:'sap',ref:r,oc:String(r.doc_compras||''),cot:'',producto:r.producto,
-      codigo:r.codigo||codigoDeItem(r.producto,null),cantidad:total,pendiente,porComprar,
+    lineas.push({origen:'sap',ref:r,oc:folio,cot:'',producto:r.producto,
+      codigo:cod,cantidad:total,pendiente,porComprar,entregado:entregado+usa,
       bodega:normBodega(r.bodega||bodegaDeCentro(r.centro)||''),precio:+r.precio_neto||0,sem:{c:'gris',txt:'SAP'}});
   });
   return lineas;
@@ -3280,6 +3326,19 @@ function tarjetaGuia(g){
       <span class="chip"><i class="fa-solid fa-warehouse" style="font-size:11px"></i> ${esc(normBodega(g.destino||'Sin destino'))}</span>
       <span class="chip" title="Fecha de la guía">${fFecha(g.fecha)}</span>
       <span class="chip ink">OC ${esc(g.oc||g.folio_oc)}</span>
+      ${(()=>{ /* Guía sin OC cargada: el reporte del cliente basta como respaldo (Jefe, 20-08-2026).
+                  Si el folio viene en Pendientes SAP, la OC existe — solo no nos la hicieron
+                  llegar. Se distingue de la guía que no tiene respaldo por ningún lado. */
+        if(oc)return '';
+        const folio=String(g.oc||g.folio_oc||'');
+        const meta=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{};
+        /* `folios_reporte` trae TODOS los documentos del reporte, incluidos los ya entregados
+           del todo, que no dejan registro con saldo. Una OC entregada completa igual existe. */
+        const hay=((meta.folios_reporte||[]).includes(folio))
+               ||(meta.registros||[]).some(r=>String(r.doc_compras||'')===folio);
+        return hay?`<span class="chip verde" title="El folio viene en el reporte de Pendientes SAP${meta.actualizado?` del ${fFecha(meta.actualizado)}`:''}: la OC existe, solo falta que el cliente la envíe"><i class="fa-solid fa-file-circle-check" style="font-size:11px"></i> Respaldada por reporte SAP</span>`
+                  :`<span class="chip rojo" title="Ni la OC ni el reporte del cliente respaldan esta guía">Sin OC ni respaldo</span>`;
+      })()}
       ${g.hoja_ruta?'':'<span class="chip ambar">Sin documento asignado</span>'}
       <button class="btn mini peligro" style="margin-left:auto" onclick="borrarGuia('${esc(g.numero)}')">Eliminar</button>
     </div>
@@ -4236,7 +4295,10 @@ async function guardarGuiaLeida(){
          los define Jefe al agrupar el viaje. */
       hoja_tipo:g.es_retiro===true?'retiro':(g.es_retiro===false?'ruta':null),
       archivo:ruta,conforme:false,discrepancias:[],
-      notas:oc?null:`Cargada sin OC en el sistema: falta registrar la OC ${g.oc}.`});
+      notas:oc?null:((()=>{const M=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{},f=String(g.oc||'');
+        return ((M.folios_reporte||[]).includes(f)||(M.registros||[]).some(r=>String(r.doc_compras||'')===f))
+          ?`Sin la OC ${f} en el sistema, pero el folio viene en el reporte de Pendientes SAP: la OC existe y falta que el cliente la envíe.`
+          :`Cargada sin OC en el sistema: falta registrar la OC ${f}.`;})())});
     const A=DB[ARCH.arch].data.archivos, reg=A.find(a=>a.hash===hash);
     if(reg){reg.estado='procesado';reg.ruta=ruta;reg.referencia=String(g.numero)}
     else A.push({hash,nombre:file.name,tipo:'guias_despacho',ruta,estado:'procesado',
