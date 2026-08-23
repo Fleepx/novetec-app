@@ -1243,7 +1243,11 @@ async function generarPlanilla(){
     texto:`Este Excel conserva ${avisoNotas} nota(s) nuestras en ${_pl.notas.map(n=>n.ref).join(', ')}. `
       +`La app no las toca ni las borra. Si lo envías así, el cliente las va a leer.\n¿Generar igual?`,
     confirmar:'Generar igual'}))return;
-  const conf=DB[ARCH.conf].data, n=+conf.proxima_cotizacion_prueba||31, folio='P'+n;
+  const conf=DB[ARCH.conf].data;
+  /* La planilla del cliente sale en la serie real (Jefe, 23-08-2026): es un documento que se
+     le entrega al cliente, igual que una cotización emitida a mano. */
+  const folio=String(folioCotSiguiente());
+  if(folioCotOcupado(folio)){toast(`El folio ${folio} ya está ocupado. Recarga y vuelve a intentar.`);return}
   velo(true,'Completando la planilla…');
   try{
     const JSZipLib=await cargarJSZip();
@@ -1265,27 +1269,26 @@ async function generarPlanilla(){
       mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const nombre=`Cotizacion_${folio}_${fFecha(hoyISO())}.xlsx`;
     const ruta_repo='documentos/cotizaciones/'+nombre;
-    await subirBinario(ruta_repo,blob,`Planilla cotizada ${folio} (prueba)`);
+    await subirBinario(ruta_repo,blob,`Planilla cotizada ${folio}`);
     const neto=cot.reduce((s,f)=>s+(+f.precio)*(+f.cantidad||0),0);
     const iva=Math.round(neto*0.19);
     DB[ARCH.cot].data.cotizaciones.push({
       id:'COT-APP-'+folio,folio,fecha:hoyISO(),cliente:cl.nombre,estado:'abierta',
-      prueba:true,origen:'app',formato:'planilla',neto,iva,total:neto+iva,archivo:ruta_repo,
+      origen:'app',formato:'planilla',neto,iva,total:neto+iva,archivo:ruta_repo,
       contacto_nombre:_pl.contacto_nombre||null,validez:_pl.validez,
       /* La bodega viene del CENTRO de la planilla, que sale del SAP del cliente:
          es dato duro por línea, no una deducción de texto libre. */
       items:cot.map(f=>({producto:f.producto,codigo:f.codigo||null,codigo_sap:f.material||null,
         nombre_cliente:f.nombre,bodega:f.bodega||null,centro:f.centro==null?null:String(f.centro),
         cantidad:+f.cantidad,unidad:f.unidad||'UN',precio_unitario:+f.precio})),
-      notas:`Planilla del cliente completada desde la app (prueba). ${_pl.filas.length-cot.length} línea(s) quedaron sin cotizar.`});
+      notas:`Planilla del cliente completada desde la app. ${_pl.filas.length-cot.length} línea(s) quedaron sin cotizar.`});
     const H=DB[ARCH.hprec].data;
     cot.forEach(f=>{if(f.codigo)H.cotizaciones.push({codigo:f.codigo,codigo_sap:f.material||null,
       producto:f.producto,fecha:hoyISO(),folio,precio:+f.precio,origen:'cotizacion',folio_oc:folio})});
     H.actualizado=hoyISO();
-    conf.proxima_cotizacion_prueba=n+1;
     await guardarArchivo(ARCH.hprec,`Precios ofertados de la planilla ${folio}`);
-    await guardarArchivo(ARCH.conf,`Próxima cotización de prueba: P${n+1}`);
-    await guardarArchivo(ARCH.cot,`Planilla ${folio} cotizada desde la app (prueba)`);
+    await sincronizarFolioCot(folio,'planilla cotizada desde la app');
+    await guardarArchivo(ARCH.cot,`Planilla ${folio} cotizada desde la app`);
     _pl=null;
     bajarBlob(blob,nombre);
     toast(avisoNotas
@@ -1388,11 +1391,48 @@ function cnTextoDespacho(){
   _cotN.obsDespacho=partes.join('\n\n');
 }
 let _cotN=null;
-function nuevaCotizacion(){
+/* ══════ FOLIO DE COTIZACIÓN ══════
+   Fin de la fase de prueba (Jefe, 23-08-2026): la app emite en la MISMA serie que Facto, porque
+   las dos siguen emitiendo en paralelo. El correlativo NO se lleva en `config`: se DERIVA de los
+   folios ya registrados, igual que los saldos. Así, cuando entra una cotización de Facto con un
+   folio más alto, la app se sincroniza sola sin ningún paso aparte — que es lo que hace falta,
+   porque Facto emite documentos que nunca llegan al sistema (la serie tiene huecos: 816, 818,
+   825, 828, 829, 831). `config.proxima_cotizacion` queda solo como PISO, para que el contador no
+   retroceda si algún día se archiva o se borra la cotización más alta.
+   Riesgo conocido de emitir en paralelo: la app puede tomar un folio que Facto gaste el mismo
+   día. Eso no se puede evitar desde aquí, pero sí detectar — `folioCotOcupado` avisa antes de
+   guardar y al emitir se vuelve a comprobar. */
+function foliosCotUsados(){
+  return new Set(DB[ARCH.cot].data.cotizaciones
+    .map(c=>String(c.folio||'')).filter(f=>/^\d+$/.test(f)).map(Number));
+}
+function folioCotSiguiente(){
+  const usados=foliosCotUsados();
+  const piso=+(DB[ARCH.conf].data.proxima_cotizacion)||1;
+  let n=Math.max(piso,usados.size?Math.max(...usados)+1:piso);
+  while(usados.has(n))n++;
+  return n;
+}
+function folioCotOcupado(folio){
+  return foliosCotUsados().has(+folio);
+}
+/* Sube el piso del correlativo cuando aparece un folio igual o mayor. Se llama al registrar
+   cualquier cotización, venga de la app o de Facto. */
+async function sincronizarFolioCot(folio,motivo){
+  if(!/^\d+$/.test(String(folio)))return false;
+  const conf=DB[ARCH.conf].data;
+  const siguiente=+folio+1;
+  if(siguiente<=(+conf.proxima_cotizacion||0))return false;
+  conf.proxima_cotizacion=siguiente;
+  await guardarArchivo(ARCH.conf,`Próxima cotización: ${siguiente}${motivo?' ('+motivo+')':''}`);
+  return true;
+}
+function nuevaCotizacion(prueba){
   const cl=clientes()[0]||{};
   const bod=bodegasDe(cl)[0]||'';
   _cotN={cliente:cl.nombre||'',contacto_nombre:'',contacto_email:'',contacto_fono:'',
          validez:'7 DIAS',bodegaDefecto:bod,observaciones:'',obsDespacho:'',obsEditada:false,
+         prueba:!!prueba,
          items:[{producto:'',codigo:'',descripcion:'',cantidad:1,unidad:'UN',precio:'',bodega:bod}]};
   cnTextoDespacho();
   render();
@@ -1443,7 +1483,8 @@ function panelCotizacion(){
   const cl=clientePorNombre(_cotN.cliente)||{};
   const cont=(cl.contactos||[]).find(x=>x.nombre===_cotN.contacto_nombre);
   const conf=DB[ARCH.conf].data;
-  const folio='P'+(conf.proxima_cotizacion_prueba||31);
+  const esPrueba=!!_cotN.prueba;
+  const folio=esPrueba?('P'+(conf.proxima_cotizacion_prueba||31)):String(folioCotSiguiente());
   /* Alfabético: el maestro está ordenado por código NOV, que al buscar un producto no
      significa nada. El desplegable filtra mientras se escribe, pero el orden importa cuando
      se abre entero. */
@@ -1455,8 +1496,10 @@ function panelCotizacion(){
   };
   const neto=_cotN.items.reduce((s,i)=>s+(+i.cantidad||0)*(+i.precio||0),0);
   return `<div id="cn-panel" class="form" style="border:2px solid var(--ambar);border-radius:10px;padding:14px;margin:12px 0">
-    <b style="font-size:15px">Nueva cotización <span class="chip ambar">PRUEBA · ${esc(folio)}</span></b>
-    <p class="small muted">Folio de prueba, con correlativo aparte: no toca la serie de Facto. Las cotizaciones de prueba NO participan del match: nunca se adjudica una OC contra ellas.</p>
+    <b style="font-size:15px">Nueva cotización <span class="chip ${esPrueba?'ambar':'ink'}">${esPrueba?'PRUEBA · ':''}${esc(folio)}</span></b>
+    <p class="small muted">${esPrueba
+      ?'Folio de prueba, con correlativo aparte: no toca la serie de Facto. Las cotizaciones de prueba NO participan del match: nunca se adjudica una OC contra ellas.'
+      :'Folio de la serie real, la misma de Facto. Participa del match con las órdenes de compra. Como Facto sigue emitiendo en paralelo, el número se toma al emitir y se comprueba que esté libre.'}</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">
       <div><label>Cliente</label><select onchange="cnSet('cliente',this.value)">
         ${clientes().map(c=>`<option value="${esc(c.nombre)}"${_cotN.cliente===c.nombre?' selected':''}>${esc(c.corto)}${c.rut==='PENDIENTE'?' (datos pendientes)':''}</option>`).join('')}
@@ -1526,7 +1569,13 @@ async function emitirCotizacion(){
     texto:`${sinCod.length} línea(s) no calzan con ningún producto del maestro: ${sinCod.map(i=>i.producto).join(', ')}.\nSe cotizarán igual, pero al llegar la OC no van a emparejar solas.`,
     confirmar:'Cotizar igual'}))return;
   const conf=DB[ARCH.conf].data;
-  const n=+conf.proxima_cotizacion_prueba||31, folio='P'+n;
+  const esPrueba=!!_cotN.prueba;
+  const n=+conf.proxima_cotizacion_prueba||31;
+  const folio=esPrueba?('P'+n):String(folioCotSiguiente());
+  // Se comprueba de nuevo aquí: entre abrir el panel y emitir pudo cargarse una de Facto.
+  if(!esPrueba&&folioCotOcupado(folio)){
+    toast(`El folio ${folio} ya está ocupado. Vuelve a abrir el panel para tomar el siguiente.`);return;
+  }
   velo(true,'Generando la cotización…');
   try{
     const jsPDF=await cargarJsPDF();
@@ -1545,10 +1594,10 @@ async function emitirCotizacion(){
     const {doc,neto,iva,total}=cotizacionPDF(jsPDF,datos,await logoCotizacion());
     const blob=doc.output('blob');
     const nombre=`COT_${folio}.pdf`, ruta='documentos/cotizaciones/'+nombre;
-    await subirBinario(ruta,blob,`Cotización ${folio} (prueba) emitida desde la app`);
+    await subirBinario(ruta,blob,`Cotización ${folio} emitida desde la app${esPrueba?' (prueba)':''}`);
     DB[ARCH.cot].data.cotizaciones.push({
       id:'COT-APP-'+folio,folio,fecha:hoyISO(),cliente:cl.nombre,estado:'abierta',
-      prueba:true,origen:'app',neto,iva,total,archivo:ruta,
+      ...(esPrueba?{prueba:true}:{}),origen:'app',neto,iva,total,archivo:ruta,
       contacto_nombre:_cotN.contacto_nombre||null,
       contacto_email:_cotN.contacto_email,contacto_fono:_cotN.contacto_fono,
       validez:_cotN.validez,observaciones:datos.observaciones,
@@ -1557,14 +1606,16 @@ async function emitirCotizacion(){
       items:items.map(i=>({producto:i.producto,codigo:i.codigo||null,
         nombre_cliente:i.descripcion||null,bodega:i.bodega||null,
         cantidad:+i.cantidad,unidad:i.unidad||'UN',precio_unitario:+i.precio})),
-      notas:'Emitida desde la app en modo PRUEBA. Al archivar las pruebas se cierra y suelta sus adjudicaciones.'});
+      notas:esPrueba?'Emitida desde la app en modo PRUEBA. Al archivar las pruebas se cierra y suelta sus adjudicaciones.'
+                    :'Emitida desde la app en la serie real, la misma de Facto.'});
     const H=DB[ARCH.hprec].data;
     items.forEach(i=>{if(i.codigo)H.cotizaciones.push({codigo:i.codigo,codigo_sap:null,
       producto:i.producto,fecha:hoyISO(),folio,precio:+i.precio,origen:'cotizacion',folio_oc:folio})});
     H.actualizado=hoyISO();
-    conf.proxima_cotizacion_prueba=n+1;
     await guardarArchivo(ARCH.hprec,`Precios ofertados de la cotización ${folio}`);
-    await guardarArchivo(ARCH.conf,`Próxima cotización de prueba: P${n+1}`);
+    if(esPrueba){conf.proxima_cotizacion_prueba=n+1;
+      await guardarArchivo(ARCH.conf,`Próxima cotización de prueba: P${n+1}`);}
+    else await sincronizarFolioCot(folio,'emitida desde la app');
     await guardarArchivo(ARCH.cot,`Cotización ${folio} emitida desde la app (prueba)`);
     _cotN=null;
     bajarBlob(blob,nombre);                       // bajarBlob cierra el velo
@@ -1660,10 +1711,15 @@ async function archivarPruebas(){
 function formCotizacion(){
   const pruebas=DB[ARCH.cot].data.cotizaciones.filter(c=>c.prueba&&c.estado!=='cerrada').length;
   return `<div style="margin:10px 0">
-    <button class="btn" onclick="nuevaCotizacion()"><i class="fa-solid fa-file-circle-plus"></i> Nueva cotización (prueba)</button>
+    <button class="btn" onclick="nuevaCotizacion()"><i class="fa-solid fa-file-circle-plus"></i> Nueva cotización</button>
     <button class="btn sec" title="Sube la planilla del cliente, pon los precios y te la devuelvo completada" onclick="document.getElementById('pl-file').click()"><i class="fa-solid fa-file-excel"></i> Cotizar planilla del cliente</button>
     <input type="file" id="pl-file" accept=".xlsx,.xlsm" style="display:none" onchange="cargarPlanilla(this)">
     ${pruebas?`<button class="btn sec" onclick="archivarPruebas()" title="Cierra las pruebas y suelta sus adjudicaciones"><i class="fa-solid fa-box-archive"></i> Archivar ${pruebas} prueba(s)</button>`:''}
+    ${/* El modo prueba se conserva por si hay que ensayar algo, pero fuera del camino: la serie P
+         no toca la de Facto y esas cotizaciones no participan del match (Jefe, 23-08-2026). */''}
+    <button class="btn mini sec" style="opacity:.65;margin-left:4px" onclick="nuevaCotizacion(true)"
+      title="Emite con la serie P, aparte de la de Facto. No participa del match con las OC.">
+      <i class="fa-solid fa-flask"></i> modo prueba</button>
   </div>${panelCotizacion()}${panelPlanilla()}`;
 }
 
