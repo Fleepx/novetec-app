@@ -2323,23 +2323,37 @@ async function cargarPdfJs(){
 }
 /* Reconstruye las líneas respetando las distancias horizontales: los PDF de SAP vienen
    en dos columnas y sin esto el texto legal se mezcla con los datos. */
+/* Reconstruye las líneas de texto de un PDF a partir de las coordenadas de cada fragmento.
+   Las filas se agrupan DENTRO de cada página (Jefe, 20-08-2026). Antes se juntaban todos los
+   fragmentos del documento y se agrupaban solo por Y: dos textos a la misma altura en páginas
+   distintas caían en la misma línea, intercalados por X. Eso rompía las líneas de producto de
+   la segunda página en adelante — en la OC 4500952609 la línea de las pilas salía como
+   "60 48 UN Esperamos su confirmación...Cod: 3300002347 PILA D ALCALINA", el regex no la
+   reconocía y el total descuadraba en $87.840 sin dejar continuar. También desordenaba la
+   lectura, porque el orden global por Y mezcla el pie de una página con el encabezado de otra. */
 function lineasDePdf(paginas){
   const items=[].concat(...paginas).filter(i=>i.str.trim());
   if(!items.length)return [];
   const anchos=items.filter(i=>i.str.length>1&&i.w>0).map(i=>i.w/i.str.length).sort((a,b)=>a-b);
   const u=anchos[Math.floor(anchos.length/2)]||5;
-  const filas={};
-  items.forEach(i=>{const y=Math.round(i.y/3);(filas[y]=filas[y]||[]).push(i)});
   const minX=Math.min(...items.map(i=>i.x));
-  return Object.keys(filas).sort((a,b)=>b-a).map(y=>{
-    let s='';
-    filas[y].sort((a,b)=>a.x-b.x).forEach(i=>{
-      const col=Math.round((i.x-minX)/u);
-      if(col>s.length)s+=' '.repeat(col-s.length);
-      s+=i.str;
+  const salida=[];
+  paginas.forEach(pag=>{
+    const its=pag.filter(i=>i.str.trim());
+    if(!its.length)return;
+    const filas={};
+    its.forEach(i=>{const y=Math.round(i.y/3);(filas[y]=filas[y]||[]).push(i)});
+    Object.keys(filas).sort((a,b)=>b-a).forEach(y=>{
+      let s='';
+      filas[y].sort((a,b)=>a.x-b.x).forEach(i=>{
+        const col=Math.round((i.x-minX)/u);
+        if(col>s.length)s+=' '.repeat(col-s.length);
+        s+=i.str;
+      });
+      salida.push(s.replace(/\s+$/,''));
     });
-    return s.replace(/\s+$/,'');
-  }).filter(l=>l.trim());
+  });
+  return salida.filter(l=>l.trim());
 }
 const nSap=s=>{const t=String(s).trim().replace(/\./g,'').replace(',','.');return Math.round(parseFloat(t)*100)/100};
 /* El destino de una OC se resuelve contra el CATÁLOGO (bodegas.json), no contra una lista
