@@ -2753,6 +2753,31 @@ async function adjQuitarLinea(fe,oi){
   velo(false);
 }
 function cotPorId(id){return DB[ARCH.cot].data.cotizaciones.find(c=>c.id===id)}
+/* Guías de despacho que movieron ESTA línea de la OC (Jefe, 23-08-2026). Reemplaza a la
+   columna "Cotización": vincular OC con cotización casi nunca funciona por cómo trabaja el
+   cliente, y en cambio saber por qué guía salió cada línea sí se usa todos los días.
+   Se emparejan por código y, si la línea no lo trae, por nombre. Con varias guías se listan
+   separadas por guiones, en el orden en que salieron. Cada número lleva su fecha al pasar
+   el puntero. La adjudicación a cotizaciones sigue existiendo por debajo (`adjudicaciones.json`
+   y el match automático); lo que se quitó es su acceso desde esta tabla. */
+function guiasDeLineaOC(folio,li){
+  const cod=li.codigo||null;
+  const nom=String(li.producto||'').trim().toUpperCase();
+  return DB[ARCH.guias].data.guias
+    .filter(g=>String(g.oc||g.folio_oc||'')===String(folio))
+    .filter(g=>(g.items||[]).some(i=>(cod&&i.codigo===cod)
+      ||(!cod&&String(i.producto||'').trim().toUpperCase()===nom)))
+    .map(g=>({numero:g.numero,fecha:g.fecha,
+      cant:(g.items||[]).filter(i=>(cod&&i.codigo===cod)
+        ||(!cod&&String(i.producto||'').trim().toUpperCase()===nom))
+        .reduce((s,i)=>s+(+i.cantidad||0),0)}))
+    .sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||''))||String(a.numero).localeCompare(String(b.numero)));
+}
+function celdaGuiasOC(o,li){
+  const gs=guiasDeLineaOC(o.folio,li);
+  if(!gs.length)return '<span class="muted small">sin guía</span>';
+  return gs.map(g=>`<span class="mono" title="Guía N°${esc(g.numero)} · emitida el ${fFecha(g.fecha)} · ${num(g.cant)} en esta línea">${esc(g.numero)}</span>`).join(' - ');
+}
 /* Celda "Cotización" de la tabla de ítems de una OC (Jefe, 31-07-2026: columna al final de la
    tabla, no tarjetas aparte, para no abultar la ficha). Muestra el vínculo o las acciones. */
 function celdaAdjOC(o,li,oi){
@@ -3106,10 +3131,10 @@ function rOC(){
         <span class="muted small">Emisión ${fFecha(o.fecha_emision)}${o.fecha_carga&&o.fecha_carga!==o.fecha_emision?` · <span title="Día en que se cargó al sistema">cargada ${fFecha(o.fecha_carga)}</span>`:''}${o.fecha_entrega?` · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b>`:''} · ${esc(o.destino||'—')}</span>
         <span class="resumen">${o.items.length} ítem(s) · ${num(pendD)} por despachar</span>
       </summary>
-      <table class="tprod" style="margin-top:12px;min-width:940px"><colgroup><col style="width:12em"><col style="width:8ch"><col style="width:10ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"><col style="width:20ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">P. unit.</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th><th>Cotización</th></tr>
+      <table class="tprod" style="margin-top:12px;min-width:940px"><colgroup><col style="width:12em"><col style="width:8ch"><col style="width:10ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">P. unit.</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th><th>Guía de despacho</th></tr>
       ${o.items.map((i,ix)=>{const comp=+i.cantidad_comprada||0;
         const pend=(+i.cantidad||0)-(+i.cantidad_despachada||0);
-        return `<tr${pend>0?' class="fila-pend"':''}><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num" style="${comp<i.cantidad?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(pend)}</td><td>${celdaAdjOC(o,i,ix)}</td></tr>`}).join('')}</table>
+        return `<tr${pend>0?' class="fila-pend"':''}><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num" style="${comp<i.cantidad?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(pend)}</td><td>${celdaGuiasOC(o,i)}</td></tr>`}).join('')}</table>
       ${o.compras?.length?`<p class="small muted" style="margin-top:6px">Compras: ${o.compras.map(c=>`<span class="mono">${fFecha(c.fecha)}</span> ${esc(c.proveedor||'s/proveedor')} (${c.items.map(i=>`${esc(i.producto)} ×${num(i.cantidad)}`).join(', ')})`).join(' · ')}</p>`:''}
       ${o.guias?.length?`<p class="small muted" style="margin-top:6px">Guías: <span class="mono">${o.guias.map(esc).join(', ')}</span></p>`:''}
       ${o.archivo?`<p class="small"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(o.archivo)}')">Descargar documento</a></p>`:''}
