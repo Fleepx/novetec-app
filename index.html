@@ -483,6 +483,15 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const clp=n=>new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP'}).format(n||0);
 const num=n=>new Intl.NumberFormat('es-CL').format(n||0);
 const hoyISO=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+/* Plazo de entrega que se compromete Novetec: 10 días corridos desde que el documento se carga
+   en la app (Jefe, 23-08-2026). NO se usa la fecha del PDF: el cliente pone cualquier cosa ahí
+   (la OC 4500952609, emitida en marzo, traía entrega para el 30 de junio). Antes se calculaba
+   emisión + 15 días, que arrastraba el mismo problema por otra vía: una OC emitida hace meses
+   entraba al sistema ya vencida. El semáforo de atraso se mide contra esta fecha. */
+function fechaCompromiso(desde){
+  const base=desde?Date.parse(desde):Date.parse(hoyISO());
+  return new Date(base+10*864e5).toISOString().slice(0,10);
+}
 function fFecha(iso){if(!iso)return '—';const[a,m,d]=iso.split('-');return `${d}-${m}-${a}`}
 function dias(iso){if(!iso)return null;const[a,m,d]=iso.split('-').map(Number);const f=new Date(a,m-1,d);const h=new Date();h.setHours(0,0,0,0);return Math.round((f-h)/86400000)}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';clearTimeout(t._x);t._x=setTimeout(()=>t.style.display='none',4200)}
@@ -2466,7 +2475,7 @@ async function leerOCpdf(){
     oc.items=consolidarOC(oc.items);
     ocLeida={...oc,archivo:f,hash:h,previo:previo||null,
              errores:validarOC(oc),resueltos:resolverItems(oc.items),
-             fecha_entrega:oc.fecha_emision?new Date(Date.parse(oc.fecha_emision)+15*864e5).toISOString().slice(0,10):null};
+             fecha_carga:hoyISO(),fecha_entrega:fechaCompromiso()};
     render();
     toast(ocLeida.errores.length?'Leído con observaciones: revísalas antes de guardar.':'PDF leído. Revisa y confirma.');
   }catch(e){toast('No se pudo leer el PDF: '+e.message)}
@@ -2505,9 +2514,10 @@ async function guardarOCLeida(){
     const ruta=`documentos/ordenes_compra/OC_${o.folio}.pdf`;
     await subirDocumento('ordenes_compra',o.archivo,`OC_${o.folio}.pdf`);
     DB[ARCH.oc].data.ordenes.push({folio:o.folio,cotizacion_id:null,cotizacion_sap:o.cotizacion_sap,
-      emisor:o.emisor,fecha_emision:o.fecha_emision,fecha_entrega:o.fecha_entrega,destino:o.destino,
+      emisor:o.emisor,fecha_emision:o.fecha_emision,fecha_carga:o.fecha_carga||hoyISO(),
+      fecha_entrega:o.fecha_entrega||fechaCompromiso(),destino:o.destino,
       cliente:'Agricola Super Ltda',items,compras:[],guias:[],archivo:ruta,
-      notas:'Leída automáticamente desde el PDF y confirmada en pantalla. Fecha de entrega = emisión + 15 días.'});
+      notas:'Leída automáticamente desde el PDF y confirmada en pantalla. Fecha de entrega = carga + 10 días.'});
     (DB[ARCH.arch].data.archivos).push({hash:o.hash,nombre:o.archivo.name,tipo:'ordenes_compra',
       ruta,estado:'procesado',fecha:hoyISO(),referencia:'OC '+o.folio});
     await guardarArchivo(ARCH.prod,`Maestro: productos de la OC ${o.folio}`);
@@ -2572,7 +2582,7 @@ function panelOCLeida(){
     ${o.previo?`<div class="card" style="border-color:var(--ambar);margin-bottom:10px"><b>Este archivo ya había entrado al sistema</b><div class="small muted">${esc(o.previo.nombre||'')} · ${esc(o.previo.estado)}${o.previo.referencia?' · '+esc(o.previo.referencia):''}</div></div>`:''}
     <div class="grid3">
       <div><label>Emisión</label><div class="mono">${fFecha(o.fecha_emision)}</div></div>
-      <div><label>Entrega (emisión + 15 días)</label><div class="mono">${fFecha(o.fecha_entrega)}</div></div>
+      <div><label>Entrega (carga + 10 días)</label><div class="mono">${fFecha(o.fecha_entrega)}</div><div class="small muted">plazo propio: la fecha del documento no es fiable</div></div>
       <div><label>Destino</label><div class="mono">${esc(o.destino||'—')}</div><div class="small muted">documento: "${esc(o.destino_texto||'')}"</div></div>
       <div><label>Emisor</label><div class="mono small">${esc(o.emisor||'—')}</div></div>
       <div><label>Cotización SAP</label><div class="mono small">${esc(o.cotizacion_sap||'sin cotización')}</div></div>
