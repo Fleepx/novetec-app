@@ -2342,8 +2342,17 @@ function lineasDePdf(paginas){
   }).filter(l=>l.trim());
 }
 const nSap=s=>{const t=String(s).trim().replace(/\./g,'').replace(',','.');return Math.round(parseFloat(t)*100)/100};
-const REGLAS_BODEGA=[[/SAN FRANCISCO|MOSTAZAL/,'San Francisco de Mostazal'],[/CENTRAL|RANCAGUA/,'Rancagua'],
-                     [/PEUMO|CALERA/,'El Peumo'],[/LONGOVILO/,'Longovilo']];
+/* El destino de una OC se resuelve contra el CATÁLOGO (bodegas.json), no contra una lista
+   escrita aquí (Jefe, 20-08-2026). Antes había cuatro bodegas fijas en el código: cuando el
+   catálogo creció a siete, el lector siguió sin reconocer Casablanca, Doñihue ni Rosario y
+   dejaba la OC entera sin cargar aunque hubiera leído bien todo lo demás. Ahora basta con
+   agregar la bodega al catálogo para que el lector la reconozca. */
+function bodegaDeTexto(txt){
+  const x=sinTilde(txt);
+  if(!x)return null;
+  const hit=bodegas().find(b=>(b.claves||[]).some(k=>k&&x.includes(sinTilde(k))));
+  return hit?hit.nombre:null;
+}
 function parseOC(lineas){
   const txt=lineas.join('\n');
   const g=(re,i=1)=>{const m=txt.match(re);return m?m[i].trim():null};
@@ -2356,11 +2365,11 @@ function parseOC(lineas){
   });
   const mman=txt.match(/(?:ENTREGAR EN|DESPACHAR A)\s+([A-ZÁÉÍÓÚÑ ]{4,})/);
   const crudo=(mman?mman[1]:g(/Lugar de Entrega\s*:\s*(.+?)(?:Direcci|$)/m))||'';
-  const bod=REGLAS_BODEGA.find(([re])=>re.test(crudo.toUpperCase()));
+  const bod=bodegaDeTexto(crudo);
   const mt=txt.match(/TOTAL SIN IVA\s*:?\s*([\d.,]+)/);
   return {folio:g(/N[ºo°]\s*:\s*(45009\d{5})/),fecha_emision:fe?`${fe[3]}-${fe[2]}-${fe[1]}`:null,
           cotizacion_sap:g(/Cotización\s*:\s*(\d+)/),emisor:g(/Emisor O\/C\s*:\s*(.+)/),
-          destino_texto:crudo.trim(),destino:bod?bod[1]:null,
+          destino_texto:crudo.trim(),destino:bod,
           total_documento:mt?nSap(mt[1]):null,items};
 }
 function validarOC(oc){
