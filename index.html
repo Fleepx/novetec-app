@@ -4246,6 +4246,20 @@ function hgParsearGuia(lineas){
 /* Empareja las líneas de la guía contra las de la OC referenciada.
    La guía NO trae código: el ancla es el PRECIO UNITARIO, que en Facto sale de la misma OC.
    Nombre solo como desempate. Lo que no queda seguro se marca y lo revisa Jefe. */
+/* Cuando la OC no está cargada, el respaldo del folio es el reporte de Pendientes SAP: trae las
+   mismas líneas, con producto, cantidad y precio (Jefe, 24-08-2026). Sin esto, toda guía contra
+   una OC ausente caía en "sin_oc", cada línea se daba de alta como producto NUEVO y el pendiente
+   nunca se descontaba — de ahí salieron NOV-0347, 0349, 0350 y 0357, duplicados de productos que
+   ya existían con precio y cantidad idénticos. */
+function docDeRespaldo(folio){
+  const oc=DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===String(folio));
+  if(oc)return {doc:oc,origen:'oc'};
+  const regs=((DB[ARCH.psap]&&DB[ARCH.psap].data.registros)||[])
+    .filter(r=>String(r.doc_compras||'')===String(folio));
+  if(!regs.length)return {doc:null,origen:null};
+  return {doc:{folio:String(folio),items:regs.map(r=>({codigo:r.codigo||null,producto:r.producto,
+    cantidad:+r.cantidad||0,precio_unitario:+r.precio_neto||0}))},origen:'sap'};
+}
 function hgResolverContraOC(guia,oc){
   const nrm=t=>String(t||'').toUpperCase().replace(/Ñ/g,'N').replace(/[^A-Z0-9]/g,'');
   const usados=new Set();
@@ -4307,11 +4321,15 @@ async function leerGuiaPDF(inp){
     if(DB[ARCH.guias].data.guias.some(x=>String(x.numero)===String(g.numero)))
       throw new Error(`la guía N°${g.numero} ya está cargada`);
     const oc=DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===String(g.oc));
-    hgResolverContraOC(g,oc);
+    // Si la OC no está cargada se resuelve contra el pendiente SAP del mismo folio.
+    const resp=docDeRespaldo(g.oc);
+    hgResolverContraOC(g,resp.doc);
+    if(resp.origen==='sap')g.resuelta_con='sap';
     g.destino=normBodega(g.destino_texto||'');
     if(g.es_retiro===true)g.avisos.push('El documento dice que la retira el cliente: asígnala a un Resumen de Retiros');
     if(!bodegasOrden().includes(g.destino)){g.avisos.push(`Destino no reconocido: "${g.destino_texto||''}"`);g.destino=''}
-    if(!oc)g.avisos.push(`La OC ${g.oc||'(sin folio)'} no está en el sistema: la guía quedará marcada como pendiente`);
+    if(!oc)g.avisos.push(`La OC ${g.oc||'(sin folio)'} no está en el sistema: la guía quedará marcada como pendiente`
+      +(resp.origen==='sap'?', pero el folio viene en el reporte de Pendientes SAP y los productos se resolvieron contra él':''));
     _gLeida={g,oc,file,hash:h};
     velo(false);render();
     setTimeout(()=>{const e=document.getElementById('gl-panel');if(e)e.scrollIntoView({behavior:'smooth',block:'center'})},60);
@@ -4328,7 +4346,7 @@ function panelGuiaLeida(){
   const g=_gLeida.g, oc=_gLeida.oc;
   const MATCH={precio:['verde','emparejada por precio con la OC'],nombre:['ambar','emparejada solo por nombre'],
     ambiguo:['rojo','varias líneas de la OC calzan: elige tú'],sin_match:['rojo','no calza con ninguna línea de la OC'],
-    sin_oc:['rojo','la OC no está en el sistema']};
+    sin_oc:['rojo','la OC no está en el sistema ni en el reporte de Pendientes SAP']};
   const opciones=it=>{
     const usados=g.items.filter(x=>x!==it&&x.codigo).map(x=>x.codigo);
     const ls=(oc?oc.items:[]).map(x=>`<option value="${esc(x.codigo)}"${it.codigo===x.codigo?' selected':''}${usados.includes(x.codigo)?' disabled':''}>${esc(x.producto)} · ${num(x.cantidad)} @ ${clp(x.precio_unitario)}</option>`).join('');
