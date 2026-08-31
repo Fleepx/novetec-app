@@ -4359,9 +4359,17 @@ async function leerGuiaPDF(inp){
     g.destino=normBodega(g.destino_texto||'');
     if(g.es_retiro===true)g.avisos.push('El documento dice que la retira el cliente: asígnala a un Resumen de Retiros');
     if(!bodegasOrden().includes(g.destino)){g.avisos.push(`Destino no reconocido: "${g.destino_texto||''}"`);g.destino=''}
-    if(!oc)g.avisos.push(`La OC ${g.oc||'(sin folio)'} no está en el sistema: la guía quedará marcada como pendiente`
-      +(resp.origen==='sap'?', pero el folio viene en el reporte de Pendientes SAP y los productos se resolvieron contra él':''));
-    _gLeida={g,oc,file,hash:h};
+    if(!oc)g.avisos.push(resp.origen==='sap'
+      ? `Falta el documento de la OC ${g.oc}, pero el folio viene en el reporte de Pendientes SAP y los productos se emparejaron contra él. Puedes guardar.`
+      : `La OC ${g.oc||'(sin folio)'} no está en el sistema ni en el reporte de Pendientes SAP: la guía quedará marcada como pendiente`);
+    /* El panel de revisión arma su desplegable de productos con `doc`. Antes se guardaba aquí
+       la OC cargada y nada más: cuando la OC solo existía en el reporte de Pendientes SAP, el
+       desplegable quedaba VACÍO y el producto ya reconocido no aparecía por ninguna parte —
+       el ítem se veía como "sin asignar" aunque internamente estuviera resuelto (guía 1588:
+       el visicooler calzaba con NOV-0093 por precio y aun así la pantalla no lo mostraba).
+       `oc` se conserva aparte porque el guardado imputa el despacho a la OC de verdad, y a un
+       registro del reporte no se le puede imputar nada. */
+    _gLeida={g,oc,doc:resp.doc,origen_doc:resp.origen,file,hash:h};
     velo(false);render();
     setTimeout(()=>{const e=document.getElementById('gl-panel');if(e)e.scrollIntoView({behavior:'smooth',block:'center'})},60);
   }catch(e){velo(false);toast('No pude leer la guía: '+e.message)}
@@ -4374,18 +4382,20 @@ function glCab(campo,v){if(_gLeida)_gLeida.g[campo]=v}
    leída entra al inventario y a la OC, y desandarlo cuesta más que mirarlo. */
 function panelGuiaLeida(){
   if(!_gLeida)return '';
-  const g=_gLeida.g, oc=_gLeida.oc;
+  const g=_gLeida.g, oc=_gLeida.oc, doc=_gLeida.doc||oc;
   const MATCH={precio:['verde','emparejada por precio con la OC'],nombre:['ambar','emparejada solo por nombre'],
     ambiguo:['rojo','varias líneas de la OC calzan: elige tú'],sin_match:['rojo','no calza con ninguna línea de la OC'],
     sin_oc:['rojo','la OC no está en el sistema ni en el reporte de Pendientes SAP']};
+  const fuente=_gLeida.origen_doc==='sap'?'reporte de Pendientes SAP':'orden de compra';
   const opciones=it=>{
     const usados=g.items.filter(x=>x!==it&&x.codigo).map(x=>x.codigo);
-    const ls=(oc?oc.items:[]).map(x=>`<option value="${esc(x.codigo)}"${it.codigo===x.codigo?' selected':''}${usados.includes(x.codigo)?' disabled':''}>${esc(x.producto)} · ${num(x.cantidad)} @ ${clp(x.precio_unitario)}</option>`).join('');
+    const ls=(doc?doc.items:[]).map(x=>`<option value="${esc(x.codigo)}"${it.codigo===x.codigo?' selected':''}${usados.includes(x.codigo)?' disabled':''}>${esc(x.producto)} · ${num(x.cantidad)} @ ${clp(x.precio_unitario)}</option>`).join('');
     return `<option value="">— sin asignar —</option>${ls}<option value="__nuevo__"${it.codigo==='__nuevo__'?' selected':''}>No está en la OC: usar el nombre de la guía</option>`;
   };
   return `<div id="gl-panel" class="form" style="border:2px solid var(--ambar);border-radius:10px;padding:14px;margin:12px 0">
     <b style="font-size:15px">Revisar la guía N°${esc(g.numero||'?')} antes de guardar</b>
-    <p class="small muted">Lo que confirmes descuenta inventario y suma al despachado de la OC. La fecha de envío no se pide: la toma cuando la asignes a una Hoja de Ruta o a un Resumen de Retiros.</p>
+    <p class="small muted">Lo que confirmes descuenta inventario y suma al despachado de la OC. La fecha de envío no se pide: la toma cuando la asignes a una Hoja de Ruta o a un Resumen de Retiros.
+      ${doc?`Los productos se emparejaron contra la <b>${esc(fuente)}</b> ${esc(g.oc||'')}.`:''}</p>
     ${g.avisos.length?`<div class="chip ambar" style="display:block;white-space:normal;margin:8px 0">${g.avisos.map(esc).join(' · ')}</div>`:''}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
       <div><label>N° Guía</label><input value="${esc(g.numero||'')}" onchange="glCab('numero',this.value)"></div>
