@@ -2462,9 +2462,27 @@ function validarOC(oc){
   const suma=oc.items.reduce((a,i)=>a+i.total,0);
   if(oc.total_documento!=null&&Math.abs(suma-oc.total_documento)>0.5)
     e.push(`La suma de las líneas (${clp(suma)}) no coincide con el total del documento (${clp(oc.total_documento)}).`);
-  if(oc.folio&&DB[ARCH.oc].data.ordenes.some(o=>String(o.folio)===oc.folio))
-    e.push(`La orden de compra ${oc.folio} ya está cargada en el sistema.`);
+  const ya=oc.folio&&DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===oc.folio);
+  if(ya&&ya.archivo)e.push(`La orden de compra ${oc.folio} ya está cargada en el sistema con su documento.`);
   return e;
+}
+function ocSinDocumento(folio){
+  const o=folio&&DB[ARCH.oc].data.ordenes.find(x=>String(x.folio)===String(folio));
+  return o&&!o.archivo?o:null;
+}
+function diferenciasDocOC(oc,items){
+  const k=i=>String(i.codigo_sap||i.producto).trim()+'|'+(+i.precio||+i.precio_unitario||0);
+  const sis=new Map();
+  (oc.items||[]).forEach(i=>sis.set(k(i),(sis.get(k(i))||0)+(+i.cantidad||0)));
+  const doc=new Map();
+  items.forEach(i=>doc.set(k(i),{cant:(doc.get(k(i))?.cant||0)+(+i.cantidad||0),prod:i.producto}));
+  const d=[];
+  doc.forEach((v,key)=>{
+    if(!sis.has(key))d.push(`El documento trae ${v.prod} (${num(v.cant)} a ${clp(+key.split('|')[1])}), que la OC del sistema no tiene.`);
+    else if(sis.get(key)!==v.cant)d.push(`${v.prod}: el documento dice ${num(v.cant)} y la OC del sistema ${num(sis.get(key))}.`);
+  });
+  (oc.items||[]).forEach(i=>{if(!doc.has(k(i)))d.push(`La OC del sistema tiene ${i.producto} (${num(i.cantidad)}), que el documento no trae.`)});
+  return d;
 }
 function consolidarOC(items){
   const m=new Map();
@@ -2529,11 +2547,14 @@ async function leerOCpdf(){
     if(!lineas.length){velo(false);toast('El PDF no tiene texto legible: es una imagen escaneada. Súbelo a la cola para que lo procese el administrador.');return}
     const oc=parseOC(lineas);
     oc.items=consolidarOC(oc.items);
+    const existe=ocSinDocumento(oc.folio);
     ocLeida={...oc,archivo:f,hash:h,previo:previo||null,
              errores:validarOC(oc),resueltos:resolverItems(oc.items),
-             fecha_carga:hoyISO(),fecha_entrega:fechaCompromiso()};
+             fecha_carga:hoyISO(),fecha_entrega:fechaCompromiso(),
+             existente:!!existe,diferencias:existe?diferenciasDocOC(existe,oc.items):[]};
     render();
-    toast(ocLeida.errores.length?'Leído con observaciones: revísalas antes de guardar.':'PDF leído. Revisa y confirma.');
+    toast(ocLeida.existente?`La OC ${oc.folio} ya está en el sistema: se adjuntará su documento.`
+      :ocLeida.errores.length?'Leído con observaciones: revísalas antes de guardar.':'PDF leído. Revisa y confirma.');
   }catch(e){toast('No se pudo leer el PDF: '+e.message)}
   velo(false);
 }
@@ -2611,8 +2632,50 @@ async function guardarOCLeida(){
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
+async function adjuntarDocOC(){
+  const o=ocLeida;
+  if(!o||!o.existente)return;
+  const oc=ocSinDocumento(o.folio);
+  if(!oc){toast(`La OC ${o.folio} ya tiene su documento.`);ocLeida=null;render();return}
+  velo(true,'Adjuntando el documento…');
+  try{
+    const ruta=await subirDocumento('ordenes_compra',o.archivo,`OC_${o.folio}.pdf`);
+    oc.archivo=ruta;
+    const A=DB[ARCH.arch].data.archivos, reg=A.find(a=>a.hash===o.hash);
+    if(reg){reg.estado='procesado';reg.ruta=ruta;reg.referencia='OC '+o.folio}
+    else A.push({hash:o.hash,nombre:o.archivo.name,tipo:'ordenes_compra',ruta,estado:'procesado',
+      fecha:hoyISO(),referencia:'OC '+o.folio});
+    await guardarArchivo(ARCH.oc,`OC ${o.folio}: documento adjuntado`);
+    await guardarArchivo(ARCH.arch,`Registro de archivos: OC ${o.folio}`);
+    ocLeida=null;
+    toast(`Documento adjuntado a la OC ${o.folio}`);
+    render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+function panelOCExistente(o){
+  const dif=o.diferencias||[];
+  return `<div class="card" style="border-color:${dif.length?'var(--ambar)':'var(--verde)'};border-width:2px">
+    <div class="top" style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <span class="folio mono">OC ${esc(o.folio)}</span>
+      <span class="chip ${dif.length?'ambar':'verde'}">${dif.length?'el documento no coincide del todo':'coincide con la OC del sistema'}</span>
+      <span class="muted small">esta OC ya existe sin documento · solo se adjunta el archivo</span>
+    </div>
+    <p class="small">La orden de compra ya está en el sistema, así que no se crea otra. Se guarda el PDF en ella y no se modifica nada de su contenido.</p>
+    ${dif.length?`<div class="card" style="border-color:var(--ambar);margin-top:10px">
+      <b>Diferencias entre el documento y la OC del sistema</b>
+      <ul style="margin:8px 0 0 18px">${dif.map(d=>`<li class="small">${esc(d)}</li>`).join('')}</ul>
+      <p class="small muted" style="margin-top:8px">Adjuntar no corrige nada: si la OC del sistema está mal, usa Modificar en su ficha.</p>
+    </div>`:''}
+    <div class="acciones">
+      <button class="btn" onclick="adjuntarDocOC()">Adjuntar el documento a la OC ${esc(o.folio)}</button>
+      <button class="btn sec" onclick="descartarOCLeida()">Descartar</button>
+    </div>
+  </div>`;
+}
 function panelOCLeida(){
   const o=ocLeida;if(!o)return '';
+  if(o.existente)return panelOCExistente(o);
   const err=o.errores;
   const filas=o.resueltos.map(r=>{
     const et=r.estado==='existente'?`<span class="chip verde">${esc(r.codigo)}</span>`
@@ -3193,7 +3256,7 @@ function rOC(){
         <span class="chip ${ESTADO_COLOR[e]}">${ESTADO_LBL[e]}</span>
         ${e!=='despachada'&&s.c!=='gris'?`<span class="chip ${s.c}" title="Plazo de entrega">${s.txt}</span>`:''}
         ${chipCompra(o)}
-        ${o.sin_documento?'<span class="chip ambar" title="Esta OC la conocemos por el reporte del cliente; su documento aún no se ha cargado">sin documento</span>':''}
+        ${o.sin_documento||!o.archivo?'<span class="chip ambar" title="Todavía no tiene su documento. Si llega, se adjunta a esta misma OC, sin crear otra.">sin documento</span>':''}
         <span class="muted small">Emisión ${fFecha(o.fecha_emision)}${o.fecha_carga&&o.fecha_carga!==o.fecha_emision?` · <span title="Día en que se cargó al sistema">cargada ${fFecha(o.fecha_carga)}</span>`:''}${o.fecha_entrega?` · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b>`:''} · ${esc(o.destino||'—')}</span>
         <span class="resumen">${o.items.length} ítem(s) · ${num(pendD)} por despachar</span>
       </summary>
@@ -3208,7 +3271,8 @@ function rOC(){
         ${ocComp(o)<ocTot(o)?`<button class="btn mini sec" onclick="toggleCompra('${encodeURIComponent(o.folio)}')">Registrar compra</button>`:''}
         ${e!=='despachada'?`<button class="btn mini" onclick="irASubir('guias')" title="Sube la guía de despacho de esta OC"><i class="fa-solid fa-cloud-arrow-up"></i> Despachar</button>`:''}
         ${o.sin_documento?`<button class="btn mini sec" onclick="irASubirOC()" title="Sube el documento de esta OC para poder editarla y darla de baja"><i class="fa-solid fa-cloud-arrow-up"></i> Subir su documento</button>`
-          :`<button class="btn mini sec" onclick="editOC('${encodeURIComponent(o.folio)}')"><i class="fa-solid fa-pen"></i> Modificar</button>
+          :`${!o.archivo?`<button class="btn mini sec" onclick="irASubirOC()" title="Adjunta el PDF de esta OC sin crear otra"><i class="fa-solid fa-cloud-arrow-up"></i> Subir su documento</button>`:''}
+        <button class="btn mini sec" onclick="editOC('${encodeURIComponent(o.folio)}')"><i class="fa-solid fa-pen"></i> Modificar</button>
         <button class="btn mini peligro" onclick="borrarOC('${encodeURIComponent(o.folio)}')">Dar de baja</button>`}
       </div>
       <div id="fc-${encodeURIComponent(o.folio)}"></div>
@@ -3862,7 +3926,14 @@ function irASubir(t){
     const d=ds.find(x=>x.querySelector('.dropzone'))||ds[0];
     if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'center'})}},60);
 }
-function irASubirOC(){irASubir('oc')}
+function irASubirOC(){
+  tab='oc';
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='oc'));
+  render();
+  setTimeout(()=>{
+    const d=[...document.querySelectorAll('#vista details.form')].find(x=>x.querySelector('#oc-pdf'));
+    if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'center'})}},60);
+}
 function filaEdit(i,ix){
   return `<tr data-ix="${ix}">
     <td><input class="ed-prod" list="dl-prod" value="${esc(i.producto||'')}"></td>
