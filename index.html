@@ -3352,7 +3352,11 @@ async function borrarGuia(numero){
       hoja.archivo=null;
     }
     arr.splice(arr.indexOf(g),1);
+    const huellas=(DB[ARCH.arch].data.archivos||[]).filter(a=>a.tipo==='guias_despacho'&&a.estado==='procesado'
+      &&((g.archivo&&a.ruta===g.archivo)||String(a.referencia)===String(numero)));
+    huellas.forEach(a=>{a.estado='descartado';a.referencia=`Guía N°${numero} eliminada el ${hoyISO()}`});
     await guardarArchivo(ARCH.guias,`Guía N°${numero} eliminada`);
+    if(huellas.length)await guardarArchivo(ARCH.arch,`Registro de archivos: guía N°${numero} eliminada, su PDF se puede volver a subir`);
     if(o)await guardarArchivo(ARCH.oc,`OC ${g.folio_oc}: reverso de guía N°${numero}`);
     await guardarArchivo(ARCH.inv,`Inventario: reverso de guía N°${numero}`);
     if(hoja)await guardarArchivo(ARCH.hr,`${hrLbl(hrTipo(hoja))} N°${hoja.numero}: quitada la guía N°${numero}, pendiente de regenerar`);
@@ -4182,21 +4186,27 @@ function hgLineasDePagina(items){
        sigue muy por debajo de la separación entre filas de la tabla (16 a 20 puntos). */
     let k=[...filas.keys()].find(v=>Math.abs(v-y)<=Math.max(2,alto*0.8));
     if(k==null){k=y;filas.set(k,[])}
-    filas.get(k).push({x,t,ancho,alto});
+    filas.get(k).push({x,y:it.transform[5],t,ancho,alto});
   });
   return [...filas.entries()].sort((a,b)=>b[0]-a[0]).map(([y,fs])=>{
     /* Dentro de la fila se lee de izquierda a derecha, PERO lo que está apilado en una misma
        celda se lee de arriba abajo. Sin esto "13" (x=342) quedaba después de "UN" (x=340) y la
        cantidad salía como "UN 13". */
-    fs.sort((a,b)=>Math.abs(a.x-b.x)<=Math.max(3,a.alto*0.5)?b.y-a.y:a.x-b.x);
+    fs.sort((a,b)=>a.x-b.x);
+    const apilados=(a,b)=>a.x<b.x+b.ancho&&b.x<a.x+a.ancho&&Math.abs(a.y-b.y)>Math.min(a.alto,b.alto)*0.3;
+    for(let n=0,cambio=true;cambio&&n<fs.length;n++){
+      cambio=false;
+      for(let i=0;i+1<fs.length;i++)
+        if(apilados(fs[i],fs[i+1])&&fs[i+1].y>fs[i].y){[fs[i],fs[i+1]]=[fs[i+1],fs[i]];cambio=true}
+    }
     /* Un hueco grande entre fragmentos es un CAMBIO DE COLUMNA y se marca con dos
        espacios; uno chico es apenas la separación entre palabras. El umbral va contra
        el tamaño de letra, no contra un número fijo: un espacio mide ~0,3 del alto y un
        salto de columna es varias veces eso. */
-    let s='',px=null,ph=8;
+    let s='',px=null,ph=8,prev=null;
     fs.forEach(f=>{
-      if(px!==null){const hueco=f.x-px; s+=hueco>ph*0.6?'  ':(hueco>ph*0.12?' ':'')}
-      s+=f.t; px=f.x+f.ancho; ph=f.alto;
+      if(px!==null){const hueco=f.x-px; s+=hueco>ph*0.6?'  ':(hueco>ph*0.12||apilados(prev,f)?' ':'')}
+      s+=f.t; px=f.x+f.ancho; ph=f.alto; prev=f;
     });
     return {y,texto:s.replace(/\s+$/,'')};
   });
