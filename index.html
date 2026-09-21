@@ -4349,8 +4349,6 @@ function hgParsearGuia(lineas){
     if(Math.abs(it.cantidad*it.precio_unitario-it.total)>1)
       g.avisos.push(`${it.nombre_guia}: cantidad x precio no da el total de la línea`);
   });
-  const suma=g.items.reduce((s,i)=>s+i.total,0);
-  if(g.neto&&Math.abs(suma-g.neto)>1)g.avisos.push(`La suma de las líneas (${suma}) no cuadra con el neto (${g.neto})`);
   if(g.neto&&g.iva&&Math.abs(Math.round(g.neto*0.19)-g.iva)>2)g.avisos.push('El IVA no es el 19% del neto');
   return g;
 }
@@ -4458,6 +4456,11 @@ async function leerGuiaPDF(inp){
 }
 function cancelarGuiaLeida(){_gLeida=null;render()}
 function glSet(i,campo,v){if(_gLeida)_gLeida.g.items[i][campo]=v}
+function guiaDescuadre(g){
+  if(!g.neto)return 0;
+  const suma=g.items.reduce((s,i)=>s+(+i.cantidad||0)*(+i.precio_unitario||0),0);
+  return Math.abs(suma-g.neto)>1?g.neto-suma:0;
+}
 function glCab(campo,v){if(_gLeida)_gLeida.g[campo]=v}
 /* Panel de revisión. Jefe pidió revisar SIEMPRE antes de guardar: una cantidad mal
    leída entra al inventario y a la OC, y desandarlo cuesta más que mirarlo. */
@@ -4478,6 +4481,10 @@ function panelGuiaLeida(){
     <p class="small muted">Lo que confirmes descuenta inventario y suma al despachado de la OC. La fecha de envío no se pide: la toma cuando la asignes a una Hoja de Ruta o a un Resumen de Retiros.
       ${doc?`Los productos se emparejaron contra la <b>${esc(fuente)}</b> ${esc(g.oc||'')}.`:''}</p>
     ${g.avisos.length?`<div class="chip ambar" style="display:block;white-space:normal;margin:8px 0">${g.avisos.map(esc).join(' · ')}</div>`:''}
+    ${(()=>{const d=guiaDescuadre(g);return d?`<div class="card" style="border-color:var(--rojo);margin:8px 0">
+      <b style="color:var(--rojo)">Esta guía no se puede guardar: las líneas no suman el neto</b>
+      <p class="small" style="margin-top:6px">Las líneas leídas suman ${clp(g.neto-d)} y el neto del documento es ${clp(g.neto)}: ${d>0?`faltan ${clp(d)}`:`sobran ${clp(-d)}`}. El lector no tomó bien alguna línea del documento. Si corregiste una cantidad a mano, revísala; si no, súbela a la cola de guías para que la procese el administrador.</p>
+    </div>`:''})()}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
       <div><label>N° Guía</label><input value="${esc(g.numero||'')}" onchange="glCab('numero',this.value)"></div>
       <div><label>Fecha</label><input type="date" value="${esc(g.fecha||'')}" onchange="glCab('fecha',this.value)"></div>
@@ -4505,6 +4512,8 @@ async function guardarGuiaLeida(){
   const g=_gLeida.g, oc=_gLeida.oc, file=_gLeida.file, hash=_gLeida.hash;
   if(!g.numero||!/^\d{4}-\d{2}-\d{2}$/.test(g.fecha||'')){toast('Faltan el número o la fecha de la guía.');return}
   if(!g.destino){toast('Elige el destino: sin bodega la guía no puede entrar a un documento.');return}
+  const desc=guiaDescuadre(g);
+  if(desc){toast(`La guía no cuadra con su neto (${desc>0?'faltan':'sobran'} ${clp(Math.abs(desc))}): no se puede guardar.`);render();return}
   const sin=g.items.filter(i=>!i.codigo);
   if(sin.length){toast(`Falta asignar ${sin.length} línea(s) a un producto del sistema.`);return}
   if(!await confirmar({titulo:`Guardar la guía N°${g.numero}`,
