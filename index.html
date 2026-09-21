@@ -3544,13 +3544,14 @@ function tarjetaGuia(g){
         <button class="btn mini sec" style="margin-left:6px" onclick="anularRectificacion('${esc(g.numero)}',${ri})" title="Deshacer esta rectificación y dejar la guía como estaba"><i class="fa-solid fa-arrow-rotate-left"></i> Anular</button></div>`).join('')}
     </div>`:''}
     <div class="acciones" style="margin-top:10px">
-      ${g.conforme?'':`<button class="btn mini" onclick="conformarGuia('${esc(g.numero)}')" title="El despacho salió tal como dice la guía"><i class="fa-solid fa-check"></i> Guía conforme</button>`}
-      <button class="btn mini sec" onclick="rectificarGuia('${esc(g.numero)}')" title="Hubo productos que no se pudieron despachar"><i class="fa-solid fa-rotate-left"></i> Rectificar${g.conforme?'':' guía'}</button>
+      ${!hojaDeGuia(g)?'':`${g.conforme?'':`<button class="btn mini" onclick="conformarGuia('${esc(g.numero)}')" title="El despacho salió tal como dice la guía"><i class="fa-solid fa-check"></i> Guía conforme</button>`}
+      <button class="btn mini sec" onclick="rectificarGuia('${esc(g.numero)}')" title="Hubo productos que no se pudieron despachar"><i class="fa-solid fa-rotate-left"></i> Rectificar${g.conforme?'':' guía'}</button>`}
       <button class="btn mini sec" onclick="moverGuia('${esc(g.numero)}')" title="Cambiar esta guía de viaje (hoja de ruta)"><i class="fa-solid fa-arrows-turn-to-dots"></i> Mover de hoja</button>
       ${/* Descargar el PDF original de Facto, igual que en las OC (Jefe, 20-08-2026).
            Se baja con el nombre Guia_N.pdf, no con el nombre largo del DTE. */''}
       ${g.archivo?`<button class="btn mini sec" onclick="descargarArchivo('${esc(g.archivo)}','Guia_${esc(g.numero)}.pdf')" title="Descargar el PDF de la guía N°${esc(g.numero)}"><i class="fa-solid fa-download"></i> Descargar guía</button>`:''}
     </div>
+    ${hojaDeGuia(g)?'':`<p class="small muted" style="margin-top:6px">Para confirmarla o rectificarla, primero asígnala a una Hoja de Ruta o a un Resumen de Retiros.</p>`}
     <div id="mv-${esc(g.numero)}"></div>
     <div id="rg-${esc(g.numero)}"></div>
   </div></div>`;
@@ -3663,9 +3664,11 @@ async function guardarMoverGuia(numero){
        volver a comprarla.
      · "se perdió o se rompió" → la mercadería ya no existe: el stock NO vuelve y además se
        descuenta de lo comprado, para que el Panel la muestre otra vez como POR COMPRAR. */
+const GUIA_SIN_HOJA='Primero asigna la guía a una Hoja de Ruta o a un Resumen de Retiros.';
 async function conformarGuia(numero){
   const g=DB[ARCH.guias].data.guias.find(x=>String(x.numero)===String(numero));
   if(!g)return;
+  if(!hojaDeGuia(g)){toast(GUIA_SIN_HOJA);return}
   g.conforme=true;g.fecha_conforme=hoyISO();
   velo(true,'Confirmando…');
   try{await guardarArchivo(ARCH.guias,`Guía N°${numero} conforme`);toast(`Guía N°${numero} conforme`);render()}
@@ -3675,6 +3678,7 @@ async function conformarGuia(numero){
 function rectificarGuia(numero){
   const g=DB[ARCH.guias].data.guias.find(x=>String(x.numero)===String(numero));
   if(!g)return;
+  if(!hojaDeGuia(g)){toast(GUIA_SIN_HOJA);return}
   const box=document.getElementById('rg-'+numero);
   if(box.innerHTML){box.innerHTML='';return}
   box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:10px">
@@ -3699,6 +3703,7 @@ function rectificarGuia(numero){
 async function guardarRectificacion(numero){
   const g=DB[ARCH.guias].data.guias.find(x=>String(x.numero)===String(numero));
   if(!g)return;
+  if(!hojaDeGuia(g)){toast(GUIA_SIN_HOJA);return}
   const folio=g.oc||g.folio_oc;
   const o=DB[ARCH.oc].data.ordenes.find(x=>String(x.folio)===String(folio));
   const box=document.getElementById('rg-'+numero);
