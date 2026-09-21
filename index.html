@@ -1300,13 +1300,7 @@ async function generarPlanilla(){
 
 /* ══════════════════ EMISIÓN DE COTIZACIONES ══════════════════
    La app pasa a emitir cotizaciones, hasta hoy hechas en Facto. Una cotización NO es un DTE
-   (sin timbre SII ni folio tributario), así que podemos emitirla nosotros.
-
-   MODO PRUEBA (Jefe, 04-08-2026): mientras se prueba, Facto sigue emitiendo en paralelo. Por
-   eso las de la app llevan folio "P31", "P32"… con correlativo propio: no chocan con la serie
-   real y se reconocen de un vistazo. Al archivarlas se cierran Y se sueltan sus adjudicaciones,
-   devolviendo las líneas de OC a "sin adjudicar" para asignarlas a la cotización de Facto
-   correcta. Sin ese paso, una prueba dejaría consumido un saldo que no consumió de verdad. */
+   (sin timbre SII ni folio tributario), así que podemos emitirla nosotros. */
 const COT_PDF_CDN='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
 let _jspdfProm=null;
 function cargarJsPDF(){
@@ -1427,12 +1421,11 @@ async function sincronizarFolioCot(folio,motivo){
   await guardarArchivo(ARCH.conf,`Próxima cotización: ${siguiente}${motivo?' ('+motivo+')':''}`);
   return true;
 }
-function nuevaCotizacion(prueba){
+function nuevaCotizacion(){
   const cl=clientes()[0]||{};
   const bod=bodegasDe(cl)[0]||'';
   _cotN={cliente:cl.nombre||'',contacto_nombre:'',contacto_email:'',contacto_fono:'',
          validez:'7 DIAS',bodegaDefecto:bod,observaciones:'',obsDespacho:'',obsEditada:false,
-         prueba:!!prueba,
          items:[{producto:'',codigo:'',descripcion:'',cantidad:1,unidad:'UN',precio:'',bodega:bod}]};
   cnTextoDespacho();
   render();
@@ -1483,8 +1476,7 @@ function panelCotizacion(){
   const cl=clientePorNombre(_cotN.cliente)||{};
   const cont=(cl.contactos||[]).find(x=>x.nombre===_cotN.contacto_nombre);
   const conf=DB[ARCH.conf].data;
-  const esPrueba=!!_cotN.prueba;
-  const folio=esPrueba?('P'+(conf.proxima_cotizacion_prueba||31)):String(folioCotSiguiente());
+  const folio=String(folioCotSiguiente());
   /* Alfabético: el maestro está ordenado por código NOV, que al buscar un producto no
      significa nada. El desplegable filtra mientras se escribe, pero el orden importa cuando
      se abre entero. */
@@ -1496,10 +1488,8 @@ function panelCotizacion(){
   };
   const neto=_cotN.items.reduce((s,i)=>s+(+i.cantidad||0)*(+i.precio||0),0);
   return `<div id="cn-panel" class="form" style="border:2px solid var(--ambar);border-radius:10px;padding:14px;margin:12px 0">
-    <b style="font-size:15px">Nueva cotización <span class="chip ${esPrueba?'ambar':'ink'}">${esPrueba?'PRUEBA · ':''}${esc(folio)}</span></b>
-    <p class="small muted">${esPrueba
-      ?'Folio de prueba, con correlativo aparte: no toca la serie de Facto. Las cotizaciones de prueba NO participan del match: nunca se adjudica una OC contra ellas.'
-      :'Folio de la serie real, la misma de Facto. Participa del match con las órdenes de compra. Como Facto sigue emitiendo en paralelo, el número se toma al emitir y se comprueba que esté libre.'}</p>
+    <b style="font-size:15px">Nueva cotización <span class="chip ink">${esc(folio)}</span></b>
+    <p class="small muted">Folio de la serie real, la misma de Facto. Participa del match con las órdenes de compra. Como Facto sigue emitiendo en paralelo, el número se toma al emitir y se comprueba que esté libre.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">
       <div><label>Cliente</label><select onchange="cnSet('cliente',this.value)">
         ${clientes().map(c=>`<option value="${esc(c.nombre)}"${_cotN.cliente===c.nombre?' selected':''}>${esc(c.corto)}${c.rut==='PENDIENTE'?' (datos pendientes)':''}</option>`).join('')}
@@ -1569,11 +1559,9 @@ async function emitirCotizacion(){
     texto:`${sinCod.length} línea(s) no calzan con ningún producto del maestro: ${sinCod.map(i=>i.producto).join(', ')}.\nSe cotizarán igual, pero al llegar la OC no van a emparejar solas.`,
     confirmar:'Cotizar igual'}))return;
   const conf=DB[ARCH.conf].data;
-  const esPrueba=!!_cotN.prueba;
-  const n=+conf.proxima_cotizacion_prueba||31;
-  const folio=esPrueba?('P'+n):String(folioCotSiguiente());
+  const folio=String(folioCotSiguiente());
   // Se comprueba de nuevo aquí: entre abrir el panel y emitir pudo cargarse una de Facto.
-  if(!esPrueba&&folioCotOcupado(folio)){
+  if(folioCotOcupado(folio)){
     toast(`El folio ${folio} ya está ocupado. Vuelve a abrir el panel para tomar el siguiente.`);return;
   }
   velo(true,'Generando la cotización…');
@@ -1594,10 +1582,10 @@ async function emitirCotizacion(){
     const {doc,neto,iva,total}=cotizacionPDF(jsPDF,datos,await logoCotizacion());
     const blob=doc.output('blob');
     const nombre=`COT_${folio}.pdf`, ruta='documentos/cotizaciones/'+nombre;
-    await subirBinario(ruta,blob,`Cotización ${folio} emitida desde la app${esPrueba?' (prueba)':''}`);
+    await subirBinario(ruta,blob,`Cotización ${folio} emitida desde la app`);
     DB[ARCH.cot].data.cotizaciones.push({
       id:'COT-APP-'+folio,folio,fecha:hoyISO(),cliente:cl.nombre,estado:'abierta',
-      ...(esPrueba?{prueba:true}:{}),origen:'app',neto,iva,total,archivo:ruta,
+      origen:'app',neto,iva,total,archivo:ruta,
       contacto_nombre:_cotN.contacto_nombre||null,
       contacto_email:_cotN.contacto_email,contacto_fono:_cotN.contacto_fono,
       validez:_cotN.validez,observaciones:datos.observaciones,
@@ -1606,17 +1594,14 @@ async function emitirCotizacion(){
       items:items.map(i=>({producto:i.producto,codigo:i.codigo||null,
         nombre_cliente:i.descripcion||null,bodega:i.bodega||null,
         cantidad:+i.cantidad,unidad:i.unidad||'UN',precio_unitario:+i.precio})),
-      notas:esPrueba?'Emitida desde la app en modo PRUEBA. Al archivar las pruebas se cierra y suelta sus adjudicaciones.'
-                    :'Emitida desde la app en la serie real, la misma de Facto.'});
+      notas:'Emitida desde la app en la serie real, la misma de Facto.'});
     const H=DB[ARCH.hprec].data;
     items.forEach(i=>{if(i.codigo)H.cotizaciones.push({codigo:i.codigo,codigo_sap:null,
       producto:i.producto,fecha:hoyISO(),folio,precio:+i.precio,origen:'cotizacion',folio_oc:folio})});
     H.actualizado=hoyISO();
     await guardarArchivo(ARCH.hprec,`Precios ofertados de la cotización ${folio}`);
-    if(esPrueba){conf.proxima_cotizacion_prueba=n+1;
-      await guardarArchivo(ARCH.conf,`Próxima cotización de prueba: P${n+1}`);}
-    else await sincronizarFolioCot(folio,'emitida desde la app');
-    await guardarArchivo(ARCH.cot,`Cotización ${folio} emitida desde la app (prueba)`);
+    await sincronizarFolioCot(folio,'emitida desde la app');
+    await guardarArchivo(ARCH.cot,`Cotización ${folio} emitida desde la app`);
     _cotN=null;
     bajarBlob(blob,nombre);                       // bajarBlob cierra el velo
     toast(`Cotización ${folio} generada por ${clp(total)}. Descargada y guardada.`);
@@ -1683,43 +1668,11 @@ async function compartirCotizacion(id){
     toast('No se pudo compartir: '+(e.message||e.name)+'. Usa el botón de correo y adjunta el PDF.');
   }
 }
-/* Archivar las pruebas: cierra las cotizaciones de prueba Y SUELTA sus adjudicaciones, para
-   que las líneas de OC vuelvan a quedar libres y se adjudiquen a la cotización real. */
-async function archivarPruebas(){
-  const C=DB[ARCH.cot].data.cotizaciones.filter(c=>c.prueba&&c.estado!=='cerrada');
-  if(!C.length){toast('No hay cotizaciones de prueba abiertas.');return}
-  const ids=new Set(C.map(c=>c.id));
-  const A=DB[ARCH.adj].data;
-  const sueltas=A.registros.filter(r=>ids.has(r.cot));
-  if(!await confirmar({titulo:'Archivar las cotizaciones de prueba',
-    texto:`Se cerrarán ${C.length} cotización(es) de prueba.${sueltas.length?`\nAdemás se soltarán ${sueltas.length} adjudicación(es) antiguas hechas contra ellas, de antes de que las pruebas quedaran fuera del match.`:''}\nEl correlativo de prueba vuelve a P31.`,
-    confirmar:'Archivar'}))return;
-  velo(true,'Archivando…');
-  try{
-    A.registros=A.registros.filter(r=>!ids.has(r.cot));
-    C.forEach(c=>{c.estado='cerrada';
-      c.notas=(c.notas?c.notas+' ':'')+`Archivada el ${hoyISO()} al cerrar las pruebas.`});
-    DB[ARCH.conf].data.proxima_cotizacion_prueba=31;
-    if(sueltas.length)await guardarArchivo(ARCH.adj,'Sueltas las adjudicaciones de las cotizaciones de prueba');
-    await guardarArchivo(ARCH.conf,'Correlativo de prueba reiniciado en P31');
-    await guardarArchivo(ARCH.cot,`Archivadas ${C.length} cotización(es) de prueba`);
-    toast(`${C.length} prueba(s) archivadas${sueltas.length?`, ${sueltas.length} línea(s) de OC liberadas`:''}.`);
-    render();
-  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
-  velo(false);
-}
 function formCotizacion(){
-  const pruebas=DB[ARCH.cot].data.cotizaciones.filter(c=>c.prueba&&c.estado!=='cerrada').length;
   return `<div style="margin:10px 0">
     <button class="btn" onclick="nuevaCotizacion()"><i class="fa-solid fa-file-circle-plus"></i> Nueva cotización</button>
     <button class="btn sec" title="Sube la planilla del cliente, pon los precios y te la devuelvo completada" onclick="document.getElementById('pl-file').click()"><i class="fa-solid fa-file-excel"></i> Cotizar planilla del cliente</button>
     <input type="file" id="pl-file" accept=".xlsx,.xlsm" style="display:none" onchange="cargarPlanilla(this)">
-    ${pruebas?`<button class="btn sec" onclick="archivarPruebas()" title="Cierra las pruebas y suelta sus adjudicaciones"><i class="fa-solid fa-box-archive"></i> Archivar ${pruebas} prueba(s)</button>`:''}
-    ${/* El modo prueba se conserva por si hay que ensayar algo, pero fuera del camino: la serie P
-         no toca la de Facto y esas cotizaciones no participan del match (Jefe, 23-08-2026). */''}
-    <button class="btn mini sec" style="opacity:.65;margin-left:4px" onclick="nuevaCotizacion(true)"
-      title="Emite con la serie P, aparte de la de Facto. No participa del match con las OC.">
-      <i class="fa-solid fa-flask"></i> modo prueba</button>
   </div>${panelCotizacion()}${panelPlanilla()}`;
 }
 
