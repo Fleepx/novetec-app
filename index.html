@@ -3455,8 +3455,10 @@ function rGuias(){
     const numsReales=Object.keys(porHoja).filter(k=>k!=='__sin__').sort((a,b)=>numReal(b)-numReal(a));
     const ordBod=g=>{const i=bodegasOrden().indexOf(normBodega(g.destino||''));return i<0?99:i};
     const bloqueHoja=(k,sin)=>{
-      const lista=[...porHoja[k]].sort((a,b)=>ordBod(a)-ordBod(b)||String(a.numero).localeCompare(String(b.numero),'es',{numeric:true}));
       const hoja=sin?null:hojas.find(x=>hrClave(x)===k);
+      const fechaDe=g=>String((hoja&&(hoja.fecha_envio||hoja.fecha))||g.fecha||'');
+      const lista=[...porHoja[k]].sort((a,b)=>fechaDe(b).localeCompare(fechaDe(a))||ordBod(a)-ordBod(b)
+        ||String(b.numero).localeCompare(String(a.numero),'es',{numeric:true}));
       const tp=hoja?hrTipo(hoja):'ruta', num=hoja?String(hoja.numero):String(k).split(':')[1];
       const dests=[...new Set(lista.map(g=>normBodega(g.destino||'Sin destino')))]
         .sort((a,b)=>bodegasOrden().indexOf(a)-bodegasOrden().indexOf(b));
