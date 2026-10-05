@@ -567,13 +567,16 @@ function resolverProducto(nombre){
 /* Estado y semaforo de OC */
 function ocTot(oc){return oc.items.reduce((s,i)=>s+(+i.cantidad||0),0)}
 function ocDesp(oc){return oc.items.reduce((s,i)=>s+(+i.cantidad_despachada||0),0)}
-function ocEstado(oc){const t=ocTot(oc),d=ocDesp(oc);return d<=0?'pendiente':(d<t?'parcial':'despachada')}
+function ocEstado(oc){if(oc.baja)return 'baja';const t=ocTot(oc),d=ocDesp(oc);return d<=0?'pendiente':(d<t?'parcial':'despachada')}
+function ocsActivas(){return DB[ARCH.oc].data.ordenes.filter(o=>!o.baja)}
+function avisoBaja(o){const m=String(o.baja.motivo||'no registrado').trim().replace(/[.\s]+$/,'');return `La OC ${o.folio} fue dada de baja el ${fFecha(o.baja.fecha)}. Motivo: ${m}.`}
 function ocComp(oc){return oc.items.reduce((s,i)=>s+(+i.cantidad_comprada||0),0)}
 function chipCompra(oc){const t=ocTot(oc),c=ocComp(oc);
   if(c<=0)return '<span class="chip rojo">Compra pendiente</span>';
   if(c<t)return `<span class="chip ambar">Compra parcial ${num(c)}/${num(t)}</span>`;
   return '<span class="chip ink">Comprada</span>'}
 function semaforo(oc){
+  if(oc.baja)return {c:'gris',txt:'dada de baja'};
   if(ocEstado(oc)==='despachada')return {c:'gris',txt:'despachada'};
   const dd=dias(oc.fecha_entrega);
   const s=DB[ARCH.conf].data.semaforo||{rojo_dias:5,amarillo_dias:10};
@@ -586,8 +589,8 @@ function semaforo(oc){
 /* Los TRES estados de una OC (Jefe, 24-07-2026), con su color:
    pendiente = gris · parcial = ámbar · despachada = verde.
    El color se aplica al chip Y a la pestaña lateral de la tarjeta. */
-const ESTADO_LBL={pendiente:'Pendiente',parcial:'Parcial',despachada:'Despachada'};
-const ESTADO_COLOR={pendiente:'gris',parcial:'ambar',despachada:'verde'};
+const ESTADO_LBL={pendiente:'Pendiente',parcial:'Parcial',despachada:'Despachada',baja:'Dada de baja'};
+const ESTADO_COLOR={pendiente:'gris',parcial:'ambar',despachada:'verde',baja:'rojo'};
 /* Una HOJA DE RUTA usa los mismos tres estados y colores, medidos sobre la conformidad de sus
    guías (Jefe, 24-07-2026): ninguna confirmada = por despachar (gris), algunas = parcial
    (ámbar), todas = conforme (verde). */
@@ -1783,7 +1786,7 @@ function lineasConfirmadas(){
   const ocs=DB[ARCH.oc].data.ordenes;
   const folios=new Set(ocs.map(o=>String(o.folio)));
   const lineas=[];
-  ocs.filter(o=>ocEstado(o)!=='despachada').forEach(o=>{const s=semaforo(o);
+  ocsActivas().filter(o=>ocEstado(o)!=='despachada').forEach(o=>{const s=semaforo(o);
     o.items.forEach(i=>{
       const total=+i.cantidad||0;
       const pendiente=Math.max(total-(+i.cantidad_despachada||0),0);
@@ -1841,7 +1844,7 @@ function sortPanel(campo){if(panelSort.campo===campo)panelSort.dir*=-1;else pane
    El código se conserva completo aquí. Para REACTIVARLO basta con agregar `${semStripHTML()}`
    al inicio del template que retorna rPanel(). */
 function semStripHTML(){
-  const act=DB[ARCH.oc].data.ordenes.filter(o=>ocEstado(o)!=='despachada');
+  const act=ocsActivas().filter(o=>ocEstado(o)!=='despachada');
   const g={vencida:[],rojo:[],ambar:[],verde:[],gris:[]};
   act.forEach(o=>g[semaforo(o).c].push(o));
   return `
@@ -2416,12 +2419,13 @@ function validarOC(oc){
   if(oc.total_documento!=null&&Math.abs(suma-oc.total_documento)>0.5)
     e.push(`La suma de las líneas (${clp(suma)}) no coincide con el total del documento (${clp(oc.total_documento)}).`);
   const ya=oc.folio&&DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===oc.folio);
-  if(ya&&ya.archivo)e.push(`La orden de compra ${oc.folio} ya está cargada en el sistema con su documento.`);
+  if(ya&&ya.baja)e.push(avisoBaja(ya)+' No se vuelve a ingresar.');
+  else if(ya&&ya.archivo)e.push(`La orden de compra ${oc.folio} ya está cargada en el sistema con su documento.`);
   return e;
 }
 function ocSinDocumento(folio){
   const o=folio&&DB[ARCH.oc].data.ordenes.find(x=>String(x.folio)===String(folio));
-  return o&&!o.archivo?o:null;
+  return o&&!o.archivo&&!o.baja?o:null;
 }
 function diferenciasDocOC(oc,items){
   const k=i=>String(i.codigo_sap||i.producto).trim()+'|'+(+i.precio||+i.precio_unitario||0);
@@ -3182,7 +3186,7 @@ function rOC(){
     <table class="tprod" style="min-width:820px"><colgroup><col style="width:10ch"><col style="width:12ch"><col><col style="width:8ch"><col style="width:12ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"></colgroup><tr><th>Fecha doc</th><th>Doc. compras</th><th>Producto</th><th class="num">Cantidad</th><th>Bodega</th><th class="num">Por entregar</th><th class="num">Prc. neto</th><th class="num">Comprado</th></tr>
     ${psapReg.map(r=>`<tr>
       <td class="mono small">${fFecha(r.fecha_doc)}</td>
-      <td class="mono">${esc(String(r.doc_compras||'—'))}</td>
+      <td class="mono">${esc(String(r.doc_compras||'—'))}${(()=>{const b=DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===String(r.doc_compras)&&o.baja);return b?` <span class="chip rojo" title="${esc(avisoBaja(b))}">baja</span>`:''})()}</td>
       <td class="trunc" title="${esc(r.producto)}">${r.codigo?`<span class="mono small muted">${esc(r.codigo)}</span> `:''}${esc(r.producto)}</td>
       <td class="num">${num(r.cantidad)}</td>
       <td class="small">${esc(r.bodega||bodegaDeCentro(r.centro)||String(r.centro||'—'))}</td>
@@ -3208,26 +3212,27 @@ function rOC(){
         <span class="folio">OC ${esc(o.folio)}</span>
         <span class="chip ${ESTADO_COLOR[e]}">${ESTADO_LBL[e]}</span>
         ${e!=='despachada'&&s.c!=='gris'?`<span class="chip ${s.c}" title="Plazo de entrega">${s.txt}</span>`:''}
-        ${chipCompra(o)}
-        ${o.sin_documento||!o.archivo?'<span class="chip ambar" title="Todavía no tiene su documento. Si llega, se adjunta a esta misma OC, sin crear otra.">sin documento</span>':''}
+        ${o.baja?'':chipCompra(o)}
+        ${!o.baja&&(o.sin_documento||!o.archivo)?'<span class="chip ambar" title="Todavía no tiene su documento. Si llega, se adjunta a esta misma OC, sin crear otra.">sin documento</span>':''}
         <span class="muted small">Emisión ${fFecha(o.fecha_emision)}${o.fecha_carga&&o.fecha_carga!==o.fecha_emision?` · <span title="Día en que se cargó al sistema">cargada ${fFecha(o.fecha_carga)}</span>`:''}${o.fecha_entrega?` · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b>`:''} · ${esc(o.destino||'—')}</span>
-        <span class="resumen">${o.items.length} ítem(s) · ${num(pendD)} por despachar</span>
+        <span class="resumen">${o.baja?`${o.items.length} ítem(s) · dada de baja`:`${o.items.length} ítem(s) · ${num(pendD)} por despachar`}</span>
       </summary>
+      ${o.baja?`<div class="chip rojo" style="display:block;white-space:normal;margin-top:10px;padding:10px">Dada de baja el ${fFecha(o.baja.fecha)}. Motivo: ${esc(o.baja.motivo||'no registrado')}</div>`:''}
       <table class="tprod" style="margin-top:12px;min-width:940px"><colgroup><col style="width:12em"><col style="width:8ch"><col style="width:10ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">P. unit.</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th><th>Guía de despacho</th></tr>
       ${o.items.map((i,ix)=>{const comp=+i.cantidad_comprada||0;
         const pend=(+i.cantidad||0)-(+i.cantidad_despachada||0);
-        return `<tr${pend>0?' class="fila-pend"':''}><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num" style="${comp<i.cantidad?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(pend)}</td><td>${celdaGuiasOC(o,i)}</td></tr>`}).join('')}</table>
+        return `<tr${pend>0&&!o.baja?' class="fila-pend"':''}><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num" style="${comp<i.cantidad&&!o.baja?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(pend)}</td><td>${celdaGuiasOC(o,i)}</td></tr>`}).join('')}</table>
       ${o.compras?.length?`<p class="small muted" style="margin-top:6px">Compras: ${o.compras.map(c=>`<span class="mono">${fFecha(c.fecha)}</span> ${esc(c.proveedor||'s/proveedor')} (${c.items.map(i=>`${esc(i.producto)} ×${num(i.cantidad)}`).join(', ')})`).join(' · ')}</p>`:''}
       ${o.guias?.length?`<p class="small muted" style="margin-top:6px">Guías: <span class="mono">${o.guias.map(esc).join(', ')}</span></p>`:''}
       ${o.archivo?`<p class="small"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(o.archivo)}')">Descargar documento</a></p>`:''}
-      <div class="acciones">
+      ${o.baja?'':`<div class="acciones">
         ${ocComp(o)<ocTot(o)?`<button class="btn mini sec" onclick="toggleCompra('${encodeURIComponent(o.folio)}')">Registrar compra</button>`:''}
         ${e!=='despachada'?`<button class="btn mini" onclick="irASubir('guias')" title="Sube la guía de despacho de esta OC"><i class="fa-solid fa-cloud-arrow-up"></i> Despachar</button>`:''}
         ${o.sin_documento?`<button class="btn mini sec" onclick="irASubirOC()" title="Sube el documento de esta OC para poder editarla y darla de baja"><i class="fa-solid fa-cloud-arrow-up"></i> Subir su documento</button>`
           :`${!o.archivo?`<button class="btn mini sec" onclick="irASubirOC()" title="Adjunta el PDF de esta OC sin crear otra"><i class="fa-solid fa-cloud-arrow-up"></i> Subir su documento</button>`:''}
         <button class="btn mini sec" onclick="editOC('${encodeURIComponent(o.folio)}')"><i class="fa-solid fa-pen"></i> Modificar</button>
         <button class="btn mini peligro" onclick="borrarOC('${encodeURIComponent(o.folio)}')">Dar de baja</button>`}
-      </div>
+      </div>`}
       <div id="fc-${encodeURIComponent(o.folio)}"></div>
       <div id="eo-${encodeURIComponent(o.folio)}"></div>
       </details>
@@ -3238,14 +3243,18 @@ function rOC(){
 }
 async function borrarOC(fe){
   const folio=decodeURIComponent(fe);
-  const arr=DB[ARCH.oc].data.ordenes;const o=arr.find(x=>x.folio===folio);if(!o)return;
+  const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===folio);if(!o||o.baja)return;
   if(o.guias?.length){toast(`La OC ${folio} tiene guías asociadas (${o.guias.join(', ')}). Elimina primero esas guías.`);return}
   const comprasBod=(o.compras||[]).filter(c=>c.ingreso_bodega);
   const adjOC=adjRegistros().filter(r=>r.oc===String(folio)).length+adjDescartes().filter(r=>r.oc===String(folio)).length;
   let msg='';
   if(comprasBod.length)msg+=`Se revertirán del inventario los ingresos de sus ${comprasBod.length} compra(s) registrada(s).\n`;
   if(adjOC)msg+='Sus adjudicaciones a cotizaciones se eliminarán y el saldo de esas líneas quedará disponible otra vez.';
-  if(!await confirmar({titulo:`Dar de baja la OC ${folio}`,texto:msg||'La orden quedará dada de baja.',confirmar:'Dar de baja',peligro:true}))return;
+  const motivo=await pedirTexto({titulo:`Dar de baja la OC ${folio}`,
+    producto:(msg?msg+' ':'')+'La OC queda marcada como dada de baja: sale del Panel y no se puede volver a ingresar.',
+    etiqueta:'Motivo de la baja',confirmar:'Dar de baja',
+    validar:t=>t.length<4?'Escribe el motivo de la baja.':''});
+  if(!motivo)return;
   velo(true,'Dando de baja…');
   try{
     const inv=DB[ARCH.inv].data;
@@ -3259,11 +3268,10 @@ async function borrarOC(fe){
       d.registros=d.registros.filter(r=>r.oc!==String(folio));
       d.descartes=d.descartes.filter(r=>r.oc!==String(folio));
     }
-    arr.splice(arr.indexOf(o),1);
-    await guardarArchivo(ARCH.oc,`OC ${folio} dada de baja`);
+    o.baja={fecha:hoyISO(),motivo};
+    await guardarArchivo(ARCH.oc,`OC ${folio} dada de baja: ${motivo}`);
     if(adjOC)await guardarArchivo(ARCH.adj,`Adjudicaciones de la OC ${folio} liberadas por su baja`);
     if(comprasBod.length)await guardarArchivo(ARCH.inv,`Inventario: reverso por baja de OC ${folio}`);
-    if(o.archivo)await borrarArchivoRepo(o.archivo,`Borrado documento de OC ${folio}`);
     toast(`OC ${folio} dada de baja`);render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
@@ -3378,7 +3386,7 @@ async function guardarCompra(fe){
 /* ================= Guías de despacho ================= */
 function rGuias(){
   const hrs=[...DB[ARCH.hr].data.hojas].reverse();
-  const ocsAct=DB[ARCH.oc].data.ordenes.filter(o=>ocEstado(o)!=='despachada');
+  const ocsAct=ocsActivas().filter(o=>ocEstado(o)!=='despachada');
   return `
   ${formLeerGuia()}
   ${formPendiente('guias_despacho','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
@@ -3946,7 +3954,8 @@ async function guardarEditOC(fe){
   const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===folio);if(!o)return;
   const nuevoFolio=document.getElementById('eo-folio-'+fe).value.trim();
   if(!nuevoFolio){toast('El folio no puede quedar vacío.');return}
-  if(nuevoFolio!==folio&&DB[ARCH.oc].data.ordenes.some(x=>x.folio===nuevoFolio)){toast('Ya existe otra OC con ese folio.');return}
+  const otra=nuevoFolio!==folio&&DB[ARCH.oc].data.ordenes.find(x=>x.folio===nuevoFolio);
+  if(otra){toast(otra.baja?avisoBaja(otra):'Ya existe otra OC con ese folio.');return}
   const items=leerEdit('eo-items-'+fe,o.items);
   if(!items.length){toast('La OC debe tener al menos un ítem.');return}
   // No permitir dejar una cantidad por debajo de lo ya despachado
@@ -4006,7 +4015,7 @@ function observacionesPrecio(){
     const p=+h.precio||0;if(!p)return;
     push(h.codigo||codigoDeItem(h.producto,null),h.producto,{fecha:h.fecha||'',oc:String(h.folio_oc||''),precio:p});
   });
-  DB[ARCH.oc].data.ordenes.forEach(o=>o.items.forEach(i=>{
+  ocsActivas().forEach(o=>o.items.forEach(i=>{
     const p=+i.precio_unitario||0;if(!p)return;
     push(codigoDeItem(i.producto,i.codigo),i.producto,{fecha:o.fecha_emision||'',oc:String(o.folio),precio:p});
   }));
@@ -4391,6 +4400,7 @@ async function leerGuiaPDF(inp){
     if(DB[ARCH.guias].data.guias.some(x=>String(x.numero)===String(g.numero)))
       throw new Error(`la guía N°${g.numero} ya está cargada`);
     const oc=DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===String(g.oc));
+    if(oc&&oc.baja)throw new Error(`la guía N°${g.numero} apunta a una OC dada de baja. ${avisoBaja(oc)}`);
     // Si la OC no está cargada se resuelve contra el pendiente SAP del mismo folio.
     const resp=docDeRespaldo(g.oc);
     hgResolverContraOC(g,resp.doc);
