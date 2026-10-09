@@ -2393,8 +2393,11 @@ function parseOC(lineas){
   const g=(re,i=1)=>{const m=txt.match(re);return m?m[i].trim():null};
   const fe=txt.match(/Fecha\s*:\s*(\d{2})\.(\d{2})\.(\d{4})/);
   const items=[];
+  /* La unidad admite dígitos después de la primera letra (Jefe, 09-10-2026): antes era solo
+     letras y las líneas en M2 o M3 se descartaban sin aviso. En la OC 4500980481 la cerámica
+     20x30 viene en M2 y el lector la daba por ausente del documento. */
   lineas.forEach(l=>{
-    const m=l.match(/^\s*(\d{2,3})\s+([\d.,]+)\s+([A-Z]{1,4})\s+Cod:\s*(\d{10})?\s*(.+?)\s{2,}([\d.,]+)\s+([\d.,]+)\s*$/);
+    const m=l.match(/^\s*(\d{2,3})\s+([\d.,]+)\s+([A-Z][A-Z0-9]{0,3})\s+Cod:\s*(\d{10})?\s*(.+?)\s{2,}([\d.,]+)\s+([\d.,]+)\s*$/);
     if(m)items.push({pos:+m[1],cantidad:nSap(m[2]),unidad:m[3],codigo_sap:m[4]||null,
                      producto:m[5].trim(),precio:nSap(m[6]),total:nSap(m[7])});
   });
