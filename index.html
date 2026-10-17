@@ -327,7 +327,7 @@ async function gh(path,opts={}){
        no le dice nada a quien está cargando una guía: se traduce a qué pasó y qué hacer. */
     const t=String(e.message||'');
     const claro=
-      r.status===401?'El token de GitHub no es válido o expiró. Vuelve a ingresarlo en Ajustes.':
+      r.status===401?'El token de GitHub no es válido o expiró. Vuelve a ingresarlo con «cambiar conexión», arriba a la derecha.':
       r.status===403?(/rate limit/i.test(t)?'GitHub está limitando las peticiones. Espera unos minutos y reintenta.'
                      :'El token no tiene permisos para esta operación.'):
       r.status===404?'No encontré ese archivo en el repositorio.':
@@ -472,6 +472,17 @@ async function conectar(){
   cfg={owner,repo,token};
   try{await gh('contents/data');localStorage.setItem(LSKEY,JSON.stringify(cfg));iniciar()}
   catch(e){document.getElementById('s-err').textContent='No se pudo conectar: '+e.message;cfg=null}
+}
+function pedirTokenNuevo(){
+  const prev=cfg||{};
+  cfg=null;
+  document.getElementById('app').style.display='none';
+  document.getElementById('setup').style.display='block';
+  document.getElementById('s-owner').value=prev.owner||'';
+  document.getElementById('s-repo').value=prev.repo||'';
+  document.getElementById('s-token').value='';
+  document.getElementById('s-err').textContent='El token de GitHub expiró o fue revocado. Genera uno nuevo y pégalo aquí.';
+  document.getElementById('s-token').focus();
 }
 async function cambiarConexion(){
   if(await confirmar({titulo:'Desconectar el navegador',texto:'Se borrará el acceso guardado en este navegador y tendrás que volver a ingresar el token.',confirmar:'Desconectar',peligro:true})){localStorage.removeItem(LSKEY);location.reload()}
@@ -4992,7 +5003,10 @@ async function iniciar(){
   document.getElementById('app').style.display='block';
   document.getElementById('hoy-lbl').textContent=new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
   try{await cargarTodo();render()}
-  catch(e){toast('Error al cargar datos: '+e.message)}
+  catch(e){
+    if(e.status===401){pedirTokenNuevo();sp.style.display='none';return}
+    toast('Error al cargar datos: '+e.message)
+  }
   await splashListo;
   sp.classList.add('out');
   setTimeout(()=>sp.style.display='none',700);
