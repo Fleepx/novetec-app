@@ -240,16 +240,16 @@ details.form .inner{padding:0 16px 16px}
 #login .card{padding:34px 30px 26px}
 .login-logo{display:block;height:64px;width:auto;margin:0 auto 16px}
 html[data-tema="oscuro"] .login-logo{background:#fff;border-radius:12px;padding:6px 10px;box-sizing:content-box}
-.btn-google{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;height:44px;padding:0 16px;
-  background:#fff;color:#1f1f1f;border:1px solid #747775;border-radius:22px;font:500 15px/1 Roboto,Arial,sans-serif;
+.btn-google{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;height:46px;padding:0 18px 0 6px;
+  background:#1a73e8;color:#fff;border:none;border-radius:23px;font:500 15px/1 Roboto,Arial,sans-serif;
   letter-spacing:.25px;cursor:pointer;transition:background .15s,box-shadow .15s}
-.btn-google svg{width:20px;height:20px;flex:none}
-.btn-google:hover{background:#f8faff;box-shadow:0 1px 3px rgba(60,64,67,.3),0 1px 2px rgba(60,64,67,.15)}
-.btn-google:active{background:#eef3fd}
-.btn-google:focus-visible{outline:2px solid #0b57d0;outline-offset:2px}
+.btn-google .g-tile{width:34px;height:34px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;flex:none;margin-right:auto}
+.btn-google svg{width:20px;height:20px}
+.btn-google span:last-child{margin-right:auto}
+.btn-google:hover{background:#1b66c9;box-shadow:0 1px 3px rgba(60,64,67,.3),0 1px 2px rgba(60,64,67,.15)}
+.btn-google:active{background:#185abc}
+.btn-google:focus-visible{outline:2px solid #8ab4f8;outline-offset:2px}
 .btn-google:disabled{opacity:.6;cursor:wait;box-shadow:none}
-html[data-tema="oscuro"] .btn-google{background:#131314;color:#e3e3e3;border-color:#8e918f}
-html[data-tema="oscuro"] .btn-google:hover{background:#1f1f20}
 #setup .card,#login .card{padding:26px}
 #setup h1,#login h1{font-size:20px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px}
 a{color:var(--texto)}
@@ -288,7 +288,7 @@ a{color:var(--texto)}
     <h1>Novetec · Gestión</h1>
     <p class="muted small" style="margin:6px 0 22px">Sistema interno de despacho</p>
     <button class="btn-google" id="l-google" onclick="entrarConGoogle()">
-      <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      <span class="g-tile"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg></span>
       <span>Acceder con Google</span>
     </button>
     <p class="small muted" style="margin-top:16px">Solo para cuentas autorizadas por Novetec.</p>
