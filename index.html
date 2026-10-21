@@ -628,12 +628,16 @@ async function gestionarAccesos(){
     ov.innerHTML=`<div class="modal" style="max-width:560px">
       <b>Accesos a la app</b>
       <p class="small muted" style="margin-top:4px">Cada persona entra con su cuenta de Google. Solo pueden entrar los correos de esta lista.</p>
-      <table class="tprod" style="margin-top:10px">
-        <tr><th>Correo</th><th>Nombre</th><th>Rol</th><th></th></tr>
-        ${lista.map(a=>`<tr><td class="small">${esc(a.correo)}</td><td class="small">${esc(a.nombre||'')}</td>
-          <td><span class="chip${a.rol==='admin'?' ink':''}">${a.rol==='admin'?'administrador':'operador'}</span></td>
-          <td>${a.correo===FBS.usuario.correo?'':`<button class="btn mini sec" data-quitar="${esc(a.correo)}">Quitar</button>`}</td></tr>`).join('')}
-      </table>
+      <div style="margin-top:12px;border-top:1px solid var(--line)">
+        ${lista.map(a=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600">${esc(a.nombre||a.correo)}</div>
+            <div class="small muted" style="overflow-wrap:anywhere">${esc(a.correo)}</div>
+          </div>
+          <span class="chip${a.rol==='admin'?' ink':''}">${a.rol==='admin'?'administrador':'operador'}</span>
+          ${a.correo===FBS.usuario.correo?'':`<button class="btn mini sec" data-quitar="${esc(a.correo)}">Quitar</button>`}
+        </div>`).join('')}
+      </div>
       <label style="margin-top:14px">Correo de Google</label>
       <input id="ac-correo" type="email" placeholder="nombre@gmail.com" autocomplete="off">
       <label>Nombre</label>
