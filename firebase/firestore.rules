@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{base}/documents {
+    function perfil() {
+      return get(/databases/$(base)/documents/usuarios/$(request.auth.uid)).data;
+    }
+    function habilitado() {
+      return request.auth != null
+        && exists(/databases/$(base)/documents/usuarios/$(request.auth.uid))
+        && perfil().rol in ['admin', 'operador'];
+    }
+    function admin() {
+      return habilitado() && perfil().rol == 'admin';
+    }
+    function datos(col) {
+      return col in ['meta', 'ordenes_compra', 'guias_despacho', 'cotizaciones', 'inventario',
+        'movimientos', 'productos', 'precios_cotizados', 'precios_observados', 'archivos',
+        'adjudicaciones', 'hojas_ruta'];
+    }
+
+    match /usuarios/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || admin());
+      allow write: if admin();
+    }
+
+    match /historial/{id} {
+      allow read: if habilitado();
+      allow create: if habilitado() && request.resource.data.usuario == request.auth.token.email;
+      allow update, delete: if false;
+    }
+
+    match /{col}/{id} {
+      allow read: if datos(col) && habilitado();
+      allow create, update: if datos(col) && habilitado()
+        && request.resource.data._v is int
+        && (resource == null || request.resource.data._v == resource.data._v + 1);
+      allow delete: if datos(col) && (admin() || (habilitado()
+        && !(col in ['productos', 'ordenes_compra', 'guias_despacho', 'cotizaciones'])));
+    }
+  }
+}

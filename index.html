@@ -272,6 +272,15 @@ a{color:var(--texto)}
   <div class="card">
     <h1>Novetec · Gestión</h1>
     <p class="muted small">Conecta la app con el repositorio privado de datos. El token queda guardado solo en este navegador.</p>
+    <div id="s-fb">
+      <label>Configuración de Firebase</label>
+      <textarea id="s-fbcfg" rows="4" placeholder="Pega aquí el bloque firebaseConfig = { apiKey: ..., projectId: ... }"></textarea>
+      <label>Correo</label>
+      <input id="s-email" type="email" autocomplete="username">
+      <label>Contraseña</label>
+      <input id="s-pass" type="password" autocomplete="current-password">
+      <p class="muted small" style="margin-top:10px">Los datos viven en Firebase. Los documentos PDF siguen en GitHub: completa también el repositorio y el token de documentos.</p>
+    </div>
     <label>Usuario u organización de GitHub</label>
     <input id="s-owner" placeholder="ej: novetec-spa">
     <label>Repositorio de datos</label>
@@ -308,6 +317,7 @@ a{color:var(--texto)}
 <div id="toast"></div>
 <div id="velo"><span id="velo-msg">Guardando…</span></div>
 
+<script src="lib/fbdatos.js"></script>
 <script>
 /* ================= Conexión GitHub ================= */
 const LSKEY='novetec_cfg';
@@ -342,6 +352,54 @@ async function gh(path,opts={}){
     throw err;
   }
   return r.json();
+}
+const FB_SDK='https://www.gstatic.com/firebasejs/10.14.1/';
+let FBS=null;
+const modoFirebase=()=>!!(cfg&&cfg.fb);
+const esAdmin=()=>!modoFirebase()||(FBS&&FBS.rol==='admin');
+function leerConfigFirebase(t){
+  const m=String(t||'').match(/\{[\s\S]*\}/);if(!m)return null;
+  try{
+    const j=JSON.parse(m[0].replace(/'/g,'"').replace(/([{,]\s*)([A-Za-z_]\w*)\s*:/g,'$1"$2":').replace(/,\s*\}/g,'}'));
+    return j.apiKey&&j.projectId?j:null;
+  }catch(_){return null}
+}
+async function fbAbrir(config){
+  if(FBS&&FBS.projectId===config.projectId)return FBS;
+  const [a,au,fs]=await Promise.all(['firebase-app.js','firebase-auth.js','firebase-firestore.js'].map(f=>import(FB_SDK+f)));
+  const app=a.initializeApp(config);
+  const auth=au.getAuth(app),db=fs.getFirestore(app);
+  const ref=(c,id)=>fs.doc(db,c,id);
+  const store={
+    nuevoId:()=>fs.doc(fs.collection(db,FB_HIST)).id,
+    async leerDoc(c,id){const s=await fs.getDoc(ref(c,id));return s.exists()?s.data():null},
+    async leerColeccion(c){return (await fs.getDocs(fs.collection(db,c))).docs.map(d=>({id:d.id,data:d.data()}))},
+    transaccion:fn=>fs.runTransaction(db,t=>fn({
+      leer:async(c,id)=>{const s=await t.get(ref(c,id));return s.exists()?s.data():null},
+      escribir:(c,id,d)=>{t.set(ref(c,id),d)},
+      borrar:(c,id)=>{t.delete(ref(c,id))}}))
+  };
+  FBS={projectId:config.projectId,auth,au,db,fs,store,usuario:null,rol:null};
+  await new Promise(r=>{const u=au.onAuthStateChanged(auth,()=>{u();r()})});
+  return FBS;
+}
+function errorFirebase(e){
+  const c=String(e&&e.code||'');
+  const t=c.includes('permission-denied')?'Tu usuario no tiene permiso para esta operación. Pídesela al administrador.':
+    c.includes('unavailable')||c.includes('network')?'Sin conexión con Firebase. Revisa internet y reintenta.':
+    c.includes('invalid-credential')||c.includes('wrong-password')||c.includes('user-not-found')?'Correo o contraseña incorrectos.':
+    c.includes('too-many-requests')?'Demasiados intentos. Espera unos minutos.':
+    (e&&e.message)||'Error de Firebase';
+  const err=new Error(t);err.status=e&&e.status;err.code=c;return err;
+}
+async function fbSesion(){
+  const s=await fbAbrir(cfg.fb);
+  const u=s.auth.currentUser;
+  if(!u)return false;
+  const perfil=await s.store.leerDoc('usuarios',u.uid);
+  if(!perfil||!['admin','operador'].includes(perfil.rol)){const e=new Error(`El usuario ${u.email} no está habilitado en la app. Pide al administrador que lo active.`);e.sinAcceso=true;throw e}
+  s.usuario={uid:u.uid,email:u.email,nombre:perfil.nombre||u.email};s.rol=perfil.rol;
+  return true;
 }
 const ESTRUCTURAS_BASE={'data/cotizaciones.json':{cotizaciones:[]},'data/clientes.json':{clientes:[]},'data/ordenes_compra.json':{ordenes:[]},
  'data/historial_precios.json':{observaciones:[]},
@@ -385,6 +443,11 @@ function normalizarDatos(p,d){
   return d;
 }
 async function cargarArchivo(p){
+  if(modoFirebase()){
+    let r;try{r=await fbCargar(FBS.store,p)}catch(e){throw errorFirebase(e)}
+    DB[p]={data:normalizarDatos(p,r.data||JSON.parse(JSON.stringify(ESTRUCTURAS_BASE[p]||{}))),base:r.base};
+    return;
+  }
   try{
     const j=await gh(`contents/${p}?t=${Date.now()}`);
     DB[p]={data:normalizarDatos(p,JSON.parse(b64dec(j.content))),sha:j.sha};
@@ -397,6 +460,14 @@ async function cargarArchivo(p){
   }
 }
 async function guardarArchivo(p,msg){
+  if(modoFirebase()){
+    try{await fbGuardar(FBS.store,p,DB[p].data,DB[p].base,{usuario:FBS.usuario&&FBS.usuario.email,mensaje:msg})}
+    catch(e){
+      if(e.status===409){toast('Atención: otro usuario guardó cambios en lo mismo. Recargando datos…');await cargarTodo();render();throw new Error('conflicto')}
+      const err=errorFirebase(e);toast(err.message);throw err;
+    }
+    return;
+  }
   try{
     const j=await gh(`contents/${p}`,{method:'PUT',body:JSON.stringify({message:msg,content:b64enc(JSON.stringify(DB[p].data,null,2)),sha:DB[p].sha})});
     DB[p].sha=j.content.sha;
@@ -464,14 +535,37 @@ async function descargarArchivo(p,nombre){
   }catch(e){toast('Error al descargar: '+e.message)}
   velo(false);
 }
-async function cargarTodo(){await Promise.all(Object.values(ARCH).map(cargarArchivo))}
+async function cargarTodo(){
+  await Promise.all(Object.values(ARCH).map(cargarArchivo));
+  if(!modoFirebase()&&DB[ARCH.conf]&&DB[ARCH.conf].data.migrado_firebase){
+    const e=new Error(`Los datos se migraron a Firebase el ${fFecha(DB[ARCH.conf].data.migrado_firebase)}. Este repositorio quedó como respaldo de solo lectura: conéctate con «cambiar conexión» usando Firebase.`);
+    DB={};throw e;
+  }
+}
 
 async function conectar(){
   const owner=v('s-owner').trim(),repo=v('s-repo').trim(),token=v('s-token').trim();
-  if(!owner||!repo||!token){document.getElementById('s-err').textContent='Completa los tres campos.';return}
+  const err=document.getElementById('s-err');
+  if(!owner||!repo||!token){err.textContent='Completa el usuario, el repositorio y el token de GitHub.';return}
+  const textoFb=v('s-fbcfg').trim();
+  if(textoFb){
+    const fbc=leerConfigFirebase(textoFb);
+    if(!fbc){err.textContent='No reconozco la configuración de Firebase: pega el bloque completo con apiKey y projectId.';return}
+    const email=v('s-email').trim(),pass=v('s-pass');
+    if(!email||!pass){err.textContent='Completa el correo y la contraseña.';return}
+    cfg={owner,repo,token,fb:fbc};
+    try{
+      const s=await fbAbrir(fbc);
+      await s.au.signInWithEmailAndPassword(s.auth,email,pass);
+      await gh('contents/documentos');
+      document.getElementById('s-pass').value='';
+      localStorage.setItem(LSKEY,JSON.stringify(cfg));iniciar();
+    }catch(e){err.textContent='No se pudo conectar: '+(e.status?e.message:errorFirebase(e).message);cfg=null}
+    return;
+  }
   cfg={owner,repo,token};
   try{await gh('contents/data');localStorage.setItem(LSKEY,JSON.stringify(cfg));iniciar()}
-  catch(e){document.getElementById('s-err').textContent='No se pudo conectar: '+e.message;cfg=null}
+  catch(e){err.textContent='No se pudo conectar: '+e.message;cfg=null}
 }
 function pedirTokenNuevo(){
   const prev=cfg||{};
@@ -482,10 +576,25 @@ function pedirTokenNuevo(){
   document.getElementById('s-repo').value=prev.repo||'';
   document.getElementById('s-token').value='';
   document.getElementById('s-err').textContent='El token de GitHub expiró o fue revocado. Genera uno nuevo y pégalo aquí.';
+  if(prev.fb)document.getElementById('s-fbcfg').value=JSON.stringify(prev.fb);
   document.getElementById('s-token').focus();
 }
+function pedirSesionFirebase(msg){
+  const prev=cfg||{};
+  document.getElementById('app').style.display='none';
+  document.getElementById('setup').style.display='block';
+  document.getElementById('s-owner').value=prev.owner||'';
+  document.getElementById('s-repo').value=prev.repo||'';
+  document.getElementById('s-token').value=prev.token||'';
+  document.getElementById('s-fbcfg').value=prev.fb?JSON.stringify(prev.fb):'';
+  document.getElementById('s-err').textContent=msg||'';
+  cfg=null;
+}
 async function cambiarConexion(){
-  if(await confirmar({titulo:'Desconectar el navegador',texto:'Se borrará el acceso guardado en este navegador y tendrás que volver a ingresar el token.',confirmar:'Desconectar',peligro:true})){localStorage.removeItem(LSKEY);location.reload()}
+  if(await confirmar({titulo:'Desconectar el navegador',texto:'Se borrará el acceso guardado en este navegador y tendrás que volver a ingresar el token'+(modoFirebase()?' y tu contraseña':'')+'.',confirmar:'Desconectar',peligro:true})){
+    if(modoFirebase()&&FBS)try{await FBS.au.signOut(FBS.auth)}catch(_){}
+    localStorage.removeItem(LSKEY);location.reload();
+  }
 }
 
 /* ================= Utilidades ================= */
@@ -2531,7 +2640,7 @@ function emparejarGuiasPrevias(folio,resueltos){
     const libre=codigoSoloDeGuias(cod,folio);
     if(!libre)pares.push({...base,pos:r.pos,accion:'revisar'});
     else if(r.estado==='nuevo'){r.estado='guia';r.codigo=cod;pares.push({...base,pos:r.pos,accion:'usar'})}
-    else pares.push({...base,pos:r.pos,accion:'fusionar',fusionar:true});
+    else pares.push({...base,pos:r.pos,accion:'fusionar',fusionar:esAdmin()});
   });
   return pares;
 }
@@ -2539,7 +2648,7 @@ function fijarFusionGuia(cod,val){const p=(ocLeida&&ocLeida.guiasPrevias||[]).fi
 function fusionarCodigoDeGuia(dup,keep,folio){
   const d=DB[ARCH.prod].data;
   const pd=d.productos.find(x=>x.codigo===dup),pk=d.productos.find(x=>x.codigo===keep);
-  if(!pd||!pk||dup===keep||!codigoSoloDeGuias(dup,folio))return false;
+  if(!esAdmin()||!pd||!pk||dup===keep||!codigoSoloDeGuias(dup,folio))return false;
   if(normProd(pd.nombre)!==normProd(pk.nombre)&&!pk.alias.some(a=>normProd(a)===normProd(pd.nombre)))pk.alias.push(pd.nombre);
   d.productos=d.productos.filter(x=>x.codigo!==dup);
   guiasPreviasDe(folio).forEach(g=>(g.items||[]).forEach(it=>{if(it.codigo===dup){it.codigo=keep;it.producto=pk.nombre}}));
@@ -2727,8 +2836,8 @@ function panelGuiasPrevias(o){
     const dato=`<b>${esc(p.nombreGuia)}</b> <span class="mono small">${esc(p.codigoGuia)}</span> · ${num(p.cantidad)} en la ${g}`;
     if(p.accion==='usar')return `<li class="small">${dato}: la línea "${esc(r.producto)}" usa el mismo código, sin crear uno nuevo.</li>`;
     if(p.accion==='fusionar')return `<li class="small"><label style="display:flex;gap:6px;align-items:flex-start">
-      <input type="checkbox"${p.fusionar?' checked':''} onchange="fijarFusionGuia('${esc(p.codigoGuia)}',this.checked)">
-      <span>${dato}: lo creó la guía. Fusionarlo en <span class="mono">${esc(r.codigo||'el código de la línea')}</span> ("${esc(r.producto)}"), mismo precio. Su nombre queda como alias.</span></label></li>`;
+      <input type="checkbox"${p.fusionar?' checked':''}${esAdmin()?'':' disabled'} onchange="fijarFusionGuia('${esc(p.codigoGuia)}',this.checked)">
+      <span>${dato}: lo creó la guía. Fusionarlo en <span class="mono">${esc(r.codigo||'el código de la línea')}</span> ("${esc(r.producto)}"), mismo precio. Su nombre queda como alias.${esAdmin()?'':' Solo el administrador puede fusionar: la OC se guarda y la fusión queda pendiente para él.'}</span></label></li>`;
     return `<li class="small" style="color:var(--rojo)">${dato}: ${r?`calza por precio con "${esc(r.producto)}", pero el código ya tiene SAP o se usa en otros documentos`:'no calza con una sola línea de la OC por precio'}. No se imputa como despachado: revísalo a mano.</li>`};
   return `<div class="card" style="border-color:var(--ambar);margin-top:12px">
     <b>Guías ya cargadas contra esta OC</b>
@@ -5095,10 +5204,14 @@ async function iniciar(){
   document.getElementById('setup').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('hoy-lbl').textContent=new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
-  try{await cargarTodo();render()}
+  try{
+    if(modoFirebase()&&!await fbSesion()){sp.style.display='none';pedirSesionFirebase('La sesión se cerró. Ingresa tu correo y contraseña.');return}
+    await cargarTodo();render();
+  }
   catch(e){
     if(e.status===401){pedirTokenNuevo();sp.style.display='none';return}
-    toast('Error al cargar datos: '+e.message)
+    if(e.sinAcceso){sp.style.display='none';pedirSesionFirebase(e.message);return}
+    toast('Error al cargar datos: '+(e.code?errorFirebase(e).message:e.message))
   }
   await splashListo;
   sp.classList.add('out');
