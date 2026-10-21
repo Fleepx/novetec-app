@@ -1415,7 +1415,7 @@ function panelPlanilla(){
   const cl=clientePorNombre(_pl.cliente)||{};
   return `<div id="pl-panel" class="form" style="border:2px solid var(--ambar);border-radius:8px;padding:16px;margin:12px 0">
     <b style="font-size:14px">Planilla del cliente · ${esc(_pl.file.name)}</b>
-    <p class="small muted">Los precios que pongas aquí se escriben en la columna PROV4 del MISMO archivo y te lo devuelvo completado. Dejar una línea en blanco significa NO COTIZAR ese producto: así lo entiende la planilla.</p>
+    <p class="small muted">Línea sin precio: no se cotiza.</p>
     ${(_pl.notas||[]).length?`<div class="chip rojo" style="display:block;white-space:normal;margin:8px 0;padding:12px">
       <b>Este archivo trae ${_pl.notas.length} nota(s) internas nuestras.</b> Vienen de una vez anterior en que se trabajó esta planilla, no las agregó la app. Si se lo mandas así al cliente, va a ver información que no le corresponde. Bórralas en Excel antes de enviar:
       <ul style="margin:8px 0 0 16px">${_pl.notas.map(n=>`<li><b>${esc(n.hoja)} ${esc(n.ref)}</b>: ${esc(n.texto.slice(0,90))}${n.texto.length>90?'…':''}</li>`).join('')}</ul></div>`:''}
@@ -1707,7 +1707,6 @@ function panelCotizacion(){
   const neto=_cotN.items.reduce((s,i)=>s+(+i.cantidad||0)*(+i.precio||0),0);
   return `<div id="cn-panel" class="form" style="border:2px solid var(--ambar);border-radius:8px;padding:16px;margin:12px 0">
     <b style="font-size:14px">Nueva cotización <span class="chip ink">${esc(folio)}</span></b>
-    <p class="small muted">Folio de la serie real, la misma de Facto. Participa del match con las órdenes de compra. Como Facto sigue emitiendo en paralelo, el número se toma al emitir y se comprueba que esté libre.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">
       <div><label>Cliente</label><select onchange="cnSet('cliente',this.value)">
         ${clientes().map(c=>`<option value="${esc(c.nombre)}"${_cotN.cliente===c.nombre?' selected':''}>${esc(c.corto)}${c.rut==='PENDIENTE'?' (datos pendientes)':''}</option>`).join('')}
@@ -1731,7 +1730,6 @@ function panelCotizacion(){
     </div>
     <datalist id="cn-unidades">${UNIDADES.map(u=>`<option value="${esc(u)}">`).join('')}</datalist>
     <datalist id="cn-prods">${prods.map(p=>`<option value="${esc(p.nombre)}">`).join('')}</datalist>
-    <p class="small muted" style="margin-top:12px">La bodega va por línea: una misma cotización puede despachar a varias, y el precio cambia según la distancia (peajes y bencina).</p>
     <table class="cot-lineas"><thead><tr><th></th><th>Producto</th><th>Descripción</th><th>Bodega</th><th class="num">Cant.</th><th>Unidad</th><th>Precio</th><th></th></tr></thead><tbody>
     ${_cotN.items.map((it,i)=>{
       const oc=it.codigo?ultimoPrecio(it.codigo,'oc'):null, co=it.codigo?ultimoPrecio(it.codigo,'cot'):null;
@@ -3376,7 +3374,6 @@ function panelRecot(id){
     .sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
   box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:12px">
     <b>Recotización de ${esc(c.folio)}</b>
-    <p class="small muted">Cuando el vendedor rehace una cotización duplicando el documento, se arrastra la fecha vieja. Corrígela aquí: la fecha decide con qué órdenes de compra puede emparejar.</p>
     <label>Fecha real de emisión</label>
     <input type="date" id="rc-f-${esc(id)}" value="${esc(c.fecha||'')}">
     <label>Reemplaza a</label>
@@ -3384,7 +3381,7 @@ function panelRecot(id){
       <option value="">— no reemplaza a ninguna —</option>
       ${cand.map(x=>`<option value="${esc(x.id)}"${c.reemplaza_a===x.id?' selected':''}>COT ${esc(x.folio)} · ${fFecha(x.fecha)} · ${esc(x.estado)} · ${x.items.length} línea(s)</option>`).join('')}
     </select>
-    ${cand.length?'<p class="small muted">Al guardar, la cotización reemplazada se cierra. Se puede reabrir cuando quieras.</p>':'<p class="small muted">No hay cotizaciones anteriores con productos en común.</p>'}
+    ${cand.length?'':'<p class="small muted">Sin cotizaciones anteriores con productos en común.</p>'}
     <div class="acciones"><button class="btn mini" onclick="guardarRecot('${esc(id)}')">Guardar</button>
     <button class="btn mini sec" onclick="panelRecot('${esc(id)}')">Cancelar</button></div>
   </div>`;
