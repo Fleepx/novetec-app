@@ -303,8 +303,7 @@ a{color:var(--texto)}
 <div id="setup" style="display:none">
   <div class="card">
     <h1>Novetec · Gestión</h1>
-    <p class="muted small">Conecta la app con el repositorio privado de datos. El token queda guardado solo en este navegador.</p>
-    <label>Usuario u organización de GitHub</label>
+        <label>Usuario u organización de GitHub</label>
     <input id="s-owner" placeholder="ej: novetec-spa">
     <label>Repositorio de datos</label>
     <input id="s-repo" placeholder="novetec-datos">
@@ -649,8 +648,7 @@ async function gestionarAccesos(){
     lista.sort((x,y)=>(x.rol===y.rol?0:x.rol==='admin'?-1:1)||x.correo.localeCompare(y.correo));
     ov.innerHTML=`<div class="modal" style="max-width:560px">
       <b>Accesos a la app</b>
-      <p class="small muted" style="margin-top:4px">Cada persona entra con su cuenta de Google. Solo pueden entrar los correos de esta lista.</p>
-      <div style="margin-top:12px;border-top:1px solid var(--line)">
+            <div style="margin-top:12px;border-top:1px solid var(--line)">
         ${lista.map(a=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)">
           <div style="flex:1;min-width:0">
             <div style="font-weight:600">${esc(a.nombre||a.correo)}</div>
@@ -903,8 +901,7 @@ function modalDuplicados(dups,nuevos){
     const ov=document.createElement('div');ov.className='modal-ov';
     ov.innerHTML=`<div class="modal" style="max-width:620px">
       <b>${dups.length===1?'Este documento ya había entrado al sistema':`${dups.length} documentos ya habían entrado al sistema`}</b>
-      <p class="small muted" style="margin-top:8px">Se comparó el contenido del archivo, no el nombre: aunque lo hayas renombrado, es el mismo documento.</p>
-      <div style="max-height:13em;overflow:auto;margin-top:12px">
+            <div style="max-height:13em;overflow:auto;margin-top:12px">
         <table class="tprod"><colgroup><col><col style="width:15ch"></colgroup>
         <tr><th>Archivo</th><th>Subido antes</th></tr>
         ${dups.map(d=>{
@@ -2914,7 +2911,7 @@ function panelOCExistente(o){
     ${dif.length?`<div class="card" style="border-color:var(--ambar);margin-top:12px">
       <b>Diferencias entre el documento y la OC del sistema</b>
       <ul style="margin:8px 0 0 16px">${dif.map(d=>`<li class="small">${esc(d)}</li>`).join('')}</ul>
-      <p class="small muted" style="margin-top:8px">Adjuntar no corrige nada: si la OC del sistema está mal, usa Modificar en su ficha.</p>
+      <p class="small muted" style="margin-top:8px">Para corregir la OC, usa Modificar en su ficha.</p>
     </div>`:''}
     <div class="acciones">
       <button class="btn" onclick="adjuntarDocOC()">Adjuntar el documento a la OC ${esc(o.folio)}</button>
@@ -2981,8 +2978,8 @@ function panelOCLeida(){
     ${err.length?`<div class="card" style="border-color:var(--rojo);margin-top:12px">
       <b style="color:var(--rojo)">No se puede guardar hasta resolver esto:</b>
       <ul style="margin:8px 0 0 16px">${err.map(e=>`<li class="small">${esc(e)}</li>`).join('')}</ul>
-      <p class="small muted" style="margin-top:8px">Si el documento no es una OC de SAP o viene con un formato distinto, súbelo a la cola y lo procesa el administrador.</p>
-    </div>`:'<p class="small muted" style="margin-top:12px">Se verificó que cada línea cuadre (cantidad × precio = total), que la suma dé el total del documento, que la bodega esté en la lista y que el folio no esté cargado.</p>'}
+      <p class="small muted" style="margin-top:8px">Otro formato o escaneado: súbelo a la cola.</p>
+    </div>`:''}
     <div class="acciones">
       <button class="btn" onclick="guardarOCLeida()" ${err.length?'disabled style="opacity:.45;cursor:not-allowed"':''}>Guardar esta orden de compra</button>
       <button class="btn sec" onclick="descartarOCLeida()">Descartar</button>
@@ -3484,15 +3481,14 @@ function rOC(){
   const psapReg=psapD.registros||[];
   return `${dlProd()}
   ${ocLeida?panelOCLeida():`<details class="form"><summary>Leer una orden de compra desde el PDF</summary><div class="inner">
-    <p class="small muted" style="margin-top:12px">Para las OC de SAP en PDF: la app las lee, valida los totales y te muestra lo que encontró para que confirmes. Nada se guarda sin tu aprobación. Si el PDF es una foto escaneada o el formato es otro, súbelo a la cola de más abajo.</p>
+    <p class="small muted" style="margin-top:12px">PDF escaneado o de otro formato: súbelo a la cola.</p>
     <label>Archivo PDF de la orden de compra</label>
     <input type="file" id="oc-pdf" accept=".pdf">
     <div class="acciones"><button class="btn" onclick="leerOCpdf()"><i class="ph ph-file-arrow-down"></i> Leer el PDF</button></div>
   </div></details>`}
   ${formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${psapReg.length?`<details class="form"><summary>Ver el reporte de pendientes SAP tal como llegó (${psapReg.length} líneas)${psapD.actualizado?` · cargado el ${fFecha(psapD.actualizado)}`:''}</summary><div class="inner" style="overflow-x:auto">
-    <p class="small muted" style="margin-top:12px">Contenido crudo del último reporte del cliente, solo como respaldo: sus órdenes ya están en la lista de arriba junto a las demás. Si después se carga el documento de una de esas OC, manda el documento.</p>
-    <table class="tprod" style="min-width:820px"><colgroup><col style="width:10ch"><col style="width:12ch"><col><col style="width:8ch"><col style="width:12ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"></colgroup><tr><th>Fecha doc</th><th>Doc. compras</th><th>Producto</th><th class="num">Cantidad</th><th>Bodega</th><th class="num">Por entregar</th><th class="num">Prc. neto</th><th class="num">Comprado</th></tr>
+        <table class="tprod" style="min-width:820px"><colgroup><col style="width:10ch"><col style="width:12ch"><col><col style="width:8ch"><col style="width:12ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"></colgroup><tr><th>Fecha doc</th><th>Doc. compras</th><th>Producto</th><th class="num">Cantidad</th><th>Bodega</th><th class="num">Por entregar</th><th class="num">Prc. neto</th><th class="num">Comprado</th></tr>
     ${psapReg.map(r=>`<tr>
       <td class="mono small">${fFecha(r.fecha_doc)}</td>
       <td class="mono">${esc(String(r.doc_compras||'—'))}${(()=>{const b=DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===String(r.doc_compras)&&o.baja);return b?` <span class="chip rojo" title="${esc(avisoBaja(b))}">baja</span>`:''})()}</td>
@@ -3648,7 +3644,7 @@ function toggleCompra(fe){
       <div><label>Fecha de compra</label><input id="pc-fecha-${fe}" type="date" value="${hoyISO()}"></div>
       <div><label>Bodega</label><label style="text-transform:none;font-weight:400;letter-spacing:0;display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink)"><input type="checkbox" id="pc-bod-${fe}" checked style="width:auto"> Ingresar a inventario</label></div>
     </div>
-    <p class="small muted" style="margin-top:8px">Si compraste de más para dejar stock, ingrésalo igual: a la OC se imputa solo lo que pidió el cliente y el excedente entra a bodega como stock libre.</p>
+    <p class="small muted" style="margin-top:8px">El excedente entra como stock libre.</p>
     <table class="tprod" style="margin-top:8px;min-width:440px"><colgroup><col><col style="width:10ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Por comprar</th><th>Comprado ahora</th></tr>
     ${pend.map(i=>`<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.porComprar)}</td><td><input type="number" data-ix="${i.ix}" min="0" step="any" placeholder="0"></td></tr>`).join('')}</table>
     <div class="acciones"><button class="btn mini" onclick="guardarCompra('${fe}')">Guardar compra</button><button class="btn mini sec" onclick="toggleCompra('${fe}')">Cancelar</button></div>
@@ -3823,7 +3819,7 @@ function tarjetaGuia(g){
            Se baja con el nombre Guia_N.pdf, no con el nombre largo del DTE. */''}
       ${g.archivo?`<button class="btn mini sec" onclick="descargarArchivo('${esc(g.archivo)}','Guia_${esc(g.numero)}.pdf')" title="Descargar el PDF de la guía N°${esc(g.numero)}"><i class="ph ph-download-simple"></i> Descargar guía</button>`:''}
     </div>
-    ${hojaDeGuia(g)?'':`<p class="small muted" style="margin-top:8px">Para confirmarla o rectificarla, primero asígnala a una Hoja de Ruta o a un Resumen de Retiros.</p>`}
+    ${hojaDeGuia(g)?'':`<p class="small muted" style="margin-top:8px">Asígnala a un viaje para confirmarla o rectificarla.</p>`}
     <div id="mv-${esc(g.numero)}"></div>
     <div id="rg-${esc(g.numero)}"></div>
   </div></div>`;
@@ -3850,7 +3846,7 @@ function moverGuia(numero){
 
   box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:12px">
     <b>Mover la guía N°${esc(numero)} a otro documento</b>
-    <p class="small muted">Puede ir a una Hoja de Ruta (la entregamos nosotros) o a un Resumen de Retiros (la retira el cliente). La guía tomará la fecha del documento de destino, y los documentos afectados quedarán "sin archivo" hasta regenerarlos.</p>
+    <p class="small muted">Los documentos afectados quedan sin archivo hasta regenerarlos.</p>
     <label>Documento de destino</label>
     <select id="mv-dest-${esc(numero)}" onchange="document.getElementById('mv-nueva-${esc(numero)}').style.display=this.value.startsWith('__nueva__')?'block':'none'">
       ${abiertas.map(h=>`<option value="${esc(hrClave(h))}">${esc(hrLbl(hrTipo(h)))} N°${esc(String(h.numero))} · ${fFecha(h.fecha_envio||h.fecha)} · ${(h.guias||[]).length} guía(s)</option>`).join('')}
@@ -3955,7 +3951,7 @@ function rectificarGuia(numero){
   if(box.innerHTML){box.innerHTML='';return}
   box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:12px">
     <b>Rectificar la guía N°${esc(numero)}</b>
-    <p class="small muted">Indica cuántas unidades NO se pudieron despachar. Volverán a quedar pendientes en la OC ${esc(g.oc||g.folio_oc)} y reaparecerán en el Panel.</p>
+    <p class="small muted">Unidades que no se despacharon. Vuelven a quedar pendientes.</p>
     <table class="tprod" style="margin-top:8px;min-width:520px"><colgroup><col><col style="width:9ch"><col style="width:12ch"><col style="width:19ch"></colgroup>
       <tr><th>Producto</th><th class="num">Despachado</th><th>No despachado</th><th>¿Qué pasó?</th></tr>
       ${g.items.map((i,ix)=>`<tr>
@@ -4150,7 +4146,7 @@ function compraFaltante(numero,btn){
     return falta>0?{ix:oc.items.indexOf(i),producto:i.producto,falta}:null;
   }).filter(Boolean);
   box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:8px">
-    <p class="small muted">Vía de excepción: normalmente la compra se ingresa antes de la guía. Registra aquí lo comprado para cuadrar la OC y el inventario.</p>
+    <p class="small muted">Solo si la compra no se ingresó antes de la guía.</p>
     <div class="grid2">
       <div><label>Proveedor</label><input id="cf-prov-${numero}" placeholder="ej: Ferretería El Volcán"></div>
       <div><label>Fecha de compra</label><input id="cf-fecha-${numero}" type="date" value="${hoyISO()}"></div>
@@ -4247,7 +4243,7 @@ function editOC(fe){
   if(box.innerHTML){box.innerHTML='';return}
   const conMov=o.items.some(i=>(+i.cantidad_despachada||0)>0||(+i.cantidad_comprada||0)>0);
   box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:8px">
-    ${conMov?'<p class="small muted">Esta OC ya tiene compras o despachos registrados: no puedes dejar una cantidad por debajo de lo ya despachado, ni quitar un ítem con movimiento.</p>':''}
+    ${conMov?'<p class="small muted">No se puede bajar de lo despachado ni quitar ítems con movimiento.</p>':''}
     <div class="grid3">
       <div><label>Folio OC</label><input id="eo-folio-${fe}" value="${esc(o.folio)}"></div>
       <div><label>Fecha emisión</label><input id="eo-femi-${fe}" type="date" value="${esc(o.fecha_emision||'')}"></div>
@@ -4406,7 +4402,7 @@ function rPrecios(){
         <td class="num">${f.cot?`<span class="mono" style="color:var(--muted)" title="COT ${esc(f.cot.folio)} · ${fFecha(f.cot.fecha)}${ps[0]?' · adjudicada en '+clp(ps[0].precio):''}">${clp(f.cot.precio)}</span>`:''}</td>
       </tr>`}).join('')}
   </table></div>
-  <p class="small muted">Precios netos del listado de OC (órdenes cargadas y reporte de pendientes SAP), del más reciente al más antiguo. La columna <b>Cotizado</b> es el último precio que ofertamos, solo como referencia: no cuenta para la variación. Pasa el cursor sobre cualquier precio para ver su documento y su fecha.</p>`
+  <p class="small muted"><b>Cotizado</b> es referencia: no cuenta para la variación.</p>`
   :'<div class="card vacio">No hay artículos que coincidan con la búsqueda.</div>'}`;
 }
 
@@ -4759,7 +4755,7 @@ function panelGuiaLeida(){
   };
   return `<div id="gl-panel" class="form" style="border:2px solid var(--ambar);border-radius:8px;padding:16px;margin:12px 0">
     <b style="font-size:14px">Revisar la guía N°${esc(g.numero||'?')} antes de guardar</b>
-    <p class="small muted">Lo que confirmes descuenta inventario y suma al despachado de la OC. La fecha de envío no se pide: la toma cuando la asignes a una Hoja de Ruta o a un Resumen de Retiros.
+    <p class="small muted">Al confirmar se descuenta inventario.
       ${doc?`Los productos se emparejaron contra la <b>${esc(fuente)}</b> ${esc(g.oc||'')}.`:''}</p>
     ${g.avisos.length?`<div class="chip ambar" style="display:block;white-space:normal;margin:8px 0">${g.avisos.map(esc).join(' · ')}</div>`:''}
     ${(()=>{const d=guiaDescuadre(g);return d?`<div class="card" style="border-color:var(--rojo);margin:8px 0">
@@ -4863,8 +4859,7 @@ async function guardarGuiaLeida(){
 }
 function formLeerGuia(){
   return `<details class="form" open><summary>Cargar guía de despacho desde el PDF</summary><div class="inner">
-    <p class="small muted" style="margin-top:12px">Sube el PDF de Facto y la app lo lee sola: folio, fecha, chofer, destino, OC y las líneas de producto, emparejadas contra la OC por precio. Después revisas y confirmas. No pide fecha de envío: esa la define el documento al que la asignes.</p>
-    <input type="file" accept=".pdf" onchange="leerGuiaPDF(this)">
+        <input type="file" accept=".pdf" onchange="leerGuiaPDF(this)">
   </div></details>
   ${panelGuiaLeida()}`;
 }
@@ -5191,7 +5186,7 @@ function rInv(){
   const movs=[...inv.movimientos].reverse().slice(0,40);
   return `${dlProd()}
   <details class="form"><summary>Inventario por planilla — descargar y cargar</summary><div class="inner">
-    <p class="small muted" style="margin-top:12px">Descarga la planilla con todos los productos del maestro y su cantidad actual, anota lo que cuentes en bodega y vuelve a subirla. La carga es directa: como la planilla trae el código NOV, no necesita pasar por revisión.</p>
+    <p class="small muted" style="margin-top:12px">Descárgala, anota el conteo y súbela.</p>
     <p class="small muted"><b>Importante:</b> es una foto completa del stock. La cantidad que escribas reemplaza a la anterior, y una celda de cantidad vacía se toma como cero. Si agregas filas nuevas sin código, esos productos se dan de alta en el maestro.</p>
     <div class="acciones" style="margin-top:12px"><button class="btn sec" onclick="descargarPlantillaInv()"><i class="ph ph-file-arrow-down"></i> Descargar plantilla</button></div>
     <label style="margin-top:16px">Planilla completada</label>
