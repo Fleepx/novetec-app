@@ -2498,6 +2498,83 @@ function resolverItems(items){
     return {...i,estado,codigo,opciones};
   });
 }
+function guiasPreviasDe(folio){
+  return DB[ARCH.guias].data.guias.filter(g=>String(g.oc||g.folio_oc||'')===String(folio));
+}
+function codigoSoloDeGuias(cod,folio){
+  const p=DB[ARCH.prod].data.productos.find(x=>x.codigo===cod);
+  if(!p||sapsDe(p).length)return false;
+  const marca=`"codigo":${JSON.stringify(cod)}`;
+  const otros=[ARCH.oc,ARCH.cot,ARCH.hprec,ARCH.adj,ARCH.psap,ARCH.pend].filter(k=>DB[k]);
+  if(otros.some(k=>JSON.stringify(DB[k].data).includes(marca)))return false;
+  return !DB[ARCH.guias].data.guias.some(g=>String(g.oc||g.folio_oc||'')!==String(folio)
+    &&JSON.stringify(g).includes(marca));
+}
+function emparejarGuiasPrevias(folio,resueltos){
+  const lineas=guiasPreviasDe(folio).flatMap(g=>(g.items||[]).map(it=>({guia:String(g.numero),it})));
+  if(!lineas.length)return [];
+  const porCodigo=new Set(resueltos.filter(r=>r.codigo).map(r=>r.codigo));
+  const sueltas=new Map();
+  lineas.filter(l=>l.it.codigo&&!porCodigo.has(l.it.codigo)).forEach(l=>{
+    if(!sueltas.has(l.it.codigo))sueltas.set(l.it.codigo,[]);
+    sueltas.get(l.it.codigo).push(l);
+  });
+  const tomadas=new Set(),pares=[];
+  sueltas.forEach((ls,cod)=>{
+    const precios=new Set(ls.map(l=>+l.it.precio_unitario||0));
+    const cand=resueltos.filter(r=>!tomadas.has(r.pos)&&precios.has(+r.precio||0)
+      &&!(r.codigo&&lineas.some(l=>l.it.codigo===r.codigo)));
+    const base={codigoGuia:cod,guias:[...new Set(ls.map(l=>l.guia))],
+      nombreGuia:ls[0].it.nombre_guia||ls[0].it.producto,cantidad:ls.reduce((s,l)=>s+(+l.it.cantidad||0),0)};
+    if(cand.length!==1){pares.push({...base,pos:null,accion:'revisar'});return}
+    const r=cand[0];tomadas.add(r.pos);
+    const libre=codigoSoloDeGuias(cod,folio);
+    if(!libre)pares.push({...base,pos:r.pos,accion:'revisar'});
+    else if(r.estado==='nuevo'){r.estado='guia';r.codigo=cod;pares.push({...base,pos:r.pos,accion:'usar'})}
+    else pares.push({...base,pos:r.pos,accion:'fusionar',fusionar:true});
+  });
+  return pares;
+}
+function fijarFusionGuia(cod,val){const p=(ocLeida&&ocLeida.guiasPrevias||[]).find(x=>x.codigoGuia===cod);if(p)p.fusionar=val}
+function fusionarCodigoDeGuia(dup,keep,folio){
+  const d=DB[ARCH.prod].data;
+  const pd=d.productos.find(x=>x.codigo===dup),pk=d.productos.find(x=>x.codigo===keep);
+  if(!pd||!pk||dup===keep||!codigoSoloDeGuias(dup,folio))return false;
+  if(normProd(pd.nombre)!==normProd(pk.nombre)&&!pk.alias.some(a=>normProd(a)===normProd(pd.nombre)))pk.alias.push(pd.nombre);
+  d.productos=d.productos.filter(x=>x.codigo!==dup);
+  guiasPreviasDe(folio).forEach(g=>(g.items||[]).forEach(it=>{if(it.codigo===dup){it.codigo=keep;it.producto=pk.nombre}}));
+  const inv=DB[ARCH.inv].data;
+  inv.movimientos.forEach(m=>{if(m.codigo===dup){m.codigo=keep;m.producto=pk.nombre}});
+  const vd=inv.productos.find(x=>x.codigo===dup);
+  if(vd){
+    let vk=inv.productos.find(x=>x.codigo===keep);
+    if(!vk){vk={codigo:keep,nombre:pk.nombre,cantidad:0,unidad:pk.unidad};inv.productos.push(vk)}
+    vk.cantidad=(+vk.cantidad||0)+(+vd.cantidad||0);
+    inv.productos=inv.productos.filter(x=>x!==vd);
+  }
+  return true;
+}
+function reconciliarGuiasPrevias(oc){
+  let n=0;
+  for(const g of guiasPreviasDe(oc.folio)){
+    for(const it of (g.items||[])){
+      let cands=oc.items.filter(x=>x.codigo===it.codigo);
+      if(!cands.length)cands=oc.items.filter(x=>String(x.producto).trim().toUpperCase()===String(it.producto).trim().toUpperCase());
+      if(!cands.length)continue;
+      let resto=+it.cantidad||0;
+      cands.forEach((oi,ix)=>{
+        const cabe=ix===cands.length-1?resto:Math.min(resto,Math.max(0,(+oi.cantidad||0)-(+oi.cantidad_despachada||0)));
+        oi.cantidad_despachada=(+oi.cantidad_despachada||0)+cabe;
+        oi.cantidad_comprada=Math.max(+oi.cantidad_comprada||0,oi.cantidad_despachada);
+        resto-=cabe;
+      });
+    }
+    oc.guias=[...new Set([...(oc.guias||[]),String(g.numero)])];
+    if(g.notas)g.notas=g.notas.replace(/Cargada sin OC en el sistema: falta registrar la OC \d+\.?\s*/,'').trim()||null;
+    n++;
+  }
+  return n;
+}
 async function leerOCpdf(){
   const inp=document.getElementById('oc-pdf');
   const f=inp&&inp.files[0];
@@ -2519,8 +2596,10 @@ async function leerOCpdf(){
     const oc=parseOC(lineas);
     oc.items=consolidarOC(oc.items);
     const existe=ocSinDocumento(oc.folio);
+    const resueltos=resolverItems(oc.items);
     ocLeida={...oc,archivo:f,hash:h,previo:previo||null,
-             errores:validarOC(oc),resueltos:resolverItems(oc.items),
+             errores:validarOC(oc),resueltos,
+             guiasPrevias:existe?[]:emparejarGuiasPrevias(oc.folio,resueltos),
              fecha_carga:hoyISO(),fecha_entrega:fechaCompromiso(),
              existente:!!existe,diferencias:existe?diferenciasDocOC(existe,oc.items):[]};
     render();
@@ -2550,6 +2629,10 @@ async function guardarOCLeida(){
         const p=d.productos.find(x=>x.codigo===cod);
         if(p){p.codigos_cliente=p.codigos_cliente||{};if(!p.codigos_cliente.agrosuper)p.codigos_cliente.agrosuper=r.codigo_sap}
       }
+      if(r.estado==='guia'){
+        const p=d.productos.find(x=>x.codigo===cod);
+        if(p&&normProd(p.nombre)!==normProd(r.producto)&&!p.alias.some(a=>normProd(a)===normProd(r.producto)))p.alias.push(String(r.producto));
+      }
       /* Se arma un objeto NUEVO campo por campo. Antes se arrastraban propiedades sueltas de
          la línea leída (opciones, ref y demás), que apuntan a objetos del maestro y del propio
          DOM: al serializar a JSON el recorrido se cerraba sobre sí mismo y GitHub nunca
@@ -2559,6 +2642,9 @@ async function guardarOCLeida(){
               cantidad:+r.cantidad||0,unidad:String(r.unidad||'UN'),
               precio_unitario:+r.precio||0,cantidad_comprada:0,cantidad_despachada:0};
     });
+    const fusiones=(o.guiasPrevias||[]).filter(p=>p.accion==='fusionar'&&p.fusionar)
+      .map(p=>({dup:p.codigoGuia,keep:items[o.resueltos.findIndex(r=>r.pos===p.pos)]?.codigo}))
+      .filter(f=>f.keep&&fusionarCodigoDeGuia(f.dup,f.keep,o.folio));
     const ruta=`documentos/ordenes_compra/OC_${o.folio}.pdf`;
     await subirDocumento('ordenes_compra',o.archivo,`OC_${o.folio}.pdf`);
     DB[ARCH.oc].data.ordenes.push({folio:o.folio,cotizacion_id:null,cotizacion_sap:o.cotizacion_sap,
@@ -2578,22 +2664,12 @@ async function guardarOCLeida(){
        El inventario NO se toca: el ingreso y la salida ya se registraron al cargar la guía. */
     let recon=0;
     if(nueva){
-      for(const g of DB[ARCH.guias].data.guias.filter(x=>String(x.oc||x.folio_oc||'')===String(o.folio))){
-        for(const it of (g.items||[])){
-          const oi=nueva.items.find(x=>x.codigo===it.codigo)
-                ||nueva.items.find(x=>String(x.producto).trim().toUpperCase()===String(it.producto).trim().toUpperCase());
-          if(!oi)continue;
-          oi.cantidad_despachada=(+oi.cantidad_despachada||0)+(+it.cantidad||0);
-          oi.cantidad_comprada=Math.max(+oi.cantidad_comprada||0,+oi.cantidad_despachada||0);
-        }
-        nueva.guias=[...new Set([...(nueva.guias||[]),String(g.numero)])];
-        if(g.notas)g.notas=g.notas.replace(/Cargada sin OC en el sistema: falta registrar la OC \d+\.?\s*/,'').trim()||null;
-        recon++;
-      }
+      recon=reconciliarGuiasPrevias(nueva);
       if(recon){
         await guardarArchivo(ARCH.oc,`OC ${o.folio}: ${recon} guía(s) ya cargada(s) reconciliada(s)`);
         await guardarArchivo(ARCH.guias,`Guía(s) de la OC ${o.folio}: OC registrada`);
       }
+      if(fusiones.length)await guardarArchivo(ARCH.inv,`OC ${o.folio}: ${fusiones.map(f=>f.dup+' → '+f.keep).join(', ')} fusionados en el inventario`);
     }
     const res=nueva?adjudicarOCAuto(nueva):{auto:0,sug:0,sin:0};
     if(res.auto)await guardarArchivo(ARCH.adj,`OC ${o.folio}: ${res.auto} línea(s) adjudicada(s) automáticamente a cotización`);
@@ -2644,12 +2720,28 @@ function panelOCExistente(o){
     </div>
   </div>`;
 }
+function panelGuiasPrevias(o){
+  const ps=o.guiasPrevias||[];if(!ps.length)return '';
+  const linea=p=>{const r=o.resueltos.find(x=>x.pos===p.pos);
+    const g=`guía${p.guias.length>1?'s':''} N°${p.guias.join(', ')}`;
+    const dato=`<b>${esc(p.nombreGuia)}</b> <span class="mono small">${esc(p.codigoGuia)}</span> · ${num(p.cantidad)} en la ${g}`;
+    if(p.accion==='usar')return `<li class="small">${dato}: la línea "${esc(r.producto)}" usa el mismo código, sin crear uno nuevo.</li>`;
+    if(p.accion==='fusionar')return `<li class="small"><label style="display:flex;gap:6px;align-items:flex-start">
+      <input type="checkbox"${p.fusionar?' checked':''} onchange="fijarFusionGuia('${esc(p.codigoGuia)}',this.checked)">
+      <span>${dato}: lo creó la guía. Fusionarlo en <span class="mono">${esc(r.codigo||'el código de la línea')}</span> ("${esc(r.producto)}"), mismo precio. Su nombre queda como alias.</span></label></li>`;
+    return `<li class="small" style="color:var(--rojo)">${dato}: ${r?`calza por precio con "${esc(r.producto)}", pero el código ya tiene SAP o se usa en otros documentos`:'no calza con una sola línea de la OC por precio'}. No se imputa como despachado: revísalo a mano.</li>`};
+  return `<div class="card" style="border-color:var(--ambar);margin-top:12px">
+    <b>Guías ya cargadas contra esta OC</b>
+    <ul style="margin:8px 0 0 18px">${ps.map(linea).join('')}</ul>
+  </div>`;
+}
 function panelOCLeida(){
   const o=ocLeida;if(!o)return '';
   if(o.existente)return panelOCExistente(o);
   const err=o.errores;
   const filas=o.resueltos.map(r=>{
     const et=r.estado==='existente'?`<span class="chip verde">${esc(r.codigo)}</span>`
+      :r.estado==='guia'?`<span class="chip verde">${esc(r.codigo)}</span> <span class="small muted">de la guía</span>`
       :r.estado==='nuevo'?'<span class="chip ambar">producto nuevo</span>'
       :`<select onchange="fijarCodigo(${r.pos},this.value)" style="width:100%">
           <option value="">Elige el producto…</option>
@@ -2683,6 +2775,7 @@ function panelOCLeida(){
       <tr><th>Producto</th><th>Cód. SAP</th><th class="num">Cant.</th><th class="num">Precio</th><th class="num">Total</th><th>En el maestro</th></tr>
       ${filas}
     </table>
+    ${panelGuiasPrevias(o)}
     ${err.length?`<div class="card" style="border-color:var(--rojo);margin-top:12px">
       <b style="color:var(--rojo)">No se puede guardar hasta resolver esto:</b>
       <ul style="margin:8px 0 0 18px">${err.map(e=>`<li class="small">${esc(e)}</li>`).join('')}</ul>
