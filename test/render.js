@@ -20,6 +20,9 @@ const DATOS = process.argv[2] || path.join(__dirname, '..', '..', 'repo', 'data'
 
 const html = fs.readFileSync(APP, 'utf8');
 const js = html.match(/<script>([\s\S]*)<\/script>/)[1];
+const css = (html.match(/<style>([\s\S]*?)<\/style>/) || [, ''])[1];
+const abre = (css.match(/{/g) || []).length, cierra = (css.match(/}/g) || []).length;
+if (abre !== cierra) { console.error('FALLA: los estilos tienen ' + abre + ' llaves que abren y ' + cierra + ' que cierran'); process.exit(1); }
 
 /* ---- DOM mínimo: solo lo que las vistas tocan al renderizar ---- */
 const nodo = () => ({
