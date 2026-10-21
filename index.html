@@ -9,8 +9,9 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
   /* Tema claro (por defecto) */
@@ -19,114 +20,116 @@
   --campo:#FFFFFF; --hover:#EEF3F7; --sub-bg:#FAFBFC;
   --rojo:#C7392F; --rojo-bg:#FBEAE8; --ambar:#B57708; --ambar-bg:#FCF3E1;
   --verde:#2E7D4F; --verde-bg:#E7F3EC; --gris-bg:#EAEDF0; --vencida:#7A1F17;
-  --radius:10px; --mono:'IBM Plex Mono',ui-monospace,monospace; --sans:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;
+  --radius:8px; --mono:'Geist Mono',ui-monospace,monospace; --sans:'Manrope',system-ui,-apple-system,sans-serif;
   /* Escala tipográfica (guía Learn UI Design, diseño interaction-heavy).
      16px es el piso del cuerpo y de TODOS los campos: bajo eso iOS hace zoom al tocarlos.
      --escala la controla el botón de zoom de la barra superior (1 · 1,15 · 1,3). */
   --escala:1;
-  --fs-xs:calc(12.5px * var(--escala)); --fs-sm:calc(14px * var(--escala));
+  --fs-xs:calc(12px * var(--escala)); --fs-sm:calc(14px * var(--escala));
   --fs-md:calc(16px * var(--escala)); --fs-base:calc(16px * var(--escala));
   --fs-lg:calc(18px * var(--escala));
 }
 /* Tema oscuro */
 html[data-tema="oscuro"]{
-  --ink:#E4EBF1; --texto:#E4EBF1; --paper:#0E151C; --card:#16202B; --line:#2B3846; --muted:#93A5B6;
-  --barra:#080D12; --btn-bg:#E4EBF1; --btn-fg:#0E151C; --btn-bg-h:#FFFFFF;
-  --campo:#0F1821; --hover:#1E2A37; --sub-bg:#131C25;
+  --ink:#E4EBF1; --texto:#E4EBF1; --paper:#181818; --card:#1F1F1F; --line:#313131; --muted:#9B9B9B;
+  --barra:#000000; --btn-bg:#E4EBF1; --btn-fg:#181818; --btn-bg-h:#FFFFFF;
+  --campo:#181818; --hover:#272727; --sub-bg:#181818;
   --rojo:#F0897D; --rojo-bg:#3B1D19; --ambar:#E0A94D; --ambar-bg:#352712;
-  --verde:#6FCB95; --verde-bg:#123021; --gris-bg:#243040; --vencida:#5E1811;
+  --verde:#6FCB95; --verde-bg:#123021; --gris-bg:#272727; --vencida:#5E1811;
 }
 html[data-tema="oscuro"] #splash img{filter:brightness(1.08)}
 *{box-sizing:border-box;margin:0;padding:0}
+p,li{text-wrap:pretty}
+h1,h2,h3{text-wrap:balance}
 body{font-family:var(--sans);background:var(--paper);color:var(--texto);font-size:var(--fs-base);line-height:1.55;-webkit-font-smoothing:antialiased}
-header{background:var(--barra);color:#fff;padding:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-header h1{font-size:17px;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
+header{background:var(--barra);color:#fff;padding:12px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header h1{font-size:16px;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
 header .sub{font-family:var(--mono);font-size:var(--fs-sm);color:#9FB0BE;letter-spacing:.02em}
 header .conn{font-family:var(--mono);font-size:var(--fs-xs);color:#9FB0BE;cursor:pointer;text-decoration:underline dotted}
 /* Acciones de la barra: botones redondos */
-.hacciones{margin-left:auto;display:flex;align-items:center;gap:10px}
-.hbtn{width:38px;height:38px;flex:none;border-radius:50%;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.06);color:#E4EBF1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;overflow:hidden;position:relative;transition:background .15s,border-color .15s}
+.hacciones{margin-left:auto;display:flex;align-items:center;gap:12px}
+.hbtn{width:38px;height:38px;flex:none;border-radius:50%;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.06);color:#E4EBF1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;overflow:hidden;position:relative;transition:background 300ms cubic-bezier(0.32,0.72,0,1),border-color 300ms cubic-bezier(0.32,0.72,0,1)}
 .hbtn:hover{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.45)}
 .hbtn img{width:100%;height:100%;object-fit:cover;display:block}
-.hbtn i{font-size:15px}
-.hbtn .nivel{position:absolute;bottom:-1px;right:-1px;background:var(--btn-bg);color:var(--btn-fg);font-family:var(--mono);font-size:9.5px;font-weight:600;line-height:1;padding:2px 3px;border-radius:6px}
+.hbtn i{font-size:14px}
+.hbtn .nivel{position:absolute;bottom:-1px;right:-1px;background:var(--btn-bg);color:var(--btn-fg);font-family:var(--mono);font-size:12px;font-weight:600;line-height:1;padding:2px 4px;border-radius:6px}
 @media(max-width:640px){.hacciones .conn{display:none}}
 nav{background:var(--card);border-bottom:1px solid var(--line);display:flex;overflow-x:auto;position:sticky;top:0;z-index:10}
-nav button{font-family:var(--sans);font-size:var(--fs-md);font-weight:600;letter-spacing:.01em;padding:14px 18px;border:none;background:none;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;transition:color .15s}
+nav button{font-family:var(--sans);font-size:var(--fs-md);font-weight:600;letter-spacing:.01em;padding:16px 16px;border:none;background:none;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;transition:color 300ms cubic-bezier(0.32,0.72,0,1)}
 nav button:hover{color:var(--texto)}
 nav button.on{color:var(--texto);border-bottom-color:var(--texto);font-weight:700}
 main{max-width:1080px;margin:0 auto;padding:24px 16px 80px}
-h2{font-size:var(--fs-lg);font-weight:700;letter-spacing:-.005em;margin:34px 0 12px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;line-height:1.3}
+h2{font-size:var(--fs-lg);font-weight:700;letter-spacing:-.005em;margin:32px 0 12px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;line-height:1.3}
 h2:first-child{margin-top:0}
 h2 .muted{font-size:var(--fs-sm);font-weight:400}
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px;overflow-x:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:16px;overflow-x:auto}
 .card>table:first-child{margin-top:-2px}
 .mono{font-family:var(--mono);letter-spacing:-.01em}
 .muted{color:var(--muted)}
 .small{font-size:var(--fs-sm)}
 /* Rótulo de bodega dentro de una tarjeta: mismo cuerpo que el resto del texto */
-.bodega-lbl{font-size:var(--fs-base);font-weight:700;color:var(--texto);display:flex;align-items:center;gap:7px;margin:20px 0 8px}
+.bodega-lbl{font-size:var(--fs-base);font-weight:700;color:var(--texto);display:flex;align-items:center;gap:8px;margin:24px 0 8px}
 .bodega-lbl:first-child{margin-top:8px}
 .bodega-lbl .muted{font-weight:400;font-size:var(--fs-sm)}
-button.btn{font-family:var(--sans);font-weight:700;font-size:var(--fs-sm);letter-spacing:.01em;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:10px 17px;cursor:pointer;transition:background .15s}
+button.btn{font-family:var(--sans);font-weight:700;font-size:var(--fs-sm);letter-spacing:.01em;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:12px 16px;cursor:pointer;transition:background 300ms cubic-bezier(0.32,0.72,0,1)}
 button.btn:hover{background:var(--btn-bg-h)}
 button.btn.sec{background:none;color:var(--texto);border:1.5px solid var(--texto)}
-button.btn.mini{padding:7px 12px;font-size:var(--fs-xs)}
+button.btn.mini{padding:8px 12px;font-size:var(--fs-xs)}
 button.btn.peligro{background:none;border:1.5px solid var(--rojo);color:var(--rojo)}
-input,select,textarea{font-family:var(--mono);font-size:var(--fs-base);padding:10px 11px;border:1px solid var(--line);border-radius:7px;background:var(--campo);color:var(--texto);width:100%}
+input,select,textarea{font-family:var(--mono);font-size:var(--fs-base);padding:12px 12px;border:1px solid var(--line);border-radius:6px;background:var(--campo);color:var(--texto);width:100%}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--texto);outline-offset:1px}
-label{display:block;font-size:var(--fs-xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:15px 0 6px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
-.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 14px}
+label{display:block;font-size:var(--fs-xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:16px 0 8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px}
 @media(max-width:640px){.grid2,.grid3{grid-template-columns:1fr}}
 /* Semáforo */
-.sem-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.sem-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
 @media(max-width:640px){.sem-strip{grid-template-columns:repeat(2,1fr)}}
-.sem-box{border-radius:var(--radius);padding:14px;border:1px solid var(--line);background:var(--card)}
+.sem-box{border-radius:var(--radius);padding:16px;border:1px solid var(--line);background:var(--card)}
 .sem-box .n{font-family:var(--mono);font-size:30px;font-weight:600;line-height:1}
-.sem-box .l{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-top:6px}
+.sem-box .l{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-top:8px}
 .sem-box.rojo{background:var(--rojo-bg)}.sem-box.rojo .n,.sem-box.rojo .l{color:var(--rojo)}
 .sem-box.ambar{background:var(--ambar-bg)}.sem-box.ambar .n,.sem-box.ambar .l{color:var(--ambar)}
 .sem-box.verde{background:var(--verde-bg)}.sem-box.verde .n,.sem-box.verde .l{color:var(--verde)}
 .sem-box.vencida{background:var(--vencida)}.sem-box.vencida .n,.sem-box.vencida .l{color:#fff}
 /* Etiqueta de carga (fila OC) */
-.tag{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:10px;display:flex;overflow:hidden}
-.tag .bar{width:7px;flex:none}
-.tag .bar.rojo{background:var(--rojo)}.tag .bar.ambar{background:var(--ambar)}.tag .bar.verde{background:var(--verde)}
-.tag .bar.vencida{background:var(--vencida)}.tag .bar.gris{background:#AEB9C2}
+.tag{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:12px;display:flex;overflow:hidden}
+.tag .bar{display:none}
+.tag:has(>.bar.rojo){border-color:var(--rojo)}.tag:has(>.bar.ambar){border-color:var(--ambar)}.tag:has(>.bar.verde){border-color:var(--verde)}
+.tag:has(>.bar.vencida){border-color:var(--vencida)}
 /* La tarjeta recorta (overflow:hidden) para que la pestaña de color respete las esquinas
    redondeadas, pero eso dejaba SIN DESPLAZAMIENTO a las tablas de adentro, que tienen ancho
    mínimo mayor que un teléfono: la información quedaba cortada y no había forma de verla
    (Jefe, 29-07-2026). El cuerpo se desplaza en horizontal. */
-.tag .body{flex:1;padding:12px 14px;min-width:0;overflow-x:auto}
+.tag .body{flex:1;padding:12px 16px;min-width:0;overflow-x:auto}
 .tag .body>table,.tag .body .tprod{max-width:none}
-.tag .top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.tag .top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
 /* Fichas plegables de documento (cotizaciones y OC): el encabezado es el resumen y el
    detalle queda oculto hasta desplegarlo, para poder recorrer el listado de folios. */
 details.doc>summary{list-style:none;cursor:pointer;align-items:center}
 details.doc>summary::-webkit-details-marker{display:none}
-details.doc>summary::before{content:'\f105';font-family:'Font Awesome 6 Free';font-weight:900;color:var(--muted);transition:transform .15s;flex:none;width:9px}
+details.doc>summary::before{content:'\e13a';font-family:'Phosphor';font-weight:400;color:var(--muted);transition:transform 300ms cubic-bezier(0.32,0.72,0,1);flex:none;width:9px}
 details.doc[open]>summary::before{transform:rotate(90deg)}
 details.doc>summary:hover{opacity:.85}
 details.doc .resumen{margin-left:auto;font-family:var(--mono);font-size:var(--fs-xs);color:var(--muted)}
 details.doc[open] .resumen{display:none}
 .tag .folio{font-family:var(--mono);font-weight:700;font-size:var(--fs-lg);letter-spacing:-.01em}
-.chip{display:inline-block;font-family:var(--mono);font-size:var(--fs-xs);font-weight:600;padding:3px 10px;border-radius:20px;background:var(--gris-bg);color:var(--muted);white-space:nowrap}
+.chip{display:inline-block;font-family:var(--mono);font-size:var(--fs-xs);font-weight:600;padding:4px 12px;border-radius:16px;background:var(--gris-bg);color:var(--muted);white-space:nowrap}
 .chip.rojo{background:var(--rojo-bg);color:var(--rojo)}
 .chip.ambar{background:var(--ambar-bg);color:var(--ambar)}
 .chip.verde{background:var(--verde-bg);color:var(--verde)}
 .chip.vencida{background:var(--vencida);color:#fff}
 .chip.ink{background:var(--btn-bg);color:var(--btn-fg)}
 table{width:100%;border-collapse:collapse;font-size:var(--fs-sm);line-height:1.4}
-th{font-size:var(--fs-xs);font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1.5px solid var(--line);white-space:nowrap}
-td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:var(--fs-xs);font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 12px;border-bottom:1.5px solid var(--line);white-space:nowrap}
+td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
 /* Realce de fila al pasar el puntero (Jefe, 30-07-2026): permite seguir visualmente
    dónde empieza y termina cada fila. Solo aplica a filas de datos: los encabezados usan
    <th>, así que este selector no los toca. */
 tr:hover>td{background:var(--hover)}
 tr:last-child td{border-bottom:none}
 td .small{font-size:var(--fs-xs);line-height:1.4}
-td .small.sep::before{content:'·';color:var(--line);margin:0 5px}
+td .small.sep::before{content:'·';color:var(--line);margin:0 4px}
 /* Celda de una sola línea: si el texto no cabe, se corta con puntos suspensivos.
    Al hacer clic se despliega completo (puede ocupar más de una línea). */
 td.trunc{max-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
@@ -139,7 +142,7 @@ table.tprod td.trunc{max-width:none}
 table.tprod td,table.tprod th{padding-left:8px;padding-right:8px}
 table.tprod td:first-child,table.tprod th:first-child{padding-left:2px}
 table.tprod td:last-child,table.tprod th:last-child{padding-right:2px}
-.aviso-medida{color:var(--ambar);margin-right:5px;cursor:help}
+.aviso-medida{color:var(--ambar);margin-right:4px;cursor:help}
 /* Línea de una OC que aún tiene unidades por despachar: amarillo suave (Jefe, 24-07-2026) */
 tr.fila-pend>td{background:var(--ambar-bg)}
 tr.fila-adj>td{background:var(--verde-bg)}
@@ -151,52 +154,53 @@ tr.fila-adj-parcial>td{background:var(--ambar-bg)}
 tr.fila-comprada>td{background:var(--verde-bg)}
 tr.fila-comprada-parcial>td{background:var(--ambar-bg)}
 /* Alerta roja junto a una cifra (ej: se despachó más de lo comprado) */
-.alerta-cifra{color:var(--rojo);margin-left:5px;cursor:help}
+.alerta-cifra{color:var(--rojo);margin-left:4px;cursor:help}
 /* Acordeón de guías: hoja de ruta -> guías de ese viaje */
 .acc-bodega{margin-bottom:12px}
-.acc-fecha>summary{list-style:none;cursor:pointer;padding:11px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin-top:8px;font-weight:600}
+.acc-fecha>summary{list-style:none;cursor:pointer;padding:12px 16px;border:1px solid var(--line);border-radius:8px;background:var(--card);display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-top:8px;font-weight:600}
 .acc-fecha>summary .btn{flex:none}
 .acc-fecha>summary::-webkit-details-marker{display:none}
-.acc-fecha>summary::before{content:'\f105';font-family:'Font Awesome 6 Free';font-weight:900;color:var(--muted);transition:transform .15s}
+.acc-fecha>summary::before{content:'\e13a';font-family:'Phosphor';font-weight:400;color:var(--muted);transition:transform 300ms cubic-bezier(0.32,0.72,0,1)}
 .acc-fecha[open]>summary::before{transform:rotate(90deg)}
 .acc-fecha>summary .cnt{margin-left:auto;font-family:var(--mono);font-size:var(--fs-xs);color:var(--muted);font-weight:400}
 .acc-fecha>summary .chip{font-weight:400}
-.acc-fecha .cuerpo{padding:6px 0 4px 6px;min-width:0}
+.acc-fecha .cuerpo{padding:8px 0 4px 8px;min-width:0}
 /* Pestaña de color de la hoja de ruta, igual criterio que las OC (Jefe, 24-07-2026) */
-.acc-fecha.hr-gris>summary{border-left:5px solid #AEB9C2}
-.acc-fecha.hr-ambar>summary{border-left:5px solid var(--ambar)}
-.acc-fecha.hr-verde>summary{border-left:5px solid var(--verde)}
+.acc-fecha>summary::before{order:-2}
+.acc-fecha.hr-gris>summary::after,.acc-fecha.hr-ambar>summary::after,.acc-fecha.hr-verde>summary::after{content:"";order:-1;flex:none;width:8px;height:8px;border-radius:9999px;background:#AEB9C2}
+.acc-fecha.hr-ambar>summary::after{background:var(--ambar)}
+.acc-fecha.hr-verde>summary::after{background:var(--verde)}
 /* Acordeón de MES (Jefe, 30-07-2026): agrupa cotizaciones, OC y guías. Va por fuera de todo lo
    demás (incluida la agrupación por Hoja de Ruta de las guías, que se conserva adentro). Un
    nivel más grande que acc-fecha para que se note que es el contenedor exterior. */
-.acc-mes{margin-bottom:10px}
-.acc-mes>summary{list-style:none;cursor:pointer;padding:13px 16px;border:1px solid var(--line);border-radius:10px;background:var(--sub-bg);display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;font-weight:700;font-size:var(--fs-md)}
+.acc-mes{margin-bottom:12px}
+.acc-mes>summary{list-style:none;cursor:pointer;padding:12px 16px;border:1px solid var(--line);border-radius:8px;background:var(--sub-bg);display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;font-weight:700;font-size:var(--fs-md)}
 .acc-mes>summary::-webkit-details-marker{display:none}
-.acc-mes>summary::before{content:'\f105';font-family:'Font Awesome 6 Free';font-weight:900;color:var(--muted);transition:transform .15s}
+.acc-mes>summary::before{content:'\e13a';font-family:'Phosphor';font-weight:400;color:var(--muted);transition:transform 300ms cubic-bezier(0.32,0.72,0,1)}
 .acc-mes[open]>summary::before{transform:rotate(90deg)}
 .acc-mes>summary .cnt{margin-left:auto;font-family:var(--mono);font-size:var(--fs-sm);color:var(--muted);font-weight:500}
-.acc-mes .cuerpo{padding:10px 0 2px 2px}
+.acc-mes .cuerpo{padding:12px 0 2px 2px}
 /* Acordeón de AÑO (Jefe, 30-07-2026): solo aparece cuando la data cruza más de un año
    calendario. Sin esto, dos meses del mismo nombre en años distintos (dos "Junio") quedaban
    uno junto al otro y se leían como un mes duplicado. Un nivel más grande que acc-mes. */
 /* Acordeón de la cola de archivos (Jefe, 30-07-2026): cerrado por defecto y mostrando solo
    el conteo, para que una carga grande no ocupe toda la pantalla. */
-.acc-cola{border:1.5px solid var(--ambar);border-radius:10px;background:var(--card);margin-bottom:14px}
-.acc-cola>summary{list-style:none;cursor:pointer;padding:14px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:var(--fs-sm);font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ambar)}
+.acc-cola{border:1.5px solid var(--ambar);border-radius:8px;background:var(--card);margin-bottom:16px}
+.acc-cola>summary{list-style:none;cursor:pointer;padding:16px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:var(--fs-sm);font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ambar)}
 .acc-cola>summary::-webkit-details-marker{display:none}
-.acc-cola>summary::before{content:'\f105';font-family:'Font Awesome 6 Free';font-weight:900;transition:transform .15s}
+.acc-cola>summary::before{content:'\e13a';font-family:'Phosphor';font-weight:400;transition:transform 300ms cubic-bezier(0.32,0.72,0,1)}
 .acc-cola[open]>summary::before{transform:rotate(90deg)}
 .acc-cola>summary .cnt{margin-left:auto;font-family:var(--mono);font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted)}
 /* Alto de unos 5 archivos (cada fila mide ~37px: botón mini de 29px más 8px de separación).
    En em para que acompañe al zoom de la app. El resto queda bajo el scroll. */
-.acc-cola .cuerpo{padding:0 16px 14px;max-height:12.5em;overflow:auto}
+.acc-cola .cuerpo{padding:0 16px 16px;max-height:12.5em;overflow:auto}
 .acc-anio{margin-bottom:12px}
-.acc-anio>summary{list-style:none;cursor:pointer;padding:14px 16px;border:1.5px solid var(--ink);border-radius:10px;background:var(--card);display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;font-weight:800;font-size:var(--fs-lg)}
+.acc-anio>summary{list-style:none;cursor:pointer;padding:16px 16px;border:1.5px solid var(--ink);border-radius:8px;background:var(--card);display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;font-weight:700;font-size:var(--fs-lg)}
 .acc-anio>summary::-webkit-details-marker{display:none}
-.acc-anio>summary::before{content:'\f105';font-family:'Font Awesome 6 Free';font-weight:900;color:var(--muted);transition:transform .15s}
+.acc-anio>summary::before{content:'\e13a';font-family:'Phosphor';font-weight:400;color:var(--muted);transition:transform 300ms cubic-bezier(0.32,0.72,0,1)}
 .acc-anio[open]>summary::before{transform:rotate(90deg)}
 .acc-anio>summary .cnt{margin-left:auto;font-family:var(--mono);font-size:var(--fs-sm);color:var(--muted);font-weight:500}
-.acc-anio .cuerpo{padding:10px 2px 2px}
+.acc-anio .cuerpo{padding:12px 2px 2px}
 td.trunc:hover{background:var(--hover)}
 td.trunc.abierto{white-space:normal;overflow:visible;text-overflow:clip;background:var(--hover)}
 td.num,th.num{text-align:right;font-family:var(--mono);letter-spacing:-.01em}
@@ -205,40 +209,40 @@ td.num,th.num{text-align:right;font-family:var(--mono);letter-spacing:-.01em}
 .item-row button{border:none;background:none;color:var(--rojo);font-size:18px;cursor:pointer}
 .acciones{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;align-items:center}
 .vacio{text-align:center;color:var(--muted);padding:32px;font-size:var(--fs-sm)}
-#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--btn-bg);color:var(--btn-fg);font-family:var(--mono);font-size:var(--fs-sm);padding:13px 18px;border-radius:8px;display:none;z-index:99;max-width:90vw}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--btn-bg);color:var(--btn-fg);font-family:var(--mono);font-size:var(--fs-sm);padding:12px 16px;border-radius:8px;display:none;z-index:99;max-width:90vw}
 #velo{position:fixed;inset:0;background:rgba(22,35,46,.35);display:none;align-items:center;justify-content:center;z-index:50;font-family:var(--mono);color:#fff;font-size:var(--fs-md)}
-#splash{position:fixed;inset:0;background:var(--paper);display:none;align-items:center;justify-content:center;flex-direction:column;z-index:200;opacity:1;transition:opacity .6s ease}
+#splash{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:200;opacity:1;transition:opacity 700ms cubic-bezier(0.32,0.72,0,1)}
 #splash.out{opacity:0;pointer-events:none}
-#splash img{width:min(46vw,260px);animation:splashIn .7s ease}
+#splash img{width:min(46vw,260px);animation:splashIn .8s cubic-bezier(0.32,0.72,0,1)}
 @keyframes splashIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
 .modal-ov{position:fixed;inset:0;background:rgba(22,35,46,.45);display:flex;align-items:center;justify-content:center;z-index:120;padding:16px}
-.modal{background:var(--card);border-radius:var(--radius);padding:20px;max-width:460px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
-.modal .cand{display:block;width:100%;text-align:left;border:1px solid var(--line);background:var(--campo);border-radius:8px;padding:11px 13px;margin-top:8px;cursor:pointer;font-family:var(--sans);font-size:var(--fs-sm);line-height:1.4}
+.modal{background:var(--card);border-radius:var(--radius);padding:24px;max-width:460px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.modal .cand{display:block;width:100%;text-align:left;border:1px solid var(--line);background:var(--campo);border-radius:8px;padding:12px 12px;margin-top:8px;cursor:pointer;font-family:var(--sans);font-size:var(--fs-sm);line-height:1.4}
 .modal .cand:hover{border-color:var(--texto);background:var(--hover)}
-.modal .cand.nuevo{border-style:dashed;color:var(--muted);margin-top:14px}
+.modal .cand.nuevo{border-style:dashed;color:var(--muted);margin-top:16px}
 /* Ventana de ingreso de montos: reemplaza a prompt() del navegador. */
 .monto-ctx{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px}
-.monto-ctx div{background:var(--sub-bg);border:1px solid var(--line);border-radius:8px;padding:7px 11px;flex:1;min-width:96px}
+.monto-ctx div{background:var(--sub-bg);border:1px solid var(--line);border-radius:8px;padding:8px 12px;flex:1;min-width:96px}
 .monto-ctx .et{font-size:var(--fs-xs);color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
 .monto-ctx .va{font-family:var(--mono);font-size:var(--fs-lg);font-weight:600;line-height:1.25}
 .monto-campo{display:flex;align-items:stretch;gap:8px;margin-top:4px}
-.monto-campo input{font-size:26px;font-weight:600;text-align:right;padding:12px 14px;letter-spacing:-.01em}
+.monto-campo input{font-size:24px;font-weight:600;text-align:right;padding:12px 16px;letter-spacing:-.01em}
 .monto-campo .uni{display:flex;align-items:center;color:var(--muted);font-family:var(--mono);font-size:var(--fs-sm);white-space:nowrap}
-.monto-aviso{font-size:var(--fs-sm);margin-top:9px;min-height:1.3em;line-height:1.35}
+.monto-aviso{font-size:var(--fs-sm);margin-top:8px;min-height:1.3em;line-height:1.35}
 .monto-aviso.mal{color:var(--rojo);font-weight:600}
 .monto-aviso.bien{color:var(--muted)}
-.dropzone{border:2px dashed var(--line);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;background:var(--campo);transition:all .15s}
+.dropzone{border:2px dashed var(--line);border-radius:var(--radius);padding:24px;text-align:center;cursor:pointer;background:var(--campo);transition:all 300ms cubic-bezier(0.32,0.72,0,1)}
 .dropzone.hover{border-color:var(--texto);background:var(--hover)}
-.dropzone .dz-icono{font-size:26px;color:var(--muted);margin-bottom:6px}
+.dropzone .dz-icono{font-size:24px;color:var(--muted);margin-bottom:8px}
 details.form{border:1.5px dashed var(--line);border-radius:var(--radius);margin-bottom:16px;background:var(--sub-bg)}
-details.form summary{padding:14px 16px;font-weight:700;font-size:var(--fs-base);letter-spacing:0;cursor:pointer;list-style:none}
+details.form summary{padding:16px 16px;font-weight:700;font-size:var(--fs-base);letter-spacing:0;cursor:pointer;list-style:none}
 details.form summary::before{content:'+ '}
 details.form[open] summary::before{content:'– '}
 details.form .inner{padding:0 16px 16px}
 .filtro{margin-bottom:12px}
 #setup,#login{max-width:460px;margin:64px auto;padding:0 16px}
-#setup .card{padding:26px}
-#setup h1{font-size:20px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px}
+#setup .card{padding:24px}
+#setup h1{font-size:20px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px}
 #login .card{padding:40px 32px 32px;border-radius:16px;text-align:center}
 .login-logo{display:block;height:192px;max-width:100%;width:auto;margin:0 auto 8px}
 html[data-tema="oscuro"] .login-logo{background:#fff;border-radius:12px;padding:8px 12px;box-sizing:content-box}
@@ -247,7 +251,7 @@ html[data-tema="oscuro"] .login-logo{background:#fff;border-radius:12px;padding:
 .login-err:empty{display:none}
 .btn-google{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;padding:8px 12px;
   background:#1a73e8;color:#fff;border:none;border-radius:9999px;font:600 16px/24px var(--sans);cursor:pointer;
-  transition:background-color 300ms cubic-bezier(0.32,0.72,0,1),box-shadow 300ms cubic-bezier(0.32,0.72,0,1),transform 300ms cubic-bezier(0.32,0.72,0,1)}
+  transition:background-color 300ms cubic-bezier(0.32,0.72,0,1),box-shadow 300ms cubic-bezier(0.32,0.72,0,1),transform 300ms cubic-bezier(0.32,0.72,0,1)
 .btn-google .g-tile{width:32px;height:32px;border-radius:9999px;background:#fff;display:flex;align-items:center;justify-content:center;flex:none}
 .btn-google svg{width:20px;height:20px}
 .btn-google:hover{background:#1b66c9;box-shadow:0 1px 3px rgba(60,64,67,.3),0 1px 2px rgba(60,64,67,.15)}
@@ -268,16 +272,16 @@ a{color:var(--texto)}
   table.cot-lineas thead{display:none}
   table.cot-lineas td{padding:2px 0;border:none}
   table.cot-lineas td input,table.cot-lineas td select{width:100%}
-  table.cot-lineas tr.cot-a{display:grid;grid-template-columns:38px 1fr;gap:6px 8px;
+  table.cot-lineas tr.cot-a{display:grid;grid-template-columns:38px 1fr;gap:8px 8px;
     border-top:1.5px solid var(--line);padding-top:12px;margin-top:12px}
   table.cot-lineas tr.cot-a td:nth-child(1){grid-column:1;grid-row:1;align-self:start}
   table.cot-lineas tr.cot-a td:nth-child(2){grid-column:2;grid-row:1}
   table.cot-lineas tr.cot-a td:nth-child(n+3){grid-column:1/-1}
-  table.cot-lineas tr.cot-b{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:6px 8px;
-    padding:6px 0 2px}
+  table.cot-lineas tr.cot-b{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:8px 8px;
+    padding:8px 0 2px}
   table.cot-lineas tr.cot-b td:nth-child(4){grid-column:1/-1}
   table.cot-lineas tr.cot-b td:nth-child(4) button{flex:1 1 46%}
-  table.cot-lineas td[data-et]::before{content:attr(data-et);display:block;font-size:11px;
+  table.cot-lineas td[data-et]::before{content:attr(data-et);display:block;font-size:12px;
     color:var(--muted);margin-bottom:2px}
 }
 </style>
@@ -307,7 +311,7 @@ a{color:var(--texto)}
     <label>Token de acceso (fine-grained)</label>
     <input id="s-token" type="password" placeholder="github_pat_...">
     <div class="acciones"><button class="btn" onclick="conectar()">Conectar</button></div>
-    <p id="s-err" class="small" style="color:var(--rojo);margin-top:10px"></p>
+    <p id="s-err" class="small" style="color:var(--rojo);margin-top:12px"></p>
   </div>
 </div>
 
@@ -317,8 +321,8 @@ a{color:var(--texto)}
   <span class="sub" id="hoy-lbl"></span>
   <div class="hacciones">
     <button class="hbtn" id="btn-tema" onclick="alternarTema()" title="Modo oscuro" aria-label="Modo oscuro"><img src="logo-marca.png" alt=""></button>
-    <button class="hbtn" id="btn-zoom" onclick="ciclarZoom()" title="Ampliar la vista" aria-label="Ampliar la vista"><i class="fa-solid fa-magnifying-glass-plus"></i><span class="nivel" id="zoom-nivel" style="display:none"></span></button>
-    <button class="hbtn" id="btn-accesos" onclick="gestionarAccesos()" title="Accesos" aria-label="Accesos" style="display:none"><i class="fa-solid fa-user-plus"></i></button>
+    <button class="hbtn" id="btn-zoom" onclick="ciclarZoom()" title="Ampliar la vista" aria-label="Ampliar la vista"><i class="ph ph-magnifying-glass-plus"></i><span class="nivel" id="zoom-nivel" style="display:none"></span></button>
+    <button class="hbtn" id="btn-accesos" onclick="gestionarAccesos()" title="Accesos" aria-label="Accesos" style="display:none"><i class="ph ph-user-plus"></i></button>
     <span class="conn" onclick="cambiarConexion()">cambiar conexión</span>
   </div>
 </header>
@@ -647,7 +651,7 @@ async function gestionarAccesos(){
       <b>Accesos a la app</b>
       <p class="small muted" style="margin-top:4px">Cada persona entra con su cuenta de Google. Solo pueden entrar los correos de esta lista.</p>
       <div style="margin-top:12px;border-top:1px solid var(--line)">
-        ${lista.map(a=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)">
+        ${lista.map(a=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)">
           <div style="flex:1;min-width:0">
             <div style="font-weight:600">${esc(a.nombre||a.correo)}</div>
             <div class="small muted" style="overflow-wrap:anywhere">${esc(a.correo)}</div>
@@ -656,7 +660,7 @@ async function gestionarAccesos(){
           ${a.correo===FBS.usuario.correo?'':`<button class="btn mini sec" data-quitar="${esc(a.correo)}">Quitar</button>`}
         </div>`).join('')}
       </div>
-      <label style="margin-top:14px">Correo de Google</label>
+      <label style="margin-top:16px">Correo de Google</label>
       <input id="ac-correo" type="email" placeholder="nombre@gmail.com" autocomplete="off">
       <label>Nombre</label>
       <input id="ac-nombre" type="text" autocomplete="off">
@@ -899,8 +903,8 @@ function modalDuplicados(dups,nuevos){
     const ov=document.createElement('div');ov.className='modal-ov';
     ov.innerHTML=`<div class="modal" style="max-width:620px">
       <b>${dups.length===1?'Este documento ya había entrado al sistema':`${dups.length} documentos ya habían entrado al sistema`}</b>
-      <p class="small muted" style="margin-top:6px">Se comparó el contenido del archivo, no el nombre: aunque lo hayas renombrado, es el mismo documento.</p>
-      <div style="max-height:13em;overflow:auto;margin-top:10px">
+      <p class="small muted" style="margin-top:8px">Se comparó el contenido del archivo, no el nombre: aunque lo hayas renombrado, es el mismo documento.</p>
+      <div style="max-height:13em;overflow:auto;margin-top:12px">
         <table class="tprod"><colgroup><col><col style="width:15ch"></colgroup>
         <tr><th>Archivo</th><th>Subido antes</th></tr>
         ${dups.map(d=>{
@@ -913,7 +917,7 @@ function modalDuplicados(dups,nuevos){
         }).join('')}
         </table>
       </div>
-      ${nuevos.length?`<p class="small muted" style="margin-top:10px">Los otros ${nuevos.length} archivo(s) sí son nuevos: se suben de todas formas aunque descartes ${dups.length===1?'el repetido':'los repetidos'}.</p>`:''}
+      ${nuevos.length?`<p class="small muted" style="margin-top:12px">Los otros ${nuevos.length} archivo(s) sí son nuevos: se suben de todas formas aunque descartes ${dups.length===1?'el repetido':'los repetidos'}.</p>`:''}
       <div class="acciones">
         <button class="btn mini" id="dup-igual">Cargar igualmente</button>
         <button class="btn mini sec" id="dup-omitir">Descartar archivo${dups.length===1?'':'s'}</button>
@@ -999,14 +1003,14 @@ function formPendiente(tipo,accept){
     :tipo==='ordenes_compra'?'Sube aquí tanto las órdenes de compra como el reporte de pendientes SAP del cliente, tal como llegaron. El administrador reconoce cada documento y lo carga donde corresponde.'
     :'Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.';
   return `<details class="form"><summary>${titulo}</summary><div class="inner">
-    <p class="small muted" style="margin-top:10px">${ayuda}</p>
+    <p class="small muted" style="margin-top:12px">${ayuda}</p>
     <label>Archivos</label>
     <div class="dropzone" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'${tipo}')" onclick="document.getElementById('pd-file-${tipo}').click()">
       <input id="pd-file-${tipo}" type="file" accept="${accept}" multiple style="display:none" onchange="dzContar('${tipo}')" onclick="event.stopPropagation()">
-      <div class="dz-icono"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+      <div class="dz-icono"><i class="ph ph-cloud-arrow-up"></i></div>
       <div><b>Arrastra los archivos aquí</b> o haz clic para elegirlos</div>
       <div class="small muted">Se aceptan PDF, Excel, Word e imágenes · varios a la vez</div>
-      <div id="pd-count-${tipo}" class="mono small" style="margin-top:6px;color:var(--verde)"></div>
+      <div id="pd-count-${tipo}" class="mono small" style="margin-top:8px;color:var(--verde)"></div>
     </div>
     ${tipo==='guias_despacho'?`<label>Fecha de envío del viaje</label><input id="pd-fenv-${tipo}" type="date">`:''}
     <label>Nota para el administrador (opcional, aplica a todos)</label><input id="pd-nota-${tipo}" placeholder="ej: corresponden a junio 2025">
@@ -1021,7 +1025,7 @@ function listaPend(tipo){
   return `<details class="acc-cola" data-k="${esc(k)}"${fichaAbierta(k)?' open':''} ontoggle="recordarFicha(this)">
   <summary>Pendiente por procesar<span class="cnt">${ps.length} archivo${ps.length===1?'':'s'}</span></summary>
   <div class="cuerpo">
-  ${ps.map(p=>`<div class="small" style="margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+  ${ps.map(p=>`<div class="small" style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
     <span class="mono">${fFecha(p.subido)}</span>
     <a href="#" onclick="event.preventDefault();descargarArchivo('${esc(p.archivo)}')">${esc(p.nombre)}</a>
     ${p.nota?`<span class="muted">· ${esc(p.nota)}</span>`:''}
@@ -1060,7 +1064,7 @@ function aplicarZoom(z){
   const el=document.getElementById('zoom-nivel');
   if(el){el.textContent=Math.round(z*100)+'%';el.style.display=z===1?'none':'block'}
   const b=document.getElementById('btn-zoom');
-  if(b)b.querySelector('i').className=z===ZOOMS[ZOOMS.length-1]?'fa-solid fa-magnifying-glass-minus':'fa-solid fa-magnifying-glass-plus';
+  if(b)b.querySelector('i').className=z===ZOOMS[ZOOMS.length-1]?'ph ph-magnifying-glass-minus':'ph ph-magnifying-glass-plus';
 }
 function ciclarZoom(){
   const actual=+(localStorage.getItem(ZOOM_KEY)||1);
@@ -1409,12 +1413,12 @@ function panelPlanilla(){
   const conCot=_pl.filas.filter(f=>+f.precio>0);
   const neto=conCot.reduce((s,f)=>s+(+f.precio)*(+f.cantidad||0),0);
   const cl=clientePorNombre(_pl.cliente)||{};
-  return `<div id="pl-panel" class="form" style="border:2px solid var(--ambar);border-radius:10px;padding:14px;margin:12px 0">
-    <b style="font-size:15px">Planilla del cliente · ${esc(_pl.file.name)}</b>
+  return `<div id="pl-panel" class="form" style="border:2px solid var(--ambar);border-radius:8px;padding:16px;margin:12px 0">
+    <b style="font-size:14px">Planilla del cliente · ${esc(_pl.file.name)}</b>
     <p class="small muted">Los precios que pongas aquí se escriben en la columna PROV4 del MISMO archivo y te lo devuelvo completado. Dejar una línea en blanco significa NO COTIZAR ese producto: así lo entiende la planilla.</p>
-    ${(_pl.notas||[]).length?`<div class="chip rojo" style="display:block;white-space:normal;margin:8px 0;padding:10px">
+    ${(_pl.notas||[]).length?`<div class="chip rojo" style="display:block;white-space:normal;margin:8px 0;padding:12px">
       <b>Este archivo trae ${_pl.notas.length} nota(s) internas nuestras.</b> Vienen de una vez anterior en que se trabajó esta planilla, no las agregó la app. Si se lo mandas así al cliente, va a ver información que no le corresponde. Bórralas en Excel antes de enviar:
-      <ul style="margin:6px 0 0 18px">${_pl.notas.map(n=>`<li><b>${esc(n.hoja)} ${esc(n.ref)}</b>: ${esc(n.texto.slice(0,90))}${n.texto.length>90?'…':''}</li>`).join('')}</ul></div>`:''}
+      <ul style="margin:8px 0 0 16px">${_pl.notas.map(n=>`<li><b>${esc(n.hoja)} ${esc(n.ref)}</b>: ${esc(n.texto.slice(0,90))}${n.texto.length>90?'…':''}</li>`).join('')}</ul></div>`:''}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">
       <div><label>Cliente</label><select onchange="plSet('cliente',this.value)">
         ${clientes().map(c=>`<option value="${esc(c.nombre)}"${_pl.cliente===c.nombre?' selected':''}>${esc(c.corto)}</option>`).join('')}</select></div>
@@ -1423,7 +1427,7 @@ function panelPlanilla(){
       <div><label>Condición / validez</label><input list="cn-cond" value="${esc(_pl.validez)}" onchange="plSet('validez',this.value)">
         <datalist id="cn-cond">${CONDICIONES.map(x=>`<option value="${esc(x)}">`).join('')}</datalist></div>
     </div>
-    <table style="margin-top:10px"><tr><th>Producto solicitado</th><th>Bodega</th><th class="num">Cant.</th><th>Precio unitario</th></tr>
+    <table style="margin-top:12px"><tr><th>Producto solicitado</th><th>Bodega</th><th class="num">Cant.</th><th>Precio unitario</th></tr>
     ${_pl.filas.map((f,i)=>{
       const oc=f.codigo?ultimoPrecio(f.codigo,'oc'):null, co=f.codigo?ultimoPrecio(f.codigo,'cot'):null;
       return `<tr${+f.precio>0?'':' style="opacity:.62"'}>
@@ -1431,15 +1435,15 @@ function panelPlanilla(){
           <span class="small ${f.codigo?'muted':''}">${f.codigo?esc(f.codigo):'<span class="chip rojo">fuera del maestro</span>'}${f.material?' · SAP '+esc(f.material):''}</span></td>
         <td class="small">${esc(f.bodega||f.centro||'—')}</td>
         <td class="num">${num(f.cantidad)} ${esc(f.unidad)}</td>
-        <td><div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap">
+        <td><div style="display:flex;gap:8px;align-items:center;flex-wrap:nowrap">
           <input style="width:110px" placeholder="sin cotizar" value="${f.precio===''?'':esc(String(f.precio))}" onchange="plFila(${i},'precio',this.value===''?'':(+this.value||0))">
           <button class="btn mini sec" ${oc?'':'disabled'} onclick="plPrecio(${i},'oc')" title="${oc?`Adjudicado el ${fFecha(oc.fecha)} en la OC ${esc(oc.ref)}`:'Sin precio adjudicado previo'}">OC ${oc?clp(oc.precio):'—'}</button>
           <button class="btn mini sec" ${co?'':'disabled'} onclick="plPrecio(${i},'cot')" title="${co?`Ofertado el ${fFecha(co.fecha)} en ${esc(co.ref)}`:'Sin precio ofertado previo'}">Cot ${co?clp(co.precio):'—'}</button>
         </div></td></tr>`}).join('')}
     </table>
     <div class="small muted" style="margin-top:8px">${conCot.length} de ${_pl.filas.length} línea(s) cotizadas · neto ${clp(neto)}</div>
-    <div class="acciones" style="margin-top:10px">
-      <button class="btn" onclick="generarPlanilla()"><i class="fa-solid fa-file-excel"></i> Generar y descargar el Excel</button>
+    <div class="acciones" style="margin-top:12px">
+      <button class="btn" onclick="generarPlanilla()"><i class="ph ph-file-xls"></i> Generar y descargar el Excel</button>
       <button class="btn sec" onclick="cancelarPlanilla()">Cancelar</button>
     </div></div>`;
 }
@@ -1698,11 +1702,11 @@ function panelCotizacion(){
     .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
   const opc=(lista,tipo,valor)=>{
     if(!cont||!(cont[tipo]||[]).length)return '';
-    return (cont[tipo]||[]).map(x=>`<button class="btn mini ${x.valor===valor?'':'sec'}" title="${x.principal?'Es el principal':'Marcar como principal'}" onclick="cnPrincipal('${tipo}','${esc(x.valor)}')"><i class="fa-${x.principal?'solid':'regular'} fa-star"></i> ${esc(x.valor)}</button>`).join(' ');
+    return (cont[tipo]||[]).map(x=>`<button class="btn mini ${x.valor===valor?'':'sec'}" title="${x.principal?'Es el principal':'Marcar como principal'}" onclick="cnPrincipal('${tipo}','${esc(x.valor)}')"><i class="ph${x.principal?'-fill':''} ph-star"></i> ${esc(x.valor)}</button>`).join(' ');
   };
   const neto=_cotN.items.reduce((s,i)=>s+(+i.cantidad||0)*(+i.precio||0),0);
-  return `<div id="cn-panel" class="form" style="border:2px solid var(--ambar);border-radius:10px;padding:14px;margin:12px 0">
-    <b style="font-size:15px">Nueva cotización <span class="chip ink">${esc(folio)}</span></b>
+  return `<div id="cn-panel" class="form" style="border:2px solid var(--ambar);border-radius:8px;padding:16px;margin:12px 0">
+    <b style="font-size:14px">Nueva cotización <span class="chip ink">${esc(folio)}</span></b>
     <p class="small muted">Folio de la serie real, la misma de Facto. Participa del match con las órdenes de compra. Como Facto sigue emitiendo en paralelo, el número se toma al emitir y se comprueba que esté libre.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">
       <div><label>Cliente</label><select onchange="cnSet('cliente',this.value)">
@@ -1719,7 +1723,7 @@ function panelCotizacion(){
         ${bodegasDe(cl).concat('RETIRA CLIENTE').map(b=>`<option value="${esc(b)}"${_cotN.bodegaDefecto===b?' selected':''}>${esc(b)}</option>`).join('')}
       </select></div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:6px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:8px">
       <div><label>Email cliente</label><input value="${esc(_cotN.contacto_email)}" onchange="cnSet('contacto_email',this.value)">
         <div class="small" style="margin-top:4px">${opc(cont,'emails',_cotN.contacto_email)}</div></div>
       <div><label>Teléfono</label><input value="${esc(_cotN.contacto_fono)}" onchange="cnSet('contacto_fono',this.value)">
@@ -1727,12 +1731,12 @@ function panelCotizacion(){
     </div>
     <datalist id="cn-unidades">${UNIDADES.map(u=>`<option value="${esc(u)}">`).join('')}</datalist>
     <datalist id="cn-prods">${prods.map(p=>`<option value="${esc(p.nombre)}">`).join('')}</datalist>
-    <p class="small muted" style="margin-top:10px">La bodega va por línea: una misma cotización puede despachar a varias, y el precio cambia según la distancia (peajes y bencina).</p>
+    <p class="small muted" style="margin-top:12px">La bodega va por línea: una misma cotización puede despachar a varias, y el precio cambia según la distancia (peajes y bencina).</p>
     <table class="cot-lineas"><thead><tr><th></th><th>Producto</th><th>Descripción</th><th>Bodega</th><th class="num">Cant.</th><th>Unidad</th><th>Precio</th><th></th></tr></thead><tbody>
     ${_cotN.items.map((it,i)=>{
       const oc=it.codigo?ultimoPrecio(it.codigo,'oc'):null, co=it.codigo?ultimoPrecio(it.codigo,'cot'):null;
       return `<tr class="cot-a">
-      <td><button class="btn mini sec" onclick="cnQuitar(${i})" title="Quitar la línea"><i class="fa-solid fa-xmark"></i></button></td>
+      <td><button class="btn mini sec" onclick="cnQuitar(${i})" title="Quitar la línea"><i class="ph ph-x"></i></button></td>
       <td data-et="Producto"><input list="cn-prods" style="width:100%" value="${esc(it.producto)}" onchange="cnItem(${i},'producto',this.value)">
         <span class="small ${it.codigo?'muted':''}">${it.producto?(it.codigo?esc(it.codigo):'<span class="chip rojo">no está en el maestro</span>'):''}</span></td>
       <td data-et="Descripción"><input style="width:100%" value="${esc(it.descripcion)}" onchange="cnItem(${i},'descripcion',this.value)"></td>
@@ -1742,20 +1746,20 @@ function panelCotizacion(){
       <td class="num" data-et="Cant."><input style="width:70px" value="${esc(String(it.cantidad))}" onchange="cnItem(${i},'cantidad',+this.value||0)"></td>
       <td data-et="Unidad"><input list="cn-unidades" style="width:80px" value="${esc(it.unidad||'UN')}" onchange="cnItem(${i},'unidad',this.value.toUpperCase().trim()||'UN')"></td>
       <td data-et="Precio"><input style="width:110px" value="${esc(String(it.precio))}" onchange="cnItem(${i},'precio',+this.value||0)"></td>
-      <td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <td><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn mini sec" ${oc?'':'disabled'} onclick="cnPrecio(${i},'oc')" title="${oc?`Adjudicado el ${fFecha(oc.fecha)} en la OC ${esc(oc.ref)}`:'Sin precio adjudicado previo'}">OC ${oc?clp(oc.precio):'—'}</button>
         <button class="btn mini sec" ${co?'':'disabled'} onclick="cnPrecio(${i},'cot')" title="${co?`Ofertado el ${fFecha(co.fecha)} en ${esc(co.ref)}`:'Sin precio ofertado previo'}">Cot ${co?clp(co.precio):'—'}</button>
       </div></td></tr>`}).join('')}
     </tbody></table>
-    <button class="btn mini sec" style="margin-top:6px" onclick="cnAgregar()"><i class="fa-solid fa-plus"></i> Agregar línea</button>
-    <label style="margin-top:10px">Texto de despacho ${_cotN.obsEditada?'<span class="chip ambar small">editado a mano</span>':'<span class="chip small">se arma solo</span>'}</label>
+    <button class="btn mini sec" style="margin-top:8px" onclick="cnAgregar()"><i class="ph ph-plus"></i> Agregar línea</button>
+    <label style="margin-top:12px">Texto de despacho ${_cotN.obsEditada?'<span class="chip ambar small">editado a mano</span>':'<span class="chip small">se arma solo</span>'}</label>
     <textarea rows="5" onchange="cnSet('obsDespacho',this.value)">${esc(_cotN.obsDespacho)}</textarea>
     ${_cotN.obsEditada?`<button class="btn mini sec" style="margin-top:4px" onclick="_cotN.obsEditada=false;cnTextoDespacho();render()">Volver al texto automático</button>`:''}
-    <label style="margin-top:10px">Otras observaciones (una por línea)</label>
+    <label style="margin-top:12px">Otras observaciones (una por línea)</label>
     <textarea rows="3" onchange="cnSet('observaciones',this.value)">${esc(_cotN.observaciones)}</textarea>
-    <div class="small muted" style="margin-top:6px">Neto ${clp(neto)} · IVA ${clp(Math.round(neto*0.19))} · Total ${clp(neto+Math.round(neto*0.19))}</div>
-    <div class="acciones" style="margin-top:10px">
-      <button class="btn" onclick="emitirCotizacion()"><i class="fa-solid fa-file-pdf"></i> Generar y guardar</button>
+    <div class="small muted" style="margin-top:8px">Neto ${clp(neto)} · IVA ${clp(Math.round(neto*0.19))} · Total ${clp(neto+Math.round(neto*0.19))}</div>
+    <div class="acciones" style="margin-top:12px">
+      <button class="btn" onclick="emitirCotizacion()"><i class="ph ph-file-pdf"></i> Generar y guardar</button>
       <button class="btn sec" onclick="cancelarCotizacion()">Cancelar</button>
     </div></div>`;
 }
@@ -1883,9 +1887,9 @@ async function compartirCotizacion(id){
   }
 }
 function formCotizacion(){
-  return `<div style="margin:10px 0">
-    <button class="btn" onclick="nuevaCotizacion()"><i class="fa-solid fa-file-circle-plus"></i> Nueva cotización</button>
-    <button class="btn sec" title="Sube la planilla del cliente, pon los precios y te la devuelvo completada" onclick="document.getElementById('pl-file').click()"><i class="fa-solid fa-file-excel"></i> Cotizar planilla del cliente</button>
+  return `<div style="margin:12px 0">
+    <button class="btn" onclick="nuevaCotizacion()"><i class="ph ph-file-plus"></i> Nueva cotización</button>
+    <button class="btn sec" title="Sube la planilla del cliente, pon los precios y te la devuelvo completada" onclick="document.getElementById('pl-file').click()"><i class="ph ph-file-xls"></i> Cotizar planilla del cliente</button>
     <input type="file" id="pl-file" accept=".xlsx,.xlsm" style="display:none" onchange="cargarPlanilla(this)">
   </div>${panelCotizacion()}${panelPlanilla()}`;
 }
@@ -2083,17 +2087,17 @@ function rPanel(){
     <colgroup><col><col style="width:8ch"><col style="width:8ch"><col style="width:7ch"><col style="width:14ch"></colgroup>
     <tr><th>Producto</th><th class="num">Total a despachar</th><th class="num">Pendiente</th><th class="num">Stock</th><th class="num">Compra</th></tr>
     ${cons.map(c=>`<tr class="${c.porComprar<=0?'fila-comprada':(c.comprada>0?'fila-comprada-parcial':'')}" title="${c.porComprar<=0?'Comprado':(c.comprada>0?`Comprado en parte: ${num(c.comprada)} de ${num(c.cantidad)}`:'Sin comprar')}">
-      <td class="trunc" title="${esc(c.producto)} — ${esc([...c.bodegas].join(', '))}">${medidaPendiente(c.codigo)?'<i class="fa-solid fa-ruler aviso-medida" title="El documento no especifica la medida o la talla: confirmar antes de despachar"></i>':''}${esc(c.producto)}<span class="small muted sep">${esc([...c.bodegas].join(' · '))}</span></td>
+      <td class="trunc" title="${esc(c.producto)} — ${esc([...c.bodegas].join(', '))}">${medidaPendiente(c.codigo)?'<i class="ph ph-ruler aviso-medida" title="El documento no especifica la medida o la talla: confirmar antes de despachar"></i>':''}${esc(c.producto)}<span class="small muted sep">${esc([...c.bodegas].join(' · '))}</span></td>
       <td class="num">${num(c.cantidad)}</td>
       <td class="num" style="font-weight:600">${num(c.pendiente)}</td>
       <td class="num" style="${c.stock<c.pendiente?'color:var(--rojo);font-weight:600':''}">${num(c.stock)}</td>
       <td class="num" style="white-space:nowrap">${c.porComprar>0
-        ?`<button class="btn mini sec" onclick="marcarCompra('${encodeURIComponent(c.k)}')" title="Marcar la compra de ${num(c.porComprar)}"><i class="fa-solid fa-cart-plus"></i> ${num(c.porComprar)}</button>`
-        :`<button class="btn mini" onclick="ocultarDelResumen('${encodeURIComponent(c.k)}')" title="Comprada · pulsa para quitarla del resumen"><i class="fa-solid fa-check"></i></button>`}${revertible(c)>0?`
-        <button class="btn mini sec" onclick="revertirCompra('${encodeURIComponent(c.k)}')" title="Revertir una compra ingresada por error (hasta ${num(revertible(c))})"><i class="fa-solid fa-rotate-left"></i></button>`:''}</td>
+        ?`<button class="btn mini sec" onclick="marcarCompra('${encodeURIComponent(c.k)}')" title="Marcar la compra de ${num(c.porComprar)}"><i class="ph ph-shopping-cart-simple"></i> ${num(c.porComprar)}</button>`
+        :`<button class="btn mini" onclick="ocultarDelResumen('${encodeURIComponent(c.k)}')" title="Comprada · pulsa para quitarla del resumen"><i class="ph ph-check"></i></button>`}${revertible(c)>0?`
+        <button class="btn mini sec" onclick="revertirCompra('${encodeURIComponent(c.k)}')" title="Revertir una compra ingresada por error (hasta ${num(revertible(c))})"><i class="ph ph-arrow-counter-clockwise"></i></button>`:''}</td>
     </tr>`).join('')}
   </table></div>`:`<div class="card vacio">${nOcultos?'Todo lo confirmado está comprado y oculto del resumen.':'No hay pendientes confirmados (OC ni Pendientes SAP).'}</div>`}
-  ${nOcultos?`<p class="small muted" style="margin:-6px 0 14px">${nOcultos} producto(s) comprados ocultos del resumen · <a href="#" onclick="event.preventDefault();mostrarOcultos()">volver a mostrarlos</a></p>`:''}`;
+  ${nOcultos?`<p class="small muted" style="margin:-8px 0 16px">${nOcultos} producto(s) comprados ocultos del resumen · <a href="#" onclick="event.preventDefault();mostrarOcultos()">volver a mostrarlos</a></p>`:''}`;
 
   /* ZONA INFERIOR: detalle por bodega, orden fijo Rancagua → San Francisco Mostazal → El Peumo → Longovilo.
      Se muestran SIEMPRE Total y Pendiente, aunque no haya stock. */
@@ -2106,15 +2110,15 @@ function rPanel(){
     return (typeof va==='string'?va.localeCompare(vb,'es'):va-vb)*dS});
   const grupos={};
   filas.forEach(f=>{(grupos[f.bodega]=grupos[f.bodega]||[]).push(f)});
-  const th=(lbl,campo,cls='')=>`<th class="${cls}" style="cursor:pointer;user-select:none" onclick="sortPanel('${campo}')">${lbl}${panelSort.campo===campo?(panelSort.dir>0?' <i class="fa-solid fa-arrow-up-short-wide" style="font-size:11px"></i>':' <i class="fa-solid fa-arrow-down-wide-short" style="font-size:11px"></i>'):''}</th>`;
+  const th=(lbl,campo,cls='')=>`<th class="${cls}" style="cursor:pointer;user-select:none" onclick="sortPanel('${campo}')">${lbl}${panelSort.campo===campo?(panelSort.dir>0?' <i class="ph ph-sort-ascending" style="font-size:12px"></i>':' <i class="ph ph-sort-descending" style="font-size:12px"></i>'):''}</th>`;
   const tablaGrupo=(dest,fs)=>`
-    <h2><i class="fa-solid fa-warehouse" style="font-size:15px;color:var(--muted)"></i> ${esc(dest)} <span class="muted">· ${fs.length} ítem(s) pendiente(s)</span></h2>
+    <h2><i class="ph ph-warehouse" style="font-size:14px;color:var(--muted)"></i> ${esc(dest)} <span class="muted">· ${fs.length} ítem(s) pendiente(s)</span></h2>
     <div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:600px">
       <colgroup><col style="width:12.5ch"><col><col style="width:7ch"><col style="width:8ch"><col style="width:7ch"><col style="width:9ch"></colgroup>
       <tr>${th('OC','oc')}${th('Producto','producto')}${th('Total','cantidad','num')}${th('Pendiente','pendiente','num')}${th('Stock','stock','num')}${th('Precio','precio','num')}</tr>
       ${fs.map(f=>`<tr>
         <td class="mono trunc" title="${esc(f.oc)}${f.origen==='sap'?' (Pendientes SAP)':''}">${esc(f.oc)||'—'}${f.origen==='sap'?' <span class="chip">SAP</span>':''}</td>
-        <td class="trunc" title="${esc(f.producto)}">${medidaPendiente(f.codigo)?'<i class="fa-solid fa-ruler aviso-medida" title="El documento no especifica la medida o la talla: confirmar antes de despachar"></i>':''}${esc(f.producto)}</td>
+        <td class="trunc" title="${esc(f.producto)}">${medidaPendiente(f.codigo)?'<i class="ph ph-ruler aviso-medida" title="El documento no especifica la medida o la talla: confirmar antes de despachar"></i>':''}${esc(f.producto)}</td>
         <td class="num">${num(f.cantidad)}</td>
         <td class="num" style="font-weight:600">${num(f.pendiente)}</td>
         <td class="num" style="${f.stock<f.pendiente?'color:var(--rojo);font-weight:600':''}">${num(f.stock)}</td>
@@ -2125,10 +2129,10 @@ function rPanel(){
     .concat(Object.keys(grupos).filter(b=>!bodegasOrden().includes(b)).sort((a,b)=>a.localeCompare(b,'es')));
   return `
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
-    <button class="btn mini sec" onclick="alternarNombres(this)"><i class="fa-solid fa-arrows-up-down-left-right"></i> Desplegar nombres</button>
+    <button class="btn mini sec" onclick="alternarNombres(this)"><i class="ph ph-arrows-out-cardinal"></i> Desplegar nombres</button>
   </div>
   ${zonaResumen}
-  ${DB[ARCH.pend].data.pendientes.length?`<div class="card" style="border-color:var(--ambar)"><i class="fa-solid fa-file-lines"></i> <b>${DB[ARCH.pend].data.pendientes.length}</b> documento(s) en cola esperando ser procesados por el administrador.</div>`:''}
+  ${DB[ARCH.pend].data.pendientes.length?`<div class="card" style="border-color:var(--ambar)"><i class="ph ph-file-text"></i> <b>${DB[ARCH.pend].data.pendientes.length}</b> documento(s) en cola esperando ser procesados por el administrador.</div>`:''}
   ${destOrden.length?destOrden.map(dst=>tablaGrupo(dst,grupos[dst])).join(''):'<div class="card vacio">No hay ítems pendientes de despacho.</div>'}`;
 }
 /* Fichas plegables de documento: se recuerda cuáles quedaron abiertas para que un render
@@ -2144,13 +2148,13 @@ function alternarFichas(btn){
   if(!ds.length)return;
   const abrir=ds.some(d=>!d.open);
   ds.forEach(d=>{d.open=abrir;recordarFicha(d)});
-  btn.innerHTML=abrir?'<i class="fa-solid fa-chevron-up"></i> Contraer todas'
-                     :'<i class="fa-solid fa-chevron-down"></i> Desplegar todas';
+  btn.innerHTML=abrir?'<i class="ph ph-caret-up"></i> Contraer todas'
+                     :'<i class="ph ph-caret-down"></i> Desplegar todas';
 }
 function barraFichas(){
-  return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
-    <button class="btn mini sec" onclick="alternarFichas(this)"><i class="fa-solid fa-chevron-down"></i> Desplegar todas</button>
-    <button class="btn mini sec" onclick="alternarNombres(this)"><i class="fa-solid fa-arrows-up-down-left-right"></i> Desplegar nombres</button>
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
+    <button class="btn mini sec" onclick="alternarFichas(this)"><i class="ph ph-caret-down"></i> Desplegar todas</button>
+    <button class="btn mini sec" onclick="alternarNombres(this)"><i class="ph ph-arrows-out-cardinal"></i> Desplegar nombres</button>
   </div>`;
 }
 /* Despliega o contrae de una vez todos los nombres cortados de la vista (util en celular) */
@@ -2158,8 +2162,8 @@ function alternarNombres(btn){
   const celdas=[...document.querySelectorAll('#vista td.trunc')];
   const abrir=celdas.some(c=>!c.classList.contains('abierto'));
   celdas.forEach(c=>c.classList.toggle('abierto',abrir));
-  btn.innerHTML=abrir?'<i class="fa-solid fa-compress"></i> Contraer nombres'
-                     :'<i class="fa-solid fa-arrows-up-down-left-right"></i> Desplegar nombres';
+  btn.innerHTML=abrir?'<i class="ph ph-arrows-in"></i> Contraer nombres'
+                     :'<i class="ph ph-arrows-out-cardinal"></i> Desplegar nombres';
 }
 
 /* ===== Ingreso de cantidades =====
@@ -2537,8 +2541,8 @@ function tagOC(o){
       <span class="muted small">Entrega: <span class="mono">${fFecha(o.fecha_entrega)}</span> · ${esc(o.destino||'—')}</span>
     </div>
     ${(()=>{const pc=o.items.filter(i=>(+i.cantidad||0)-(+i.cantidad_comprada||0)>0);
-      return pc.length?`<div class="small" style="margin-top:6px;color:var(--rojo)">Falta comprar: ${pc.map(i=>`${esc(i.producto)} <span class="mono">(${num((+i.cantidad||0)-(+i.cantidad_comprada||0))})</span>`).join(' · ')}</div>`:''})()}
-    ${pend.length?`<div class="small muted" style="margin-top:6px">Falta despachar: ${pend.map(i=>`${esc(i.producto)} <span class="mono">(${num((+i.cantidad||0)-(+i.cantidad_despachada||0))})</span>`).join(' · ')}</div>`:''}
+      return pc.length?`<div class="small" style="margin-top:8px;color:var(--rojo)">Falta comprar: ${pc.map(i=>`${esc(i.producto)} <span class="mono">(${num((+i.cantidad||0)-(+i.cantidad_comprada||0))})</span>`).join(' · ')}</div>`:''})()}
+    ${pend.length?`<div class="small muted" style="margin-top:8px">Falta despachar: ${pend.map(i=>`${esc(i.producto)} <span class="mono">(${num((+i.cantidad||0)-(+i.cantidad_despachada||0))})</span>`).join(' · ')}</div>`:''}
   </div></div>`;
 }
 
@@ -2903,15 +2907,15 @@ async function adjuntarDocOC(){
 function panelOCExistente(o){
   const dif=o.diferencias||[];
   return `<div class="card" style="border-color:${dif.length?'var(--ambar)':'var(--verde)'};border-width:2px">
-    <div class="top" style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+    <div class="top" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
       <span class="folio mono">OC ${esc(o.folio)}</span>
       <span class="chip ${dif.length?'ambar':'verde'}">${dif.length?'el documento no coincide del todo':'coincide con la OC del sistema'}</span>
       <span class="muted small">esta OC ya existe sin documento · solo se adjunta el archivo</span>
     </div>
     <p class="small">La orden de compra ya está en el sistema, así que no se crea otra. Se guarda el PDF en ella y no se modifica nada de su contenido.</p>
-    ${dif.length?`<div class="card" style="border-color:var(--ambar);margin-top:10px">
+    ${dif.length?`<div class="card" style="border-color:var(--ambar);margin-top:12px">
       <b>Diferencias entre el documento y la OC del sistema</b>
-      <ul style="margin:8px 0 0 18px">${dif.map(d=>`<li class="small">${esc(d)}</li>`).join('')}</ul>
+      <ul style="margin:8px 0 0 16px">${dif.map(d=>`<li class="small">${esc(d)}</li>`).join('')}</ul>
       <p class="small muted" style="margin-top:8px">Adjuntar no corrige nada: si la OC del sistema está mal, usa Modificar en su ficha.</p>
     </div>`:''}
     <div class="acciones">
@@ -2926,13 +2930,13 @@ function panelGuiasPrevias(o){
     const g=`guía${p.guias.length>1?'s':''} N°${p.guias.join(', ')}`;
     const dato=`<b>${esc(p.nombreGuia)}</b> <span class="mono small">${esc(p.codigoGuia)}</span> · ${num(p.cantidad)} en la ${g}`;
     if(p.accion==='usar')return `<li class="small">${dato}: la línea "${esc(r.producto)}" usa el mismo código, sin crear uno nuevo.</li>`;
-    if(p.accion==='fusionar')return `<li class="small"><label style="display:flex;gap:6px;align-items:flex-start">
+    if(p.accion==='fusionar')return `<li class="small"><label style="display:flex;gap:8px;align-items:flex-start">
       <input type="checkbox"${p.fusionar?' checked':''}${esAdmin()?'':' disabled'} onchange="fijarFusionGuia('${esc(p.codigoGuia)}',this.checked)">
       <span>${dato}: lo creó la guía. Fusionarlo en <span class="mono">${esc(r.codigo||'el código de la línea')}</span> ("${esc(r.producto)}"), mismo precio. Su nombre queda como alias.${esAdmin()?'':' Solo el administrador puede fusionar: la OC se guarda y la fusión queda pendiente para él.'}</span></label></li>`;
     return `<li class="small" style="color:var(--rojo)">${dato}: ${r?`calza por precio con "${esc(r.producto)}", pero el código ya tiene SAP o se usa en otros documentos`:'no calza con una sola línea de la OC por precio'}. No se imputa como despachado: revísalo a mano.</li>`};
   return `<div class="card" style="border-color:var(--ambar);margin-top:12px">
     <b>Guías ya cargadas contra esta OC</b>
-    <ul style="margin:8px 0 0 18px">${ps.map(linea).join('')}</ul>
+    <ul style="margin:8px 0 0 16px">${ps.map(linea).join('')}</ul>
   </div>`;
 }
 function panelOCLeida(){
@@ -2956,12 +2960,12 @@ function panelOCLeida(){
       <td class="num">${clp(r.total)}</td>
       <td>${et}</td></tr>`;}).join('');
   return `<div class="card" style="border-color:${err.length?'var(--rojo)':'var(--verde)'};border-width:2px">
-    <div class="top" style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+    <div class="top" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
       <span class="folio mono">OC ${esc(o.folio||'sin folio')}</span>
       <span class="chip ${err.length?'rojo':'verde'}">${err.length?'con observaciones':'todo cuadra'}</span>
       <span class="muted small">leída del PDF · confirma antes de guardar</span>
     </div>
-    ${o.previo?`<div class="card" style="border-color:var(--ambar);margin-bottom:10px"><b>Este archivo ya había entrado al sistema</b><div class="small muted">${esc(o.previo.nombre||'')} · ${esc(o.previo.estado)}${o.previo.referencia?' · '+esc(o.previo.referencia):''}</div></div>`:''}
+    ${o.previo?`<div class="card" style="border-color:var(--ambar);margin-bottom:12px"><b>Este archivo ya había entrado al sistema</b><div class="small muted">${esc(o.previo.nombre||'')} · ${esc(o.previo.estado)}${o.previo.referencia?' · '+esc(o.previo.referencia):''}</div></div>`:''}
     <div class="grid3">
       <div><label>Emisión</label><div class="mono">${fFecha(o.fecha_emision)}</div></div>
       <div><label>Entrega (carga + 10 días)</label><div class="mono">${fFecha(o.fecha_entrega)}</div><div class="small muted">plazo propio: la fecha del documento no es fiable</div></div>
@@ -2970,7 +2974,7 @@ function panelOCLeida(){
       <div><label>Cotización SAP</label><div class="mono small">${esc(o.cotizacion_sap||'sin cotización')}</div></div>
       <div><label>Total sin IVA</label><div class="mono">${clp(o.total_documento)}</div></div>
     </div>
-    <table class="tprod" style="margin-top:14px;min-width:640px">
+    <table class="tprod" style="margin-top:16px;min-width:640px">
       <colgroup><col><col style="width:12ch"><col style="width:7ch"><col style="width:10ch"><col style="width:11ch"><col style="width:20ch"></colgroup>
       <tr><th>Producto</th><th>Cód. SAP</th><th class="num">Cant.</th><th class="num">Precio</th><th class="num">Total</th><th>En el maestro</th></tr>
       ${filas}
@@ -2978,7 +2982,7 @@ function panelOCLeida(){
     ${panelGuiasPrevias(o)}
     ${err.length?`<div class="card" style="border-color:var(--rojo);margin-top:12px">
       <b style="color:var(--rojo)">No se puede guardar hasta resolver esto:</b>
-      <ul style="margin:8px 0 0 18px">${err.map(e=>`<li class="small">${esc(e)}</li>`).join('')}</ul>
+      <ul style="margin:8px 0 0 16px">${err.map(e=>`<li class="small">${esc(e)}</li>`).join('')}</ul>
       <p class="small muted" style="margin-top:8px">Si el documento no es una OC de SAP o viene con un formato distinto, súbelo a la cola y lo procesa el administrador.</p>
     </div>`:'<p class="small muted" style="margin-top:12px">Se verificó que cada línea cuadre (cantidad × precio = total), que la suma dé el total del documento, que la bodega esté en la lista y que el folio no esté cargado.</p>'}
     <div class="acciones">
@@ -3219,7 +3223,7 @@ function rCot(){
     const ocsAdj=[...new Set(adjRegistros().filter(r=>r.cot===c.id).map(r=>r.oc))];
     return `<div class="card">
       <details class="doc" data-k="cot:${esc(c.id)}"${fichaAbierta('cot:'+c.id)?' open':''} ontoggle="recordarFicha(this)">
-      <summary class="top" style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:2px">
+      <summary class="top" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:2px">
         <span class="folio mono" style="font-weight:700;margin-right:2px">COT ${esc(c.folio)}</span>
         <span class="${est}">${c.estado}</span>
         ${adj.adj||adj.parc?`<span class="chip ${adj.adj===adj.total?'verde':'ambar'}" title="Líneas totalmente adjudicadas en OC${ocsAdj.length?': '+ocsAdj.join(', '):''}">${adj.adj}/${adj.total} líneas adjudicadas</span>`:''}
@@ -3243,30 +3247,30 @@ function rCot(){
           const orden=['Rancagua','San Francisco de Mostazal','El Peumo','Longovilo'];
           const grupos=orden.filter(b=>bodegas.includes(b)).concat(bodegas.filter(b=>!orden.includes(b)));
           html=grupos.map(b=>{const its=idx.filter(([i])=>i.bodega===b);
-            return `<div class="bodega-lbl"><i class="fa-solid fa-location-dot" style="font-size:13px;color:var(--muted)"></i> ${esc(b)} <span class="muted">· ${its.length} ítem(s)</span></div>
+            return `<div class="bodega-lbl"><i class="ph ph-map-pin" style="font-size:12px;color:var(--muted)"></i> ${esc(b)} <span class="muted">· ${its.length} ítem(s)</span></div>
             <table class="tprod" style="min-width:460px"><colgroup><col><col style="width:9ch"><col style="width:11ch"><col style="width:12ch"></colgroup><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(its)}</table>`;}).join('');
         } else {
           html=`<table class="tprod" style="margin-top:12px;min-width:460px"><colgroup><col><col style="width:9ch"><col style="width:11ch"><col style="width:12ch"></colgroup><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(idx)}
             <tr><td colspan="3" style="border:none"></td><td class="num" style="font-weight:700">${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</td></tr></table>`;
         }
-        if(conBodega)html+=`<div class="small" style="text-align:right;font-weight:700;margin-top:10px;padding-top:8px;border-top:1px solid var(--line)">Neto: ${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</div>`;
+        if(conBodega)html+=`<div class="small" style="text-align:right;font-weight:700;margin-top:12px;padding-top:8px;border-top:1px solid var(--line)">Neto: ${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</div>`;
         return html;
       })()}
       ${(()=>{const x=cotFechaSospechosa(c);return x
         ?`<div class="chip ambar" style="display:block;white-space:normal;margin-top:12px" title="Los folios de Facto suben con la fecha. Si un folio mayor tiene fecha anterior, casi siempre es un documento duplicado que arrastró la fecha vieja.">Fecha sospechosa: en Facto los folios suben con la fecha, pero la ${esc(c.folio)} (${fFecha(c.fecha)}) no calza con la ${esc(x.folio)} (${fFecha(x.fecha)}), que es su vecina de folio. Si el documento se duplicó de otro, corrígelo con el botón Recotización.</div>`:''})()}
       ${c.notas?`<p class="small muted" style="margin-top:12px">${esc(c.notas)}</p>`:''}
-      ${c.archivo?`<p class="small" style="margin-top:8px"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(c.archivo)}')"><i class="fa-solid fa-download" style="font-size:12px"></i> Descargar documento</a></p>`:''}
+      ${c.archivo?`<p class="small" style="margin-top:8px"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(c.archivo)}')"><i class="ph ph-download-simple" style="font-size:12px"></i> Descargar documento</a></p>`:''}
       <div class="acciones">
       ${c.estado==='abierta'?`
-        <button class="btn mini" onclick="irASubirOC()"><i class="fa-solid fa-cloud-arrow-up"></i> El cliente envió una OC · subir documento</button>
+        <button class="btn mini" onclick="irASubirOC()"><i class="ph ph-cloud-arrow-up"></i> El cliente envió una OC · subir documento</button>
         <button class="btn mini sec" onclick="cerrarCot('${esc(c.id)}')" title="La excluye de las búsquedas de match de nuevas OC">Cerrar cotización</button>
         <button class="btn mini peligro" onclick="rechazarCot('${esc(c.id)}')">Cliente la rechazó</button>`:''}
       ${c.estado==='cerrada'?`<button class="btn mini sec" onclick="reabrirCot('${esc(c.id)}')">Reabrir</button>`:''}
-      <button class="btn mini sec" onclick="panelRecot('${esc(c.id)}')" title="Corregir la fecha y declarar a qué cotización reemplaza"><i class="fa-solid fa-rotate"></i> Recotización</button>
-      ${c.origen==='app'?`<button class="btn mini sec" onclick="correoCotizacion('${esc(c.id)}')" title="Abre el programa de correo predeterminado de Windows. El PDF hay que adjuntarlo a mano."><i class="fa-solid fa-envelope"></i> Enviar por correo</button>
-      <button class="btn mini sec" onclick="correoCotizacion('${esc(c.id)}','web')" title="Abre Outlook en el navegador, sin pasar por el programa instalado"><i class="fa-solid fa-globe"></i> Outlook web</button>
-      <button class="btn mini sec" onclick="correoCotizacion('${esc(c.id)}','copiar')" title="Copia destinatario, asunto y cuerpo para pegarlos donde quieras"><i class="fa-solid fa-copy"></i> Copiar texto</button>`:''}
-      ${c.origen==='app'&&c.archivo&&puedeCompartirPDF()?`<button class="btn mini sec" onclick="compartirCotizacion('${esc(c.id)}')" title="Abre el menú de compartir del sistema CON el PDF adjunto"><i class="fa-solid fa-share-nodes"></i> Compartir con el PDF</button>`:''}
+      <button class="btn mini sec" onclick="panelRecot('${esc(c.id)}')" title="Corregir la fecha y declarar a qué cotización reemplaza"><i class="ph ph-arrows-clockwise"></i> Recotización</button>
+      ${c.origen==='app'?`<button class="btn mini sec" onclick="correoCotizacion('${esc(c.id)}')" title="Abre el programa de correo predeterminado de Windows. El PDF hay que adjuntarlo a mano."><i class="ph ph-envelope-simple"></i> Enviar por correo</button>
+      <button class="btn mini sec" onclick="correoCotizacion('${esc(c.id)}','web')" title="Abre Outlook en el navegador, sin pasar por el programa instalado"><i class="ph ph-globe"></i> Outlook web</button>
+      <button class="btn mini sec" onclick="correoCotizacion('${esc(c.id)}','copiar')" title="Copia destinatario, asunto y cuerpo para pegarlos donde quieras"><i class="ph ph-copy"></i> Copiar texto</button>`:''}
+      ${c.origen==='app'&&c.archivo&&puedeCompartirPDF()?`<button class="btn mini sec" onclick="compartirCotizacion('${esc(c.id)}')" title="Abre el menú de compartir del sistema CON el PDF adjunto"><i class="ph ph-share-network"></i> Compartir con el PDF</button>`:''}
       </div><div id="rc-${esc(c.id)}"></div><div class="acciones">
       ${c.estado==='rechazada'?`<button class="btn mini sec" onclick="deshacerRechazoCot('${esc(c.id)}')">Deshacer el rechazo</button>`:''}
       ${esAdmin()?`<button class="btn mini peligro" onclick="borrarCot('${esc(c.id)}')">Eliminar</button>`:''}
@@ -3370,7 +3374,7 @@ function panelRecot(id){
   const cand=C.filter(x=>x.id!==id&&String(x.fecha||'')<=String(c.fecha||'9999')
       &&x.items.some(i=>cods.has(i.codigo)))
     .sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
-  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:10px">
+  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:12px">
     <b>Recotización de ${esc(c.folio)}</b>
     <p class="small muted">Cuando el vendedor rehace una cotización duplicando el documento, se arrastra la fecha vieja. Corrígela aquí: la fecha decide con qué órdenes de compra puede emparejar.</p>
     <label>Fecha real de emisión</label>
@@ -3483,14 +3487,14 @@ function rOC(){
   const psapReg=psapD.registros||[];
   return `${dlProd()}
   ${ocLeida?panelOCLeida():`<details class="form"><summary>Leer una orden de compra desde el PDF</summary><div class="inner">
-    <p class="small muted" style="margin-top:10px">Para las OC de SAP en PDF: la app las lee, valida los totales y te muestra lo que encontró para que confirmes. Nada se guarda sin tu aprobación. Si el PDF es una foto escaneada o el formato es otro, súbelo a la cola de más abajo.</p>
+    <p class="small muted" style="margin-top:12px">Para las OC de SAP en PDF: la app las lee, valida los totales y te muestra lo que encontró para que confirmes. Nada se guarda sin tu aprobación. Si el PDF es una foto escaneada o el formato es otro, súbelo a la cola de más abajo.</p>
     <label>Archivo PDF de la orden de compra</label>
     <input type="file" id="oc-pdf" accept=".pdf">
-    <div class="acciones"><button class="btn" onclick="leerOCpdf()"><i class="fa-solid fa-file-import"></i> Leer el PDF</button></div>
+    <div class="acciones"><button class="btn" onclick="leerOCpdf()"><i class="ph ph-file-arrow-down"></i> Leer el PDF</button></div>
   </div></details>`}
   ${formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${psapReg.length?`<details class="form"><summary>Ver el reporte de pendientes SAP tal como llegó (${psapReg.length} líneas)${psapD.actualizado?` · cargado el ${fFecha(psapD.actualizado)}`:''}</summary><div class="inner" style="overflow-x:auto">
-    <p class="small muted" style="margin-top:10px">Contenido crudo del último reporte del cliente, solo como respaldo: sus órdenes ya están en la lista de arriba junto a las demás. Si después se carga el documento de una de esas OC, manda el documento.</p>
+    <p class="small muted" style="margin-top:12px">Contenido crudo del último reporte del cliente, solo como respaldo: sus órdenes ya están en la lista de arriba junto a las demás. Si después se carga el documento de una de esas OC, manda el documento.</p>
     <table class="tprod" style="min-width:820px"><colgroup><col style="width:10ch"><col style="width:12ch"><col><col style="width:8ch"><col style="width:12ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"></colgroup><tr><th>Fecha doc</th><th>Doc. compras</th><th>Producto</th><th class="num">Cantidad</th><th>Bodega</th><th class="num">Por entregar</th><th class="num">Prc. neto</th><th class="num">Comprado</th></tr>
     ${psapReg.map(r=>`<tr>
       <td class="mono small">${fFecha(r.fecha_doc)}</td>
@@ -3525,20 +3529,20 @@ function rOC(){
         <span class="muted small">Emisión ${fFecha(o.fecha_emision)}${o.fecha_carga&&o.fecha_carga!==o.fecha_emision?` · <span title="Día en que se cargó al sistema">cargada ${fFecha(o.fecha_carga)}</span>`:''}${o.fecha_entrega?` · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b>`:''} · ${esc(o.destino||'—')}</span>
         <span class="resumen">${o.baja?`${o.items.length} ítem(s) · dada de baja`:`${o.items.length} ítem(s) · ${num(pendD)} por despachar`}</span>
       </summary>
-      ${o.baja?`<div class="chip rojo" style="display:block;white-space:normal;margin-top:10px;padding:10px">Dada de baja el ${fFecha(o.baja.fecha)}. Motivo: ${esc(o.baja.motivo||'no registrado')}</div>`:''}
+      ${o.baja?`<div class="chip rojo" style="display:block;white-space:normal;margin-top:12px;padding:12px">Dada de baja el ${fFecha(o.baja.fecha)}. Motivo: ${esc(o.baja.motivo||'no registrado')}</div>`:''}
       <table class="tprod" style="margin-top:12px;min-width:940px"><colgroup><col style="width:12em"><col style="width:8ch"><col style="width:10ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">P. unit.</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th><th>Guía de despacho</th></tr>
       ${o.items.map((i,ix)=>{const comp=+i.cantidad_comprada||0;
         const pend=(+i.cantidad||0)-(+i.cantidad_despachada||0);
         return `<tr${pend>0&&!o.baja?' class="fila-pend"':''}><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num" style="${comp<i.cantidad&&!o.baja?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(pend)}</td><td>${celdaGuiasOC(o,i)}</td></tr>`}).join('')}</table>
-      ${o.compras?.length?`<p class="small muted" style="margin-top:6px">Compras: ${o.compras.map(c=>`<span class="mono">${fFecha(c.fecha)}</span> ${esc(c.proveedor||'s/proveedor')} (${c.items.map(i=>`${esc(i.producto)} ×${num(i.cantidad)}`).join(', ')})`).join(' · ')}</p>`:''}
-      ${o.guias?.length?`<p class="small muted" style="margin-top:6px">Guías: <span class="mono">${o.guias.map(esc).join(', ')}</span></p>`:''}
+      ${o.compras?.length?`<p class="small muted" style="margin-top:8px">Compras: ${o.compras.map(c=>`<span class="mono">${fFecha(c.fecha)}</span> ${esc(c.proveedor||'s/proveedor')} (${c.items.map(i=>`${esc(i.producto)} ×${num(i.cantidad)}`).join(', ')})`).join(' · ')}</p>`:''}
+      ${o.guias?.length?`<p class="small muted" style="margin-top:8px">Guías: <span class="mono">${o.guias.map(esc).join(', ')}</span></p>`:''}
       ${o.archivo?`<p class="small"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(o.archivo)}')">Descargar documento</a></p>`:''}
       ${o.baja?'':`<div class="acciones">
         ${ocComp(o)<ocTot(o)?`<button class="btn mini sec" onclick="toggleCompra('${encodeURIComponent(o.folio)}')">Registrar compra</button>`:''}
-        ${e!=='despachada'?`<button class="btn mini" onclick="irASubir('guias')" title="Sube la guía de despacho de esta OC"><i class="fa-solid fa-cloud-arrow-up"></i> Despachar</button>`:''}
-        ${o.sin_documento?`<button class="btn mini sec" onclick="irASubirOC()" title="Sube el documento de esta OC para poder editarla y darla de baja"><i class="fa-solid fa-cloud-arrow-up"></i> Subir su documento</button>`
-          :`${!o.archivo?`<button class="btn mini sec" onclick="irASubirOC()" title="Adjunta el PDF de esta OC sin crear otra"><i class="fa-solid fa-cloud-arrow-up"></i> Subir su documento</button>`:''}
-        <button class="btn mini sec" onclick="editOC('${encodeURIComponent(o.folio)}')"><i class="fa-solid fa-pen"></i> Modificar</button>
+        ${e!=='despachada'?`<button class="btn mini" onclick="irASubir('guias')" title="Sube la guía de despacho de esta OC"><i class="ph ph-cloud-arrow-up"></i> Despachar</button>`:''}
+        ${o.sin_documento?`<button class="btn mini sec" onclick="irASubirOC()" title="Sube el documento de esta OC para poder editarla y darla de baja"><i class="ph ph-cloud-arrow-up"></i> Subir su documento</button>`
+          :`${!o.archivo?`<button class="btn mini sec" onclick="irASubirOC()" title="Adjunta el PDF de esta OC sin crear otra"><i class="ph ph-cloud-arrow-up"></i> Subir su documento</button>`:''}
+        <button class="btn mini sec" onclick="editOC('${encodeURIComponent(o.folio)}')"><i class="ph ph-pencil-simple"></i> Modificar</button>
         ${esAdmin()?`<button class="btn mini peligro" onclick="borrarOC('${encodeURIComponent(o.folio)}')">Dar de baja</button>`:''}`}
       </div>`}
       <div id="fc-${encodeURIComponent(o.folio)}"></div>
@@ -3704,7 +3708,7 @@ function rGuias(){
   ${(()=>{ // Hojas de ruta que quedaron SIN guías (p. ej. tras eliminar todas): no aparecerían
      // en ningún grupo de abajo, así que se avisan aquí para no perderlas de vista.
      const huerfanas=hrs.filter(h=>!(h.guias||[]).length);
-     return huerfanas.length?`<div class="card" style="border-color:var(--ambar)"><i class="fa-solid fa-triangle-exclamation" style="color:var(--ambar)"></i> ${huerfanas.map(h=>`Hoja de Ruta N°${esc(String(h.numero))} (envío ${fFecha(h.fecha_envio||h.fecha)}) quedó sin guías.`).join(' ')} Reingresa una guía con esa fecha de envío para reincorporarla.</div>`:'';
+     return huerfanas.length?`<div class="card" style="border-color:var(--ambar)"><i class="ph ph-warning" style="color:var(--ambar)"></i> ${huerfanas.map(h=>`Hoja de Ruta N°${esc(String(h.numero))} (envío ${fFecha(h.fecha_envio||h.fecha)}) quedó sin guías.`).join(' ')} Reingresa una guía con esa fecha de envío para reincorporarla.</div>`:'';
    })()}
   <h2>Guías registradas</h2>
   ${DB[ARCH.guias].data.guias.length?barraFichas():''}
@@ -3733,9 +3737,9 @@ function rGuias(){
       const tp=hoja?hrTipo(hoja):'ruta', num=hoja?String(hoja.numero):String(k).split(':')[1];
       const dests=[...new Set(lista.map(g=>normBodega(g.destino||'Sin destino')))]
         .sort((a,b)=>bodegasOrden().indexOf(a)-bodegasOrden().indexOf(b));
-      const btnGen=sin?'':`<button class="btn mini sec" title="${hoja&&hoja.archivo?'Rehacer el documento con las guías que tiene hoy':'Crear el documento Word'}" onclick="event.preventDefault();event.stopPropagation();generarDocumento('${esc(tp)}','${esc(num)}')"><i class="fa-solid fa-file-word"></i> ${hoja&&hoja.archivo?'Regenerar':'Generar'}</button>`;
+      const btnGen=sin?'':`<button class="btn mini sec" title="${hoja&&hoja.archivo?'Rehacer el documento con las guías que tiene hoy':'Crear el documento Word'}" onclick="event.preventDefault();event.stopPropagation();generarDocumento('${esc(tp)}','${esc(num)}')"><i class="ph ph-file-doc"></i> ${hoja&&hoja.archivo?'Regenerar':'Generar'}</button>`;
       const desc=(hoja&&hoja.archivo
-        ?`<button class="btn mini" title="Descargar ${esc(hrLbl(tp))} N°${esc(num)}" onclick="event.preventDefault();event.stopPropagation();descargarArchivo('${esc(hoja.archivo)}','${esc(HR_TIPOS[tp].archivo)}_N${esc(num)}_${esc(fFecha(hoja.fecha_envio||hoja.fecha))}.docx')"><i class="fa-solid fa-download"></i> ${esc(hrLbl(tp))}</button>`
+        ?`<button class="btn mini" title="Descargar ${esc(hrLbl(tp))} N°${esc(num)}" onclick="event.preventDefault();event.stopPropagation();descargarArchivo('${esc(hoja.archivo)}','${esc(HR_TIPOS[tp].archivo)}_N${esc(num)}_${esc(fFecha(hoja.fecha_envio||hoja.fecha))}.docx')"><i class="ph ph-download-simple"></i> ${esc(hrLbl(tp))}</button>`
         :(sin?'':'<span class="chip ambar" title="El documento aún no se ha generado">sin archivo</span>'))+btnGen;
       const he=hojaEstado(lista);
       const nConf=lista.filter(g=>g.conforme).length;
@@ -3775,10 +3779,10 @@ function tarjetaGuia(g){
   const hayFalta=g.items.some(i=>faltaCompra(i)>0);
   const ge=guiaEstado(g);
   return `<div class="tag"><div class="bar ${GUIA_ESTADO_COLOR[ge]}"></div><div class="body">
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
       <span class="mono" style="font-weight:700;font-size:var(--fs-lg)">Guía N° ${esc(g.numero)}</span>
       <span class="chip ${GUIA_ESTADO_COLOR[ge]}">${GUIA_ESTADO_LBL[ge]}</span>
-      <span class="chip"><i class="fa-solid fa-warehouse" style="font-size:11px"></i> ${esc(normBodega(g.destino||'Sin destino'))}</span>
+      <span class="chip"><i class="ph ph-warehouse" style="font-size:12px"></i> ${esc(normBodega(g.destino||'Sin destino'))}</span>
       <span class="chip" title="Fecha de la guía">${fFecha(g.fecha)}</span>
       <span class="chip ink">OC ${esc(g.oc||g.folio_oc)}</span>
       ${(()=>{ /* Guía sin OC cargada: el reporte del cliente basta como respaldo (Jefe, 20-08-2026).
@@ -3791,7 +3795,7 @@ function tarjetaGuia(g){
            del todo, que no dejan registro con saldo. Una OC entregada completa igual existe. */
         const hay=((meta.folios_reporte||[]).includes(folio))
                ||(meta.registros||[]).some(r=>String(r.doc_compras||'')===folio);
-        return hay?`<span class="chip verde" title="El folio viene en el reporte de Pendientes SAP${meta.actualizado?` del ${fFecha(meta.actualizado)}`:''}: la OC existe, solo falta que el cliente la envíe"><i class="fa-solid fa-file-circle-check" style="font-size:11px"></i> Respaldada por reporte SAP</span>`
+        return hay?`<span class="chip verde" title="El folio viene en el reporte de Pendientes SAP${meta.actualizado?` del ${fFecha(meta.actualizado)}`:''}: la OC existe, solo falta que el cliente la envíe"><i class="ph ph-seal-check" style="font-size:12px"></i> Respaldada por reporte SAP</span>`
                   :`<span class="chip rojo" title="Ni la OC ni el reporte del cliente respaldan esta guía">Sin OC ni respaldo</span>`;
       })()}
       ${g.hoja_ruta?'':'<span class="chip ambar">Sin documento asignado</span>'}
@@ -3807,22 +3811,22 @@ function tarjetaGuia(g){
       const falta=faltaCompra(i);
       return `<tr>
         <td class="trunc" title="${esc(no||i.producto)}${dif?' — en la guía: '+esc(otro):''}">${esc(no||i.producto)}${dif?`<span class="small muted sep" title="Nombre con que salió en la guía">${esc(otro)}</span>`:''}</td>
-        <td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}${falta>0?` <i class="fa-solid fa-circle-exclamation alerta-cifra" title="Se despacharon ${num(i.cantidad)} pero faltan ${num(falta)} por registrar como comprados. Ingresa la compra para cuadrar el inventario."></i>`:''}</td></tr>`}).join('')}</table>
-    ${hayFalta?`<div style="margin-top:10px"><button class="btn mini" style="background:none;border:1.5px solid var(--rojo);color:var(--rojo)" onclick="compraFaltante('${esc(g.numero)}',this)"><i class="fa-solid fa-cart-plus"></i> Ingresar compra faltante</button>
+        <td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}${falta>0?` <i class="ph ph-warning-circle alerta-cifra" title="Se despacharon ${num(i.cantidad)} pero faltan ${num(falta)} por registrar como comprados. Ingresa la compra para cuadrar el inventario."></i>`:''}</td></tr>`}).join('')}</table>
+    ${hayFalta?`<div style="margin-top:12px"><button class="btn mini" style="background:none;border:1.5px solid var(--rojo);color:var(--rojo)" onclick="compraFaltante('${esc(g.numero)}',this)"><i class="ph ph-shopping-cart-simple"></i> Ingresar compra faltante</button>
       <div id="cf-${esc(g.numero)}"></div></div>`:''}
-    ${(g.rectificaciones||[]).length?`<div class="small" style="margin-top:10px;border-left:3px solid var(--ambar);padding-left:9px">
+    ${(g.rectificaciones||[]).length?`<div class="small" style="margin-top:12px;border:1px solid var(--ambar);border-radius:8px;padding:8px 12px">
       ${g.rectificaciones.map((r,ri)=>`<div><b>Rectificada ${fFecha(r.fecha)}</b> — ${r.items.map(x=>`${esc(x.producto)} <span class="mono">−${num(x.cantidad)}</span> (${x.motivo==='merma'?'perdido o roto':'quedó en bodega'})`).join(' · ')}${r.nota?` · ${esc(r.nota)}`:''}
-        <button class="btn mini sec" style="margin-left:6px" onclick="anularRectificacion('${esc(g.numero)}',${ri})" title="Deshacer esta rectificación y dejar la guía como estaba"><i class="fa-solid fa-arrow-rotate-left"></i> Anular</button></div>`).join('')}
+        <button class="btn mini sec" style="margin-left:8px" onclick="anularRectificacion('${esc(g.numero)}',${ri})" title="Deshacer esta rectificación y dejar la guía como estaba"><i class="ph ph-arrow-counter-clockwise"></i> Anular</button></div>`).join('')}
     </div>`:''}
-    <div class="acciones" style="margin-top:10px">
-      ${!hojaDeGuia(g)?'':`${g.conforme?'':`<button class="btn mini" onclick="conformarGuia('${esc(g.numero)}')" title="El despacho salió tal como dice la guía"><i class="fa-solid fa-check"></i> Guía conforme</button>`}
-      <button class="btn mini sec" onclick="rectificarGuia('${esc(g.numero)}')" title="Hubo productos que no se pudieron despachar"><i class="fa-solid fa-rotate-left"></i> Rectificar${g.conforme?'':' guía'}</button>`}
-      <button class="btn mini sec" onclick="moverGuia('${esc(g.numero)}')" title="Cambiar esta guía de viaje (hoja de ruta)"><i class="fa-solid fa-arrows-turn-to-dots"></i> Mover de hoja</button>
+    <div class="acciones" style="margin-top:12px">
+      ${!hojaDeGuia(g)?'':`${g.conforme?'':`<button class="btn mini" onclick="conformarGuia('${esc(g.numero)}')" title="El despacho salió tal como dice la guía"><i class="ph ph-check"></i> Guía conforme</button>`}
+      <button class="btn mini sec" onclick="rectificarGuia('${esc(g.numero)}')" title="Hubo productos que no se pudieron despachar"><i class="ph ph-arrow-counter-clockwise"></i> Rectificar${g.conforme?'':' guía'}</button>`}
+      <button class="btn mini sec" onclick="moverGuia('${esc(g.numero)}')" title="Cambiar esta guía de viaje (hoja de ruta)"><i class="ph ph-flow-arrow"></i> Mover de hoja</button>
       ${/* Descargar el PDF original de Facto, igual que en las OC (Jefe, 20-08-2026).
            Se baja con el nombre Guia_N.pdf, no con el nombre largo del DTE. */''}
-      ${g.archivo?`<button class="btn mini sec" onclick="descargarArchivo('${esc(g.archivo)}','Guia_${esc(g.numero)}.pdf')" title="Descargar el PDF de la guía N°${esc(g.numero)}"><i class="fa-solid fa-download"></i> Descargar guía</button>`:''}
+      ${g.archivo?`<button class="btn mini sec" onclick="descargarArchivo('${esc(g.archivo)}','Guia_${esc(g.numero)}.pdf')" title="Descargar el PDF de la guía N°${esc(g.numero)}"><i class="ph ph-download-simple"></i> Descargar guía</button>`:''}
     </div>
-    ${hojaDeGuia(g)?'':`<p class="small muted" style="margin-top:6px">Para confirmarla o rectificarla, primero asígnala a una Hoja de Ruta o a un Resumen de Retiros.</p>`}
+    ${hojaDeGuia(g)?'':`<p class="small muted" style="margin-top:8px">Para confirmarla o rectificarla, primero asígnala a una Hoja de Ruta o a un Resumen de Retiros.</p>`}
     <div id="mv-${esc(g.numero)}"></div>
     <div id="rg-${esc(g.numero)}"></div>
   </div></div>`;
@@ -3847,7 +3851,7 @@ function moverGuia(numero){
   const abiertas=hojas.filter(h=>(h.estado||'borrador')==='borrador')
     .sort((a,b)=>pesoTipo(a)-pesoTipo(b)||(+b.numero)-(+a.numero));
 
-  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:10px">
+  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:12px">
     <b>Mover la guía N°${esc(numero)} a otro documento</b>
     <p class="small muted">Puede ir a una Hoja de Ruta (la entregamos nosotros) o a un Resumen de Retiros (la retira el cliente). La guía tomará la fecha del documento de destino, y los documentos afectados quedarán "sin archivo" hasta regenerarlos.</p>
     <label>Documento de destino</label>
@@ -3952,7 +3956,7 @@ function rectificarGuia(numero){
   if(!hojaDeGuia(g)){toast(GUIA_SIN_HOJA);return}
   const box=document.getElementById('rg-'+numero);
   if(box.innerHTML){box.innerHTML='';return}
-  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:10px">
+  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:12px">
     <b>Rectificar la guía N°${esc(numero)}</b>
     <p class="small muted">Indica cuántas unidades NO se pudieron despachar. Volverán a quedar pendientes en la OC ${esc(g.oc||g.folio_oc)} y reaparecerán en el Panel.</p>
     <table class="tprod" style="margin-top:8px;min-width:520px"><colgroup><col><col style="width:9ch"><col style="width:12ch"><col style="width:19ch"></colgroup>
@@ -4154,8 +4158,8 @@ function compraFaltante(numero,btn){
       <div><label>Proveedor</label><input id="cf-prov-${numero}" placeholder="ej: Ferretería El Volcán"></div>
       <div><label>Fecha de compra</label><input id="cf-fecha-${numero}" type="date" value="${hoyISO()}"></div>
     </div>
-    <label style="text-transform:none;font-weight:400;letter-spacing:0;display:flex;gap:8px;align-items:center;margin-top:10px;color:var(--texto)"><input type="checkbox" id="cf-bod-${numero}" checked style="width:auto"> Ingresar al inventario</label>
-    <table class="tprod" style="margin-top:10px;min-width:440px"><colgroup><col><col style="width:10ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Falta comprar</th><th>Comprado ahora</th></tr>
+    <label style="text-transform:none;font-weight:400;letter-spacing:0;display:flex;gap:8px;align-items:center;margin-top:12px;color:var(--texto)"><input type="checkbox" id="cf-bod-${numero}" checked style="width:auto"> Ingresar al inventario</label>
+    <table class="tprod" style="margin-top:12px;min-width:440px"><colgroup><col><col style="width:10ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Falta comprar</th><th>Comprado ahora</th></tr>
     ${faltas.map(f=>`<tr><td class="trunc" title="${esc(f.producto)}">${esc(f.producto)}</td><td class="num" style="color:var(--rojo);font-weight:600">${num(f.falta)}</td><td><input type="number" data-ix="${f.ix}" min="0" step="any" value="${f.falta}"></td></tr>`).join('')}</table>
     <div class="acciones"><button class="btn mini" onclick="guardarCompraFaltante('${numero}')">Guardar compra</button><button class="btn mini sec" onclick="compraFaltante('${numero}',this)">Cancelar</button></div>
   </div>`;
@@ -4380,14 +4384,14 @@ function rPrecios(){
     const d=ps[0].precio-ps[1].precio;
     if(!d)return '<span class="muted" title="Sin cambio respecto al precio anterior">=</span>';
     const pct=Math.round(Math.abs(d)/ps[1].precio*100);
-    return `<span style="color:var(--${d>0?'rojo':'verde'})" title="${d>0?'Subió':'Bajó'} ${clp(Math.abs(d))} respecto al precio anterior"><i class="fa-solid fa-arrow-${d>0?'up':'down'}" style="font-size:11px"></i> ${pct}%</span>`;
+    return `<span style="color:var(--${d>0?'rojo':'verde'})" title="${d>0?'Subió':'Bajó'} ${clp(Math.abs(d))} respecto al precio anterior"><i class="ph ph-arrow-${d>0?'up':'down'}" style="font-size:12px"></i> ${pct}%</span>`;
   };
   return `
   <h2>Lista de precios <span class="muted">· ${conPrecio} de ${prods.length} artículos con precio de OC</span></h2>
   <div class="filtro"><input placeholder="Buscar producto o código…" value="${esc(preFiltro)}" oninput="preFiltro=this.value;render();const i=document.querySelector('.filtro input');i.focus();i.setSelectionRange(i.value.length,i.value.length)"></div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
-    <button class="btn mini ${preSoloCon?'':'sec'}" onclick="preSoloCon=!preSoloCon;render()"><i class="fa-solid fa-${preSoloCon?'check':'filter'}"></i> Solo con precio</button>
-    <button class="btn mini sec" onclick="alternarNombres(this)"><i class="fa-solid fa-arrows-up-down-left-right"></i> Desplegar nombres</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
+    <button class="btn mini ${preSoloCon?'':'sec'}" onclick="preSoloCon=!preSoloCon;render()"><i class="ph ph-${preSoloCon?'check':'funnel'}"></i> Solo con precio</button>
+    <button class="btn mini sec" onclick="alternarNombres(this)"><i class="ph ph-arrows-out-cardinal"></i> Desplegar nombres</button>
     <span class="small muted">${filas.length} artículo(s) en pantalla</span>
   </div>
   ${filas.length?`<div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:960px">
@@ -4395,7 +4399,7 @@ function rPrecios(){
     <tr><th></th><th>Producto</th><th class="num">Último precio</th><th class="num">Var.</th><th class="num">Anterior</th><th class="num">2 atrás</th><th class="num">3 atrás</th><th class="num">Cotizado</th></tr>
     ${filas.map(f=>{const ps=f.precios;
       return `<tr>
-        <td>${f.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto('${esc(f.codigo)}')"><i class="fa-solid fa-pen"></i></button>`:''}</td>
+        <td>${f.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto('${esc(f.codigo)}')"><i class="ph ph-pencil-simple"></i></button>`:''}</td>
         <td class="trunc" title="${esc(f.nombre)}${f.codigo?' — '+esc(f.codigo):''}">${esc(f.nombre)}${f.codigo?` <span class="muted small mono">${esc(f.codigo)}</span>`:''}</td>
         <td class="num" style="font-weight:700">${ps[0]?celda(ps[0]):'<span class="muted">—</span>'}</td>
         <td class="num small">${variacion(ps)}</td>
@@ -4756,14 +4760,14 @@ function panelGuiaLeida(){
     const ls=(doc?doc.items:[]).map(x=>`<option value="${esc(x.codigo)}"${it.codigo===x.codigo?' selected':''}${usados.includes(x.codigo)?' disabled':''}>${esc(x.producto)} · ${num(x.cantidad)} @ ${clp(x.precio_unitario)}</option>`).join('');
     return `<option value="">— sin asignar —</option>${ls}<option value="__nuevo__"${it.codigo==='__nuevo__'?' selected':''}>No está en la OC: usar el nombre de la guía</option>`;
   };
-  return `<div id="gl-panel" class="form" style="border:2px solid var(--ambar);border-radius:10px;padding:14px;margin:12px 0">
-    <b style="font-size:15px">Revisar la guía N°${esc(g.numero||'?')} antes de guardar</b>
+  return `<div id="gl-panel" class="form" style="border:2px solid var(--ambar);border-radius:8px;padding:16px;margin:12px 0">
+    <b style="font-size:14px">Revisar la guía N°${esc(g.numero||'?')} antes de guardar</b>
     <p class="small muted">Lo que confirmes descuenta inventario y suma al despachado de la OC. La fecha de envío no se pide: la toma cuando la asignes a una Hoja de Ruta o a un Resumen de Retiros.
       ${doc?`Los productos se emparejaron contra la <b>${esc(fuente)}</b> ${esc(g.oc||'')}.`:''}</p>
     ${g.avisos.length?`<div class="chip ambar" style="display:block;white-space:normal;margin:8px 0">${g.avisos.map(esc).join(' · ')}</div>`:''}
     ${(()=>{const d=guiaDescuadre(g);return d?`<div class="card" style="border-color:var(--rojo);margin:8px 0">
       <b style="color:var(--rojo)">Esta guía no se puede guardar: las líneas no suman el neto</b>
-      <p class="small" style="margin-top:6px">Las líneas leídas suman ${clp(g.neto-d)} y el neto del documento es ${clp(g.neto)}: ${d>0?`faltan ${clp(d)}`:`sobran ${clp(-d)}`}. El lector no tomó bien alguna línea del documento. Si corregiste una cantidad a mano, revísala; si no, súbela a la cola de guías para que la procese el administrador.</p>
+      <p class="small" style="margin-top:8px">Las líneas leídas suman ${clp(g.neto-d)} y el neto del documento es ${clp(g.neto)}: ${d>0?`faltan ${clp(d)}`:`sobran ${clp(-d)}`}. El lector no tomó bien alguna línea del documento. Si corregiste una cantidad a mano, revísala; si no, súbela a la cola de guías para que la procese el administrador.</p>
     </div>`:''})()}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
       <div><label>N° Guía</label><input value="${esc(g.numero||'')}" onchange="glCab('numero',this.value)"></div>
@@ -4774,15 +4778,15 @@ function panelGuiaLeida(){
       <div><label>Chofer</label><input value="${esc(g.chofer||'')}" onchange="glCab('chofer',this.value)"></div>
       <div><label>Patente</label><input value="${esc(g.patente||'')}" onchange="glCab('patente',this.value)"></div>
     </div>
-    <table style="margin-top:10px"><tr><th>Producto en la guía</th><th class="num">Cant.</th><th class="num">Precio</th><th>Producto del sistema</th></tr>
+    <table style="margin-top:12px"><tr><th>Producto en la guía</th><th class="num">Cant.</th><th class="num">Precio</th><th>Producto del sistema</th></tr>
     ${g.items.map((it,i)=>{const m=MATCH[it.match]||MATCH.sin_match;return `<tr>
       <td class="trunc" title="${esc(it.nombre_guia)}">${esc(it.nombre_guia)}<br><span class="chip ${m[0]} small" title="${esc(m[1])}">${esc(it.match||'—')}</span></td>
       <td class="num"><input style="width:70px" value="${esc(String(it.cantidad))}" onchange="glSet(${i},'cantidad',+this.value||0)"></td>
       <td class="num mono">${clp(it.precio_unitario)}</td>
       <td><select onchange="glSet(${i},'codigo',this.value)">${opciones(it)}</select></td></tr>`}).join('')}
     </table>
-    <div class="small muted" style="margin-top:6px">Neto ${clp(g.neto)} · IVA ${clp(g.iva)} · Total ${clp(g.total)}</div>
-    <div class="acciones" style="margin-top:10px">
+    <div class="small muted" style="margin-top:8px">Neto ${clp(g.neto)} · IVA ${clp(g.iva)} · Total ${clp(g.total)}</div>
+    <div class="acciones" style="margin-top:12px">
       <button class="btn" onclick="guardarGuiaLeida()">Guardar la guía</button>
       <button class="btn sec" onclick="cancelarGuiaLeida()">Cancelar</button>
     </div></div>`;
@@ -4862,7 +4866,7 @@ async function guardarGuiaLeida(){
 }
 function formLeerGuia(){
   return `<details class="form" open><summary>Cargar guía de despacho desde el PDF</summary><div class="inner">
-    <p class="small muted" style="margin-top:10px">Sube el PDF de Facto y la app lo lee sola: folio, fecha, chofer, destino, OC y las líneas de producto, emparejadas contra la OC por precio. Después revisas y confirmas. No pide fecha de envío: esa la define el documento al que la asignes.</p>
+    <p class="small muted" style="margin-top:12px">Sube el PDF de Facto y la app lo lee sola: folio, fecha, chofer, destino, OC y las líneas de producto, emparejadas contra la OC por precio. Después revisas y confirmas. No pide fecha de envío: esa la define el documento al que la asignes.</p>
     <input type="file" accept=".pdf" onchange="leerGuiaPDF(this)">
   </div></details>
   ${panelGuiaLeida()}`;
@@ -5160,13 +5164,13 @@ function confirmarPlantillaInv(plan){
     const ov=document.createElement('div');ov.className='modal-ov';
     ov.innerHTML=`<div class="modal" style="max-width:640px">
       <b>Revisa antes de cargar el inventario</b>
-      <div class="monto-ctx" style="margin-top:10px">
+      <div class="monto-ctx" style="margin-top:12px">
         <div><div class="et">Ajustes de stock</div><div class="va">${plan.cambios.length}</div></div>
         <div><div class="et">Productos nuevos</div><div class="va">${plan.nuevos.length}</div></div>
         <div><div class="et">Sin cambio</div><div class="va">${plan.iguales}</div></div>
       </div>
       ${plan.ignoradas?`<p class="small muted" style="margin-top:8px">${plan.ignoradas} fila(s) sin datos válidos se omiten.</p>`:''}
-      <div style="max-height:260px;overflow:auto;margin-top:10px"><table class="tprod"><colgroup><col style="width:11ch"><col><col style="width:8ch"><col style="width:8ch"></colgroup>
+      <div style="max-height:260px;overflow:auto;margin-top:12px"><table class="tprod"><colgroup><col style="width:11ch"><col><col style="width:8ch"><col style="width:8ch"></colgroup>
         <tr><th>Código</th><th>Producto</th><th class="num">Antes</th><th class="num">Queda</th></tr>${filas.join('')}</table></div>
       ${resto?`<p class="small muted">y ${resto} más…</p>`:''}
       <div class="acciones">
@@ -5190,16 +5194,16 @@ function rInv(){
   const movs=[...inv.movimientos].reverse().slice(0,40);
   return `${dlProd()}
   <details class="form"><summary>Inventario por planilla — descargar y cargar</summary><div class="inner">
-    <p class="small muted" style="margin-top:10px">Descarga la planilla con todos los productos del maestro y su cantidad actual, anota lo que cuentes en bodega y vuelve a subirla. La carga es directa: como la planilla trae el código NOV, no necesita pasar por revisión.</p>
+    <p class="small muted" style="margin-top:12px">Descarga la planilla con todos los productos del maestro y su cantidad actual, anota lo que cuentes en bodega y vuelve a subirla. La carga es directa: como la planilla trae el código NOV, no necesita pasar por revisión.</p>
     <p class="small muted"><b>Importante:</b> es una foto completa del stock. La cantidad que escribas reemplaza a la anterior, y una celda de cantidad vacía se toma como cero. Si agregas filas nuevas sin código, esos productos se dan de alta en el maestro.</p>
-    <div class="acciones" style="margin-top:12px"><button class="btn sec" onclick="descargarPlantillaInv()"><i class="fa-solid fa-file-arrow-down"></i> Descargar plantilla</button></div>
+    <div class="acciones" style="margin-top:12px"><button class="btn sec" onclick="descargarPlantillaInv()"><i class="ph ph-file-arrow-down"></i> Descargar plantilla</button></div>
     <label style="margin-top:16px">Planilla completada</label>
     <div class="dropzone" onclick="document.getElementById('inv-plantilla').click()">
       <input id="inv-plantilla" type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="dzContarInv()" onclick="event.stopPropagation()">
-      <div class="dz-icono"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+      <div class="dz-icono"><i class="ph ph-cloud-arrow-up"></i></div>
       <div><b>Haz clic para elegir la planilla</b></div>
       <div class="small muted">Excel (.xlsx / .xls) o CSV</div>
-      <div id="inv-plantilla-n" class="mono small" style="margin-top:6px;color:var(--verde)"></div>
+      <div id="inv-plantilla-n" class="mono small" style="margin-top:8px;color:var(--verde)"></div>
     </div>
     <div class="acciones"><button class="btn" onclick="cargarPlantillaInv()">Cargar inventario</button></div>
   </div></details>
@@ -5214,7 +5218,7 @@ function rInv(){
   <h2>Stock actual (${prods.length} productos)</h2>
   <div class="card">${prods.length?`<table class="tprod" style="min-width:500px"><colgroup><col style="width:11ch"><col><col style="width:9ch"><col style="width:14ch"></colgroup><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
     ${prods.map(p=>`<tr><td class="mono small">${esc(p.codigo||'—')}</td><td class="trunc" title="${esc(p.nombre)}">${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
-    <td class="num"><button class="btn mini sec" title="Ajustar: fijar la cantidad exacta" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-pen"></i></button> <button class="btn mini sec" title="Agregar: sumar unidades al stock" onclick="agregarInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="fa-solid fa-plus"></i></button>${p.codigo?` <button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto('${esc(p.codigo)}')"><i class="fa-solid fa-tag"></i></button>`:''}</td></tr>`).join('')}</table>`
+    <td class="num"><button class="btn mini sec" title="Ajustar: fijar la cantidad exacta" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="ph ph-pencil-simple"></i></button> <button class="btn mini sec" title="Agregar: sumar unidades al stock" onclick="agregarInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="ph ph-plus"></i></button>${p.codigo?` <button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto('${esc(p.codigo)}')"><i class="ph ph-tag"></i></button>`:''}</td></tr>`).join('')}</table>`
     :'<div class="vacio">Bodega sin productos registrados. Usa "Registrar ingreso" para la carga inicial.</div>'}</div>
   <h2>Últimos movimientos</h2>
   <div class="card">${movs.length?`<table class="tprod" style="min-width:720px"><colgroup><col style="width:11ch"><col style="width:11ch"><col style="width:9ch"><col><col style="width:8ch"><col style="width:20ch"></colgroup><tr><th>Fecha</th><th>Código</th><th>Tipo</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
@@ -5299,17 +5303,26 @@ async function agregarInv(nombre){
 }
 
 /* ================= Arranque ================= */
-async function iniciar(){
-  // Splash de identidad: mínimo 1.5s y fade out
+let splashDesde=Date.now();
+function abrirSplash(){
   const sp=document.getElementById('splash');
-  sp.style.display='flex';
-  const splashListo=new Promise(r=>setTimeout(r,1500));
+  if(sp.style.display==='none'||sp.classList.contains('out')){sp.classList.remove('out');sp.style.display='flex';splashDesde=Date.now()}
+}
+async function cerrarSplash(){
+  const sp=document.getElementById('splash');
+  const falta=1500-(Date.now()-splashDesde);
+  if(falta>0)await new Promise(r=>setTimeout(r,falta));
+  sp.classList.add('out');
+  setTimeout(()=>{if(sp.classList.contains('out'))sp.style.display='none'},700);
+}
+async function iniciar(){
+  abrirSplash();
   document.getElementById('setup').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('hoy-lbl').textContent=new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
   try{
     if(modoFirebase()){
-      if(!await fbSesion()){sp.style.display='none';mostrarLogin('');return}
+      if(!await fbSesion()){mostrarLogin('');await cerrarSplash();return}
       const c=document.querySelector('.conn');
       if(c)c.textContent=`${FBS.usuario.nombre} · salir`;
       const ac=document.getElementById('btn-accesos');if(ac)ac.style.display=esAdmin()?'':'none';
@@ -5317,19 +5330,17 @@ async function iniciar(){
     await cargarTodo();render();
   }
   catch(e){
-    if(e.status===401){pedirTokenNuevo();sp.style.display='none';return}
-    if(e.sinAcceso){sp.style.display='none';mostrarLogin(e.message,true);return}
+    if(e.status===401){pedirTokenNuevo();await cerrarSplash();return}
+    if(e.sinAcceso){mostrarLogin(e.message,true);await cerrarSplash();return}
     toast('Error al cargar datos: '+(e.code?errorFirebase(e).message:e.message))
   }
-  await splashListo;
-  sp.classList.add('out');
-  setTimeout(()=>sp.style.display='none',700);
+  await cerrarSplash();
 }
 (function(){
   if(modoFirebase()){iniciar();return}
   const saved=localStorage.getItem(LSKEY);
   if(saved){cfg=JSON.parse(saved);iniciar()}
-  else document.getElementById('setup').style.display='block';
+  else{document.getElementById('setup').style.display='block';cerrarSplash()}
 })();
 </script>
 </body>
