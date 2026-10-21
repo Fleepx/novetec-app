@@ -5315,6 +5315,30 @@ async function cerrarSplash(){
   sp.classList.add('out');
   setTimeout(()=>{if(sp.classList.contains('out'))sp.style.display='none'},700);
 }
+async function cerrarSplashALogin(){
+  const sp=document.getElementById('splash'),img=sp.querySelector('img');
+  const card=document.querySelector('#login .card'),logo=document.querySelector('#login .login-logo');
+  if(!img||!logo||!card||!img.complete||matchMedia('(prefers-reduced-motion: reduce)').matches){await cerrarSplash();return}
+  const falta=1500-(Date.now()-splashDesde);
+  if(falta>0)await new Promise(r=>setTimeout(r,falta));
+  const E='cubic-bezier(0.32,0.72,0,1)';
+  const resto=[...document.querySelectorAll('#login .login-sub,#login .btn-google,#login .login-err,#l-otra')].filter(e=>getComputedStyle(e).display!=='none');
+  logo.style.opacity='0';card.style.opacity='0';resto.forEach(e=>e.style.opacity='0');
+  const a=img.getBoundingClientRect(),b=logo.getBoundingClientRect(),c=getComputedStyle(logo);
+  const pl=parseFloat(c.paddingLeft),pr=parseFloat(c.paddingRight),pt=parseFloat(c.paddingTop),pb=parseFloat(c.paddingBottom);
+  const cx=b.left+pl+(b.width-pl-pr)/2,cy=b.top+pt+(b.height-pt-pb)/2,esc=(b.height-pt-pb)/a.height;
+  const dx=cx-(a.left+a.width/2),dy=cy-(a.top+a.height/2);
+  sp.style.background='transparent';sp.style.pointerEvents='none';
+  const viaje=img.animate([{transform:'translate(0,0) scale(1)'},{transform:`translate(${dx}px,${dy}px) scale(${esc})`}],{duration:800,easing:E,fill:'forwards'});
+  card.animate([{opacity:0},{opacity:1}],{duration:500,delay:150,easing:E,fill:'both'}).finished.then(a=>{card.style.opacity='';a.cancel()});
+  await viaje.finished;
+  logo.style.opacity='';
+  sp.style.display='none';sp.style.background='';sp.style.pointerEvents='';sp.classList.add('out');viaje.cancel();
+  resto.forEach((e,i)=>{
+    const an=e.animate([{opacity:0,transform:'translateY(16px)',filter:'blur(4px)'},{opacity:1,transform:'none',filter:'blur(0)'}],{duration:700,delay:i*100,easing:E,fill:'backwards'});
+    e.style.opacity='';an.finished.then(()=>an.cancel());
+  });
+}
 async function iniciar(){
   abrirSplash();
   document.getElementById('setup').style.display='none';
@@ -5322,7 +5346,7 @@ async function iniciar(){
   document.getElementById('hoy-lbl').textContent=new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
   try{
     if(modoFirebase()){
-      if(!await fbSesion()){mostrarLogin('');await cerrarSplash();return}
+      if(!await fbSesion()){mostrarLogin('');await cerrarSplashALogin();return}
       const c=document.querySelector('.conn');
       if(c)c.textContent=`${FBS.usuario.nombre} · salir`;
       const ac=document.getElementById('btn-accesos');if(ac)ac.style.display=esAdmin()?'':'none';
@@ -5331,7 +5355,7 @@ async function iniciar(){
   }
   catch(e){
     if(e.status===401){pedirTokenNuevo();await cerrarSplash();return}
-    if(e.sinAcceso){mostrarLogin(e.message,true);await cerrarSplash();return}
+    if(e.sinAcceso){mostrarLogin(e.message,true);await cerrarSplashALogin();return}
     toast('Error al cargar datos: '+(e.code?errorFirebase(e).message:e.message))
   }
   await cerrarSplash();
