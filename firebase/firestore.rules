@@ -1,16 +1,20 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{base}/documents {
-    function perfil() {
-      return get(/databases/$(base)/documents/usuarios/$(request.auth.uid)).data;
+    function correo() {
+      return request.auth.token.email.lower();
+    }
+    function acceso() {
+      return get(/databases/$(base)/documents/accesos/$(correo())).data;
     }
     function habilitado() {
       return request.auth != null
-        && exists(/databases/$(base)/documents/usuarios/$(request.auth.uid))
-        && perfil().rol in ['admin', 'operador'];
+        && request.auth.token.email_verified == true
+        && exists(/databases/$(base)/documents/accesos/$(correo()))
+        && acceso().rol in ['admin', 'operador'];
     }
     function admin() {
-      return habilitado() && perfil().rol == 'admin';
+      return habilitado() && acceso().rol == 'admin';
     }
     function datos(col) {
       return col in ['meta', 'ordenes_compra', 'guias_despacho', 'cotizaciones', 'inventario',
@@ -18,8 +22,8 @@ service cloud.firestore {
         'adjudicaciones', 'hojas_ruta'];
     }
 
-    match /usuarios/{uid} {
-      allow read: if request.auth != null && (request.auth.uid == uid || admin());
+    match /accesos/{c} {
+      allow read: if request.auth != null && (c == correo() || admin());
       allow write: if admin();
     }
 
@@ -27,6 +31,15 @@ service cloud.firestore {
       allow read: if habilitado();
       allow create: if habilitado() && request.resource.data.usuario == request.auth.token.email;
       allow update, delete: if false;
+    }
+
+    match /documentos/{id} {
+      allow read, create, update, delete: if habilitado();
+    }
+
+    match /documentos_partes/{id} {
+      allow read, create, delete: if habilitado();
+      allow update: if false;
     }
 
     match /{col}/{id} {
