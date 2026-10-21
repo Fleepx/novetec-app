@@ -3246,7 +3246,7 @@ function rCot(){
       ${c.origen==='app'&&c.archivo&&puedeCompartirPDF()?`<button class="btn mini sec" onclick="compartirCotizacion('${esc(c.id)}')" title="Abre el menú de compartir del sistema CON el PDF adjunto"><i class="fa-solid fa-share-nodes"></i> Compartir con el PDF</button>`:''}
       </div><div id="rc-${esc(c.id)}"></div><div class="acciones">
       ${c.estado==='rechazada'?`<button class="btn mini sec" onclick="deshacerRechazoCot('${esc(c.id)}')">Deshacer el rechazo</button>`:''}
-      <button class="btn mini peligro" onclick="borrarCot('${esc(c.id)}')">Eliminar</button>
+      ${esAdmin()?`<button class="btn mini peligro" onclick="borrarCot('${esc(c.id)}')">Eliminar</button>`:''}
       </div>
       </details>
     </div>`}).join('')
@@ -3254,6 +3254,7 @@ function rCot(){
     :'<div class="card vacio">Aún no hay cotizaciones registradas.</div>'}`;
 }
 async function borrarCot(id){
+  if(!esAdmin()){toast('Solo el administrador puede hacer esto.');return}
   const arr=DB[ARCH.cot].data.cotizaciones;const c=arr.find(x=>x.id===id);if(!c)return;
   const regs=adjRegistros().filter(r=>r.cot===id);
   const ocs=[...new Set(regs.map(r=>r.oc))];
@@ -3515,7 +3516,7 @@ function rOC(){
         ${o.sin_documento?`<button class="btn mini sec" onclick="irASubirOC()" title="Sube el documento de esta OC para poder editarla y darla de baja"><i class="fa-solid fa-cloud-arrow-up"></i> Subir su documento</button>`
           :`${!o.archivo?`<button class="btn mini sec" onclick="irASubirOC()" title="Adjunta el PDF de esta OC sin crear otra"><i class="fa-solid fa-cloud-arrow-up"></i> Subir su documento</button>`:''}
         <button class="btn mini sec" onclick="editOC('${encodeURIComponent(o.folio)}')"><i class="fa-solid fa-pen"></i> Modificar</button>
-        <button class="btn mini peligro" onclick="borrarOC('${encodeURIComponent(o.folio)}')">Dar de baja</button>`}
+        ${esAdmin()?`<button class="btn mini peligro" onclick="borrarOC('${encodeURIComponent(o.folio)}')">Dar de baja</button>`:''}`}
       </div>`}
       <div id="fc-${encodeURIComponent(o.folio)}"></div>
       <div id="eo-${encodeURIComponent(o.folio)}"></div>
@@ -3526,6 +3527,7 @@ function rOC(){
   :'<div class="card vacio">No hay órdenes de compra.</div>'}`;
 }
 async function borrarOC(fe){
+  if(!esAdmin()){toast('Solo el administrador puede hacer esto.');return}
   const folio=decodeURIComponent(fe);
   const o=DB[ARCH.oc].data.ordenes.find(x=>x.folio===folio);if(!o||o.baja)return;
   if(o.guias?.length){toast(`La OC ${folio} tiene guías asociadas (${o.guias.join(', ')}). Elimina primero esas guías.`);return}
@@ -3561,6 +3563,7 @@ async function borrarOC(fe){
   velo(false);
 }
 async function borrarGuia(numero){
+  if(!esAdmin()){toast('Solo el administrador puede hacer esto.');return}
   const arr=DB[ARCH.guias].data.guias;const g=arr.find(x=>x.numero===numero);if(!g)return;
   const hoja=hojaDeGuia(g);
   let msg=`¿Eliminar la guía N°${numero}?\n\nSe devolverán sus cantidades al inventario y al pendiente de la OC ${g.folio_oc}.`;
@@ -3769,7 +3772,7 @@ function tarjetaGuia(g){
                   :`<span class="chip rojo" title="Ni la OC ni el reporte del cliente respaldan esta guía">Sin OC ni respaldo</span>`;
       })()}
       ${g.hoja_ruta?'':'<span class="chip ambar">Sin documento asignado</span>'}
-      <button class="btn mini peligro" style="margin-left:auto" onclick="borrarGuia('${esc(g.numero)}')">Eliminar</button>
+      ${esAdmin()?`<button class="btn mini peligro" style="margin-left:auto" onclick="borrarGuia('${esc(g.numero)}')">Eliminar</button>`:''}
     </div>
     <table class="tprod" style="margin-top:12px;min-width:380px"><colgroup><col><col style="width:11ch"></colgroup>
       <tr><th>Producto</th><th class="num">Cantidad</th></tr>
