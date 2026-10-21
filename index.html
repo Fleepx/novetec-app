@@ -931,14 +931,14 @@ function modalDuplicados(dups,nuevos){
   });
 }
 async function subirPendiente(tipo){
-  let files=[...document.getElementById('pd-file-'+tipo).files];
+  const files=[...document.getElementById('pd-file-'+tipo).files];
   if(!files.length){toast('Selecciona al menos un archivo.');return}
+  const notaEl=document.getElementById('pd-nota-'+tipo);
+  await encolar(tipo,files,notaEl?notaEl.value.trim():'');
+}
+async function encolar(tipo,files,nota){
   velo(true,'Revisando si ya fueron cargados…');
   try{
-    const nota=v('pd-nota-'+tipo).trim();
-    const fenvEl=document.getElementById('pd-fenv-'+tipo);
-    const fenv=fenvEl?fenvEl.value:null;
-    if(tipo==='guias_despacho'&&!fenv){velo(false);toast('Indica la fecha de envío del viaje.');return}
 
     // 1. Huella de cada archivo y cruce contra el registro y contra la propia tanda
     const reg=(DB[ARCH.arch]&&DB[ARCH.arch].data.archivos)||[];
@@ -967,12 +967,12 @@ async function subirPendiente(tipo){
       const f=files[i];
       velo(true,`Subiendo ${i+1} de ${files.length}: ${f.name}`);
       const ruta=await subirDocumento('pendientes/'+tipo,f);
-      DB[ARCH.pend].data.pendientes.push({id:'P-'+Date.now()+'-'+i,tipo,archivo:ruta,nombre:f.name,hash:porNombre[f.name],subido:hoyISO(),nota,...(fenv?{fecha_envio:fenv}:{})});
+      DB[ARCH.pend].data.pendientes.push({id:'P-'+Date.now()+'-'+i,tipo,archivo:ruta,nombre:f.name,hash:porNombre[f.name],subido:hoyISO(),nota});
       reg.push({hash:porNombre[f.name],nombre:f.name,tipo,ruta,estado:'en_cola',fecha:hoyISO(),referencia:null});
     }
     await guardarArchivo(ARCH.pend,`${files.length} documento(s) en cola (${tipo})`);
     await guardarArchivo(ARCH.arch,`Registro de archivos: ${files.length} documento(s)`);
-    toast(`${files.length} documento(s) en cola. El administrador los procesará y cargará los datos.`);render();
+    toast(`${files.length} archivo(s) en cola.`);ocLeida=null;render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
@@ -995,25 +995,34 @@ function dzContarInv(){
   if(el)el.textContent=i&&i.files.length?i.files[0].name:'';
 }
 function formPendiente(tipo,accept){
-  const titulo=tipo==='ordenes_compra'?'Subir órdenes de compra o reporte de pendientes SAP'
-    :`Subir documento de ${TIPO_LBL[tipo].toLowerCase()}${tipo==='guias_despacho'?' (bundle del viaje)':''}`;
-  const ayuda=tipo==='guias_despacho'?'Antes de subir las guías, marca las compras en el Panel: el orden es compras, después guía, después hoja de ruta. Sube las guías del viaje e indica la fecha de envío; las guías que compartan fecha se agrupan en la misma hoja de ruta aunque las cargues en momentos distintos.'
-    :tipo==='ordenes_compra'?'Sube aquí tanto las órdenes de compra como el reporte de pendientes SAP del cliente, tal como llegaron. El administrador reconoce cada documento y lo carga donde corresponde.'
-    :'Sube el archivo tal como llegó. Quedará en una cola para que el administrador extraiga y cargue los datos — no escribas nada a mano por esta vía.';
+  const esOC=tipo==='ordenes_compra';
+  const titulo=esOC?'Cargar orden de compra o reporte SAP':`Subir ${TIPO_LBL[tipo].toLowerCase()}`;
+  const pista=esOC?'PDF de SAP: se lee al instante · imagen, Excel o escaneo: queda en cola':'PDF, Excel, Word o imagen · varios a la vez';
   return `<details class="form"><summary>${titulo}</summary><div class="inner">
-    <p class="small muted" style="margin-top:12px">${ayuda}</p>
-    <label>Archivos</label>
-    <div class="dropzone" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'${tipo}')" onclick="document.getElementById('pd-file-${tipo}').click()">
+    <div class="dropzone" style="margin-top:12px" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'${tipo}')" onclick="document.getElementById('pd-file-${tipo}').click()">
       <input id="pd-file-${tipo}" type="file" accept="${accept}" multiple style="display:none" onchange="dzContar('${tipo}')" onclick="event.stopPropagation()">
       <div class="dz-icono"><i class="ph ph-cloud-arrow-up"></i></div>
       <div><b>Arrastra los archivos aquí</b> o haz clic para elegirlos</div>
-      <div class="small muted">Se aceptan PDF, Excel, Word e imágenes · varios a la vez</div>
+      <div class="small muted">${pista}</div>
       <div id="pd-count-${tipo}" class="mono small" style="margin-top:8px;color:var(--verde)"></div>
     </div>
-    ${tipo==='guias_despacho'?`<label>Fecha de envío del viaje</label><input id="pd-fenv-${tipo}" type="date">`:''}
-    <label>Nota para el administrador (opcional, aplica a todos)</label><input id="pd-nota-${tipo}" placeholder="ej: corresponden a junio 2025">
-    <div class="acciones"><button class="btn" onclick="subirPendiente('${tipo}')">Dejar en cola</button></div>
+    <label>Nota (opcional)</label><input id="pd-nota-${tipo}" placeholder="ej: corresponden a junio">
+    <div class="acciones"><button class="btn" onclick="${esOC?'cargarOC()':`subirPendiente('${tipo}')`}">${esOC?'Cargar':'Subir'}</button></div>
   </div></details>`;
+}
+async function cargarOC(){
+  const files=[...document.getElementById('pd-file-ordenes_compra').files];
+  if(!files.length){toast('Selecciona al menos un archivo.');return}
+  const nota=document.getElementById('pd-nota-ordenes_compra').value.trim();
+  if(files.length===1&&/\.pdf$/i.test(files[0].name)){
+    const leido=await leerOCpdf(files[0]);
+    if(leido!==false)return;
+  }
+  await encolar('ordenes_compra',files,nota);
+}
+async function encolarOCLeida(){
+  if(!ocLeida||!ocLeida.archivo)return;
+  await encolar('ordenes_compra',[ocLeida.archivo],'');
 }
 function listaPend(tipo){
   const tipos=Array.isArray(tipo)?tipo:[tipo];
@@ -2775,9 +2784,7 @@ function reconciliarGuiasPrevias(oc){
   }
   return n;
 }
-async function leerOCpdf(){
-  const inp=document.getElementById('oc-pdf');
-  const f=inp&&inp.files[0];
+async function leerOCpdf(f){
   if(!f){toast('Elige el PDF de la orden de compra.');return}
   velo(true,'Leyendo el PDF…');
   try{
@@ -2792,7 +2799,7 @@ async function leerOCpdf(){
       pags.push(c.items.map(i=>({str:i.str,x:i.transform[4],y:i.transform[5],w:i.width})));
     }
     const lineas=lineasDePdf(pags);
-    if(!lineas.length){velo(false);toast('El PDF no tiene texto legible: es una imagen escaneada. Súbelo a la cola para que lo procese el administrador.');return}
+    if(!lineas.length){velo(false);return false}
     const oc=parseOC(lineas);
     oc.items=consolidarOC(oc.items);
     const existe=ocSinDocumento(oc.folio);
@@ -2979,7 +2986,7 @@ function panelOCLeida(){
     ${err.length?`<div class="card" style="border-color:var(--rojo);margin-top:12px">
       <b style="color:var(--rojo)">No se puede guardar hasta resolver esto:</b>
       <ul style="margin:8px 0 0 16px">${err.map(e=>`<li class="small">${esc(e)}</li>`).join('')}</ul>
-      <p class="small muted" style="margin-top:8px">Otro formato o escaneado: súbelo a la cola.</p>
+      <div class="acciones" style="margin-top:8px"><button class="btn mini sec" onclick="encolarOCLeida()">Dejar en cola</button></div>
     </div>`:''}
     <div class="acciones">
       <button class="btn" onclick="guardarOCLeida()" ${err.length?'disabled style="opacity:.45;cursor:not-allowed"':''}>Guardar esta orden de compra</button>
@@ -3481,13 +3488,7 @@ function rOC(){
   const psapD=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{registros:[]};
   const psapReg=psapD.registros||[];
   return `${dlProd()}
-  ${ocLeida?panelOCLeida():`<details class="form"><summary>Leer una orden de compra desde el PDF</summary><div class="inner">
-    <p class="small muted" style="margin-top:12px">PDF escaneado o de otro formato: súbelo a la cola.</p>
-    <label>Archivo PDF de la orden de compra</label>
-    <input type="file" id="oc-pdf" accept=".pdf">
-    <div class="acciones"><button class="btn" onclick="leerOCpdf()"><i class="ph ph-file-arrow-down"></i> Leer el PDF</button></div>
-  </div></details>`}
-  ${formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
+  ${ocLeida?panelOCLeida():formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${psapReg.length?`<details class="form"><summary>Ver el reporte de pendientes SAP tal como llegó (${psapReg.length} líneas)${psapD.actualizado?` · cargado el ${fFecha(psapD.actualizado)}`:''}</summary><div class="inner" style="overflow-x:auto">
         <table class="tprod" style="min-width:820px"><colgroup><col style="width:10ch"><col style="width:12ch"><col><col style="width:8ch"><col style="width:12ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"></colgroup><tr><th>Fecha doc</th><th>Doc. compras</th><th>Producto</th><th class="num">Cantidad</th><th>Bodega</th><th class="num">Por entregar</th><th class="num">Prc. neto</th><th class="num">Comprado</th></tr>
     ${psapReg.map(r=>`<tr>
@@ -3697,7 +3698,6 @@ function rGuias(){
   const ocsAct=ocsActivas().filter(o=>ocEstado(o)!=='despachada');
   return `
   ${formLeerGuia()}
-  ${formPendiente('guias_despacho','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${listaPend('guias_despacho')}
   ${(()=>{ // Hojas de ruta que quedaron SIN guías (p. ej. tras eliminar todas): no aparecerían
      // en ningún grupo de abajo, así que se avisan aquí para no perderlas de vista.
@@ -4211,7 +4211,7 @@ function irASubirOC(){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='oc'));
   render();
   setTimeout(()=>{
-    const d=[...document.querySelectorAll('#vista details.form')].find(x=>x.querySelector('#oc-pdf'));
+    const d=[...document.querySelectorAll('#vista details.form')].find(x=>x.querySelector('#pd-file-ordenes_compra'));
     if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'center'})}},60);
 }
 function filaEdit(i,ix){
@@ -4859,10 +4859,23 @@ async function guardarGuiaLeida(){
   velo(false);
 }
 function formLeerGuia(){
-  return `<details class="form" open><summary>Cargar guía de despacho desde el PDF</summary><div class="inner">
-        <input type="file" accept=".pdf" onchange="leerGuiaPDF(this)">
+  return `<details class="form" open><summary>Cargar guía de despacho</summary><div class="inner">
+    <div class="dropzone" style="margin-top:12px" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDropGuia(event)" onclick="document.getElementById('guia-pdf').click()">
+      <input id="guia-pdf" type="file" accept=".pdf" style="display:none" onchange="leerGuiaPDF(this)" onclick="event.stopPropagation()">
+      <div class="dz-icono"><i class="ph ph-cloud-arrow-up"></i></div>
+      <div><b>Arrastra el PDF de Facto aquí</b> o haz clic para elegirlo</div>
+      <div class="small muted">Una guía a la vez</div>
+    </div>
   </div></details>
   ${panelGuiaLeida()}`;
+}
+function dzDropGuia(e){
+  e.preventDefault();e.currentTarget.classList.remove('hover');
+  const f=[...e.dataTransfer.files].find(x=>/\.pdf$/i.test(x.name));
+  if(!f){toast('Arrastra el PDF de la guía.');return}
+  const input=document.getElementById('guia-pdf');
+  const dt=new DataTransfer();dt.items.add(f);input.files=dt.files;
+  leerGuiaPDF(input);
 }
 
 const HR_PLANTILLA='documentos/plantillas/base_hoja_ruta.docx';
