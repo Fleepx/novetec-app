@@ -15,6 +15,10 @@
     ],
     "headers": [
       {
+        "source": "**",
+        "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+      },
+      {
         "source": "**/*.@(html|js|mjs|txt)",
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       },
