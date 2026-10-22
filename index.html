@@ -213,6 +213,18 @@ td.trunc{max-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;c
 table.tprod{table-layout:fixed}
 table.tprod th{white-space:normal;vertical-align:bottom}
 table.tprod td.trunc{max-width:none}
+@media(max-width:640px){
+  table.tarjetas{min-width:0!important;display:block;margin-top:0!important}
+  table.tarjetas colgroup,table.tarjetas tr:has(>th){display:none}
+  table.tarjetas tbody{display:block}
+  table.tarjetas tr{display:grid;grid-template-columns:repeat(auto-fit,minmax(56px,1fr));gap:8px;padding:12px 0;border-bottom:1px solid var(--line)}
+  table.tarjetas tr:last-child{border-bottom:none}
+  table.tarjetas td{border:none;padding:0!important;max-width:none;text-align:left;min-width:0}
+  table.tarjetas td.t-full{grid-column:1/-1}
+  table.tarjetas td.trunc{font-weight:600}
+  table.tarjetas td[data-l]:not(.trunc):not(.mono)::before{content:attr(data-l);display:block;font-family:var(--sans);font-size:var(--fs-xs);font-weight:600;color:var(--muted);margin-bottom:2px}
+  table.tarjetas td .acc-fila{justify-content:flex-start}
+}
 table.tprod td,table.tprod th{padding-left:8px;padding-right:8px}
 table.tprod td:first-child,table.tprod th:first-child{padding-left:2px}
 table.tprod td:last-child,table.tprod th:last-child{padding-right:2px}
@@ -1330,6 +1342,17 @@ function render(){
   document.querySelectorAll('#tabs button').forEach(b=>{if(b.dataset.t===tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
   const m=document.getElementById('vista');
   m.innerHTML={panel:rPanel,cot:rCot,oc:rOC,guias:rGuias,precios:rPrecios,inv:rInv}[tab]();
+  etiquetarTarjetas(m);
+}
+function etiquetarTarjetas(raiz){
+  raiz.querySelectorAll('table.tarjetas').forEach(t=>{
+    const ths=[...t.querySelectorAll('tr:first-child>th')];
+    t.querySelectorAll('tr').forEach(tr=>[...tr.children].forEach((td,i)=>{
+      const th=ths[i];if(!th||td.tagName!=='TD')return;
+      td.dataset.l=th.textContent.trim();
+      if(!th.classList.contains('num'))td.classList.add('t-full');
+    }));
+  });
 }
 
 /* ================= Panel ================= */
@@ -2327,7 +2350,7 @@ function rPanel(){
   /* ZONA SUPERIOR: resumen consolidado solo de confirmado (OC + Pendientes SAP) */
   const zonaResumen=`
   <h2>Resumen consolidado <span class="muted">· confirmado: OC + Pendientes SAP${psapMeta.actualizado?` (reporte del ${fFecha(psapMeta.actualizado)})`:''}</span></h2>
-  ${cons.length?`<div class="card scroll-x"><table class="tprod" style="min-width:540px">
+  ${cons.length?`<div class="card scroll-x"><table class="tprod tarjetas" style="min-width:540px">
     <colgroup><col><col style="width:8ch"><col style="width:8ch"><col style="width:7ch"><col style="width:14ch"></colgroup>
     <tr><th>Producto</th><th class="num">Total a despachar</th><th class="num">Pendiente</th><th class="num">Stock</th><th class="num">Compra</th></tr>
     ${cons.map(c=>`<tr class="${c.porComprar<=0?'fila-comprada':(c.comprada>0?'fila-comprada-parcial':'')}" title="${c.porComprar<=0?'Comprado':(c.comprada>0?`Comprado en parte: ${num(c.comprada)} de ${num(c.cantidad)}`:'Sin comprar')}">
@@ -2357,7 +2380,7 @@ function rPanel(){
   const th=(lbl,campo,cls='')=>`<th class="${cls}" style="cursor:pointer;user-select:none" onclick="sortPanel('${campo}')">${lbl}${panelSort.campo===campo?(panelSort.dir>0?' <i class="ph ph-sort-ascending fs-xs"></i>':' <i class="ph ph-sort-descending fs-xs"></i>'):''}</th>`;
   const tablaGrupo=(dest,fs)=>`
     <h2><i class="ph ph-warehouse fs-sm muted"></i> ${esc(dest)} <span class="muted">· ${fs.length} ítem(s) pendiente(s)</span></h2>
-    <div class="card scroll-x"><table class="tprod" style="min-width:600px">
+    <div class="card scroll-x"><table class="tprod tarjetas" style="min-width:600px">
       <colgroup><col style="width:12.5ch"><col><col style="width:7ch"><col style="width:8ch"><col style="width:7ch"><col style="width:9ch"></colgroup>
       <tr>${th('OC','oc')}${th('Producto','producto')}${th('Total','cantidad','num')}${th('Pendiente','pendiente','num')}${th('Stock','stock','num')}${th('Precio','precio','num')}</tr>
       ${fs.map(f=>`<tr>
@@ -3773,7 +3796,7 @@ function rOC(){
         <span class="resumen">${o.baja?`${o.items.length} ítem(s) · dada de baja`:`${o.items.length} ítem(s) · ${num(pendD)} por despachar`}</span>
       </summary>
       ${o.baja?`<div class="chip rojo" style="display:block;white-space:normal;margin-top:12px;padding:12px">Dada de baja el ${fFecha(o.baja.fecha)}. Motivo: ${esc(o.baja.motivo||'no registrado')}</div>`:''}
-      <table class="tprod" style="margin-top:12px;min-width:940px"><colgroup><col style="width:12em"><col style="width:8ch"><col style="width:10ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">P. unit.</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th><th>Guía de despacho</th></tr>
+      <table class="tprod tarjetas" style="margin-top:12px;min-width:940px"><colgroup><col style="width:12em"><col style="width:8ch"><col style="width:10ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">P. unit.</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th><th>Guía de despacho</th></tr>
       ${o.items.map((i,ix)=>{const comp=+i.cantidad_comprada||0;
         const pend=(+i.cantidad||0)-(+i.cantidad_despachada||0);
         return `<tr${pend>0&&!o.baja?' class="fila-pend"':''}><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num" style="${comp<i.cantidad&&!o.baja?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num fw-6">${num(pend)}</td><td>${celdaGuiasOC(o,i)}</td></tr>`}).join('')}</table>
@@ -5494,7 +5517,7 @@ function rInv(){
     <div class="acciones"><button class="btn" onclick="ingresoInv()">Registrar ingreso</button></div>
   </div></details>
   <h2>Stock actual (${prods.length} productos)</h2>
-  <div class="card">${prods.length?`<table class="tprod" style="min-width:500px"><colgroup><col style="width:11ch"><col><col style="width:9ch"><col style="width:136px"></colgroup><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
+  <div class="card">${prods.length?`<table class="tprod tarjetas" style="min-width:500px"><colgroup><col style="width:11ch"><col><col style="width:9ch"><col style="width:136px"></colgroup><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
     ${prods.map(p=>`<tr><td class="mono small">${esc(p.codigo||'—')}</td><td class="trunc" title="${esc(p.nombre)}">${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
     <td class="num"><div class="acc-fila"><button class="btn mini sec" title="Ajustar: fijar la cantidad exacta" aria-label="Ajustar" onclick="ajusteInv(${jsq(p.nombre)})"><i class="ph ph-pencil-simple"></i></button><button class="btn mini sec" title="Agregar: sumar unidades al stock" aria-label="Agregar" onclick="agregarInv(${jsq(p.nombre)})"><i class="ph ph-plus"></i></button>${p.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" aria-label="Editar el nombre del producto en el maestro" onclick="renombrarProducto(${jsq(p.codigo)})"><i class="ph ph-tag"></i></button>`:''}</div></td></tr>`).join('')}</table>`
     :'<div class="vacio">Bodega sin productos registrados. Usa "Registrar ingreso" para la carga inicial.</div>'}</div>
