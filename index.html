@@ -134,6 +134,12 @@ h2 .muted{font-size:var(--fs-sm);font-weight:400}
 .card>table:first-child{margin-top:-2px}
 .mono{font-family:var(--mono);letter-spacing:-.01em}
 .muted{color:var(--muted)}
+.mt-1{margin-top:4px}.mt-2{margin-top:8px}.mt-3{margin-top:12px}.mt-4{margin-top:16px}.pt-2{padding-top:8px}.pt-3{padding-top:12px}
+.fw-6{font-weight:600}.fw-7{font-weight:700}.fs-xs{font-size:var(--fs-xs)}.fs-sm{font-size:var(--fs-sm)}
+.c-rojo{color:var(--rojo)}.c-verde{color:var(--verde)}.c-ambar{color:var(--ambar)}
+.w-full{width:100%}.scroll-x{overflow-x:auto}
+.sep{border-top:1.5px dashed var(--line);margin-top:12px}
+.revision{border:2px solid var(--ambar);border-radius:8px;padding:16px;margin:12px 0}
 .small{font-size:var(--fs-sm)}
 /* Rótulo de bodega dentro de una tarjeta: mismo cuerpo que el resto del texto */
 .bodega-lbl{font-size:var(--fs-base);font-weight:700;color:var(--texto);display:flex;align-items:center;gap:8px;margin:24px 0 8px}
@@ -146,7 +152,7 @@ button.btn.mini{padding:8px 12px;font-size:var(--fs-xs)}
 button.btn.peligro{background:none;border:1.5px solid var(--rojo);color:var(--rojo)}
 input,select,textarea{font-family:var(--mono);font-size:var(--fs-base);padding:12px 12px;border:1px solid var(--line);border-radius:6px;background:var(--campo);color:var(--texto);width:100%}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--texto);outline-offset:1px}
-label{display:block;font-size:var(--fs-xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:16px 0 8px}
+label{display:block;font-size:var(--fs-sm);font-weight:600;color:var(--muted);margin:16px 0 8px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 16px}
 @media(max-width:640px){.grid2,.grid3{grid-template-columns:1fr}}
@@ -155,7 +161,7 @@ label{display:block;font-size:var(--fs-xs);font-weight:700;letter-spacing:.06em;
 @media(max-width:640px){.sem-strip{grid-template-columns:repeat(2,1fr)}}
 .sem-box{border-radius:var(--radius);padding:16px;border:1px solid var(--line);background:var(--card)}
 .sem-box .n{font-family:var(--mono);font-size:30px;font-weight:600;line-height:1}
-.sem-box .l{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-top:8px}
+.sem-box .l{font-size:var(--fs-sm);font-weight:600;margin-top:8px}
 .sem-box.rojo{background:var(--rojo-bg)}.sem-box.rojo .n,.sem-box.rojo .l{color:var(--rojo)}
 .sem-box.ambar{background:var(--ambar-bg)}.sem-box.ambar .n,.sem-box.ambar .l{color:var(--ambar)}
 .sem-box.verde{background:var(--verde-bg)}.sem-box.verde .n,.sem-box.verde .l{color:var(--verde)}
@@ -189,7 +195,7 @@ details.doc[open] .resumen{display:none}
 .chip.vencida{background:var(--vencida);color:#fff}
 .chip.ink{background:var(--btn-bg);color:var(--btn-fg)}
 table{width:100%;border-collapse:collapse;font-size:var(--fs-sm);line-height:1.4}
-th{font-size:var(--fs-xs);font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 12px;border-bottom:1.5px solid var(--line);white-space:nowrap}
+th{font-size:var(--fs-xs);font-weight:600;color:var(--muted);text-align:left;padding:8px 12px;border-bottom:1.5px solid var(--line);white-space:nowrap}
 td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
 /* Realce de fila al pasar el puntero (Jefe, 30-07-2026): permite seguir visualmente
    dónde empieza y termina cada fila. Solo aplica a filas de datos: los encabezados usan
@@ -261,7 +267,7 @@ tr.fila-comprada-parcial>td{background:var(--ambar-bg)}
 /* Acordeón de la cola de archivos (Jefe, 30-07-2026): cerrado por defecto y mostrando solo
    el conteo, para que una carga grande no ocupe toda la pantalla. */
 .acc-cola{border:1.5px solid var(--ambar);border-radius:8px;background:var(--card);margin-bottom:16px}
-.acc-cola>summary{list-style:none;cursor:pointer;padding:16px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:var(--fs-sm);font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ambar)}
+.acc-cola>summary{list-style:none;cursor:pointer;padding:16px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:var(--fs-sm);font-weight:700;color:var(--ambar)}
 .acc-cola>summary::-webkit-details-marker{display:none}
 .acc-cola>summary::before{content:'';display:inline-block;width:1em;height:1em;background-color:currentColor;-webkit-mask:var(--ph-caret) center/1em 1em no-repeat;mask:var(--ph-caret) center/1em 1em no-repeat;transition:transform 300ms cubic-bezier(0.32,0.72,0,1)}
 .acc-cola[open]>summary::before{transform:rotate(90deg)}
@@ -298,7 +304,7 @@ td.num,th.num{text-align:right;font-family:var(--mono);letter-spacing:-.01em}
 /* Ventana de ingreso de montos: reemplaza a prompt() del navegador. */
 .monto-ctx{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px}
 .monto-ctx div{background:var(--sub-bg);border:1px solid var(--line);border-radius:8px;padding:8px 12px;flex:1;min-width:96px}
-.monto-ctx .et{font-size:var(--fs-xs);color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.monto-ctx .et{font-size:var(--fs-sm);color:var(--muted);font-weight:600}
 .monto-ctx .va{font-family:var(--mono);font-size:var(--fs-lg);font-weight:600;line-height:1.25}
 .monto-campo{display:flex;align-items:stretch;gap:8px;margin-top:4px}
 .monto-campo input{font-size:24px;font-weight:600;text-align:right;padding:12px 16px;letter-spacing:-.01em}
@@ -317,7 +323,7 @@ details.form .inner{padding:0 16px 16px}
 .filtro{margin-bottom:12px}
 #setup,#login{max-width:460px;margin:64px auto;padding:0 16px}
 #setup .card{padding:24px}
-#setup h1{font-size:20px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:8px}
+#setup h1{font-size:20px;font-weight:700;margin-bottom:8px}
 #login .card{padding:40px 32px 32px;border-radius:16px;text-align:center}
 .login-logo{display:block;height:192px;max-width:100%;width:auto;margin:0 auto 8px}
 html[data-tema="oscuro"] .login-logo{background:#fff;border-radius:12px;padding:8px 12px;box-sizing:content-box}
@@ -770,14 +776,14 @@ async function gestionarAccesos(){
             <div style="margin-top:12px;border-top:1px solid var(--line)">
         ${lista.map(a=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)">
           <div style="flex:1;min-width:0">
-            <div style="font-weight:600">${esc(a.nombre||a.correo)}</div>
+            <div class="fw-6">${esc(a.nombre||a.correo)}</div>
             <div class="small muted" style="overflow-wrap:anywhere">${esc(a.correo)}</div>
           </div>
           <span class="chip${a.rol==='admin'?' ink':''}">${a.rol==='admin'?'administrador':'operador'}</span>
           ${a.correo===FBS.usuario.correo?'':`<button class="btn mini sec" data-quitar="${esc(a.correo)}">Quitar</button>`}
         </div>`).join('')}
       </div>
-      <label style="margin-top:16px">Correo de Google</label>
+      <label class="mt-4">Correo de Google</label>
       <input id="ac-correo" type="email" placeholder="nombre@gmail.com" autocomplete="off">
       <label>Nombre</label>
       <input id="ac-nombre" type="text" autocomplete="off">
@@ -972,7 +978,7 @@ function contarEstados(items,estadoFn,mapa){
 /* Los tres números del encabezado, coloreados con el mismo semáforo verde/gris/ámbar de
    siempre (confirmados=verde, pendiente=gris/muted, parcial=ámbar). */
 function cntEstados({ok,pend,parcial}){
-  return `<span style="color:var(--verde)">${ok}</span> - <span style="color:var(--muted)">${pend}</span> - <span style="color:var(--ambar)">${parcial}</span>`;
+  return `<span class="c-verde">${ok}</span> - <span class="muted">${pend}</span> - <span class="c-ambar">${parcial}</span>`;
 }
 function accMes(k,titulo,cnt,cuerpo){
   return `<details class="acc-mes" data-k="mes:${esc(k)}"${fichaAbierta('mes:'+k)?' open':''} ontoggle="recordarFicha(this)">
@@ -1034,7 +1040,7 @@ function modalDuplicados(dups,nuevos){
         }).join('')}
         </table>
       </div>
-      ${nuevos.length?`<p class="small muted" style="margin-top:12px">Los otros ${nuevos.length} archivo(s) sí son nuevos: se suben de todas formas aunque descartes ${dups.length===1?'el repetido':'los repetidos'}.</p>`:''}
+      ${nuevos.length?`<p class="small muted mt-3">Los otros ${nuevos.length} archivo(s) sí son nuevos: se suben de todas formas aunque descartes ${dups.length===1?'el repetido':'los repetidos'}.</p>`:''}
       <div class="acciones">
         <button class="btn mini" id="dup-igual">Cargar igualmente</button>
         <button class="btn mini sec" id="dup-omitir">Descartar archivo${dups.length===1?'':'s'}</button>
@@ -1120,12 +1126,12 @@ function formPendiente(tipo,accept){
   const titulo=esOC?'Cargar orden de compra o reporte SAP':`Subir ${TIPO_LBL[tipo].toLowerCase()}`;
   const pista=esOC?'PDF de SAP: se lee al instante · imagen, Excel o escaneo: queda en cola':'PDF, Excel, Word o imagen · varios a la vez';
   return `<details class="form" ${ficha('form:'+tipo)}><summary>${titulo}</summary><div class="inner">
-    <div class="dropzone" role="button" tabindex="0" style="margin-top:12px" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'${tipo}')" onclick="document.getElementById('pd-file-${tipo}').click()">
+    <div class="dropzone mt-3" role="button" tabindex="0" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'${tipo}')" onclick="document.getElementById('pd-file-${tipo}').click()">
       <input id="pd-file-${tipo}" type="file" accept="${accept}" multiple style="display:none" onchange="dzContar('${tipo}')" onclick="event.stopPropagation()">
       <div class="dz-icono"><i class="ph ph-cloud-arrow-up"></i></div>
       <div><b>Arrastra los archivos aquí</b> o haz clic para elegirlos</div>
       <div class="small muted">${pista}</div>
-      <div id="pd-count-${tipo}" class="mono small" style="margin-top:8px;color:var(--verde)"></div>
+      <div id="pd-count-${tipo}" class="mono small mt-2 c-verde"></div>
     </div>
     <label>Nota (opcional)</label><input id="pd-nota-${tipo}" placeholder="ej: corresponden a junio">
     <div class="acciones"><button class="btn" onclick="${esOC?'cargarOC()':`subirPendiente('${tipo}')`}">${esOC?'Cargar':'Subir'}</button></div>
@@ -1620,8 +1626,8 @@ function panelPlanilla(){
   const conCot=_pl.filas.filter(f=>+f.precio>0);
   const neto=conCot.reduce((s,f)=>s+(+f.precio)*(+f.cantidad||0),0);
   const cl=clientePorNombre(_pl.cliente)||{};
-  return `<div id="pl-panel" class="form" style="border:2px solid var(--ambar);border-radius:8px;padding:16px;margin:12px 0">
-    <b style="font-size:14px">Planilla del cliente · ${esc(_pl.file.name)}</b>
+  return `<div id="pl-panel" class="form revision">
+    <b class="fs-sm">Planilla del cliente · ${esc(_pl.file.name)}</b>
     <p class="small muted">Línea sin precio: no se cotiza.</p>
     ${(_pl.notas||[]).length?`<div class="chip rojo" style="display:block;white-space:normal;margin:8px 0;padding:12px">
       <b>Este archivo trae ${_pl.notas.length} nota(s) internas nuestras.</b> Vienen de una vez anterior en que se trabajó esta planilla, no las agregó la app. Si se lo mandas así al cliente, va a ver información que no le corresponde. Bórralas en Excel antes de enviar:
@@ -1634,7 +1640,7 @@ function panelPlanilla(){
       <div><label>Condición / validez</label><input list="cn-cond" value="${esc(_pl.validez)}" onchange="plSet('validez',this.value)">
         <datalist id="cn-cond">${CONDICIONES.map(x=>`<option value="${esc(x)}">`).join('')}</datalist></div>
     </div>
-    <table style="margin-top:12px"><tr><th>Producto solicitado</th><th>Bodega</th><th class="num">Cant.</th><th>Precio unitario</th></tr>
+    <table class="mt-3"><tr><th>Producto solicitado</th><th>Bodega</th><th class="num">Cant.</th><th>Precio unitario</th></tr>
     ${_pl.filas.map((f,i)=>{
       const oc=f.codigo?ultimoPrecio(f.codigo,'oc'):null, co=f.codigo?ultimoPrecio(f.codigo,'cot'):null;
       return `<tr${+f.precio>0?'':' style="opacity:.62"'}>
@@ -1648,8 +1654,8 @@ function panelPlanilla(){
           <button class="btn mini sec" ${co?'':'disabled'} onclick="plPrecio(${i},'cot')" title="${co?`Ofertado el ${fFecha(co.fecha)} en ${esc(co.ref)}`:'Sin precio ofertado previo'}">Cot ${co?clp(co.precio):'—'}</button>
         </div></td></tr>`}).join('')}
     </table>
-    <div class="small muted" style="margin-top:8px">${conCot.length} de ${_pl.filas.length} línea(s) cotizadas · neto ${clp(neto)}</div>
-    <div class="acciones" style="margin-top:12px">
+    <div class="small muted mt-2">${conCot.length} de ${_pl.filas.length} línea(s) cotizadas · neto ${clp(neto)}</div>
+    <div class="acciones mt-3">
       <button class="btn" onclick="generarPlanilla()"><i class="ph ph-file-xls"></i> Generar y descargar el Excel</button>
       <button class="btn sec" onclick="cancelarPlanilla()">Cancelar</button>
     </div></div>`;
@@ -1914,8 +1920,8 @@ function panelCotizacion(){
     return (cont[tipo]||[]).map(x=>`<button class="btn mini ${x.valor===valor?'':'sec'}" title="${x.principal?'Es el principal':'Marcar como principal'}" onclick="cnPrincipal('${tipo}',${jsq(x.valor)})"><i class="ph${x.principal?'-fill':''} ph-star"></i> ${esc(x.valor)}</button>`).join(' ');
   };
   const neto=_cotN.items.reduce((s,i)=>s+(+i.cantidad||0)*(+i.precio||0),0);
-  return `<div id="cn-panel" class="form" style="border:2px solid var(--ambar);border-radius:8px;padding:16px;margin:12px 0">
-    <b style="font-size:14px">Nueva cotización <span class="chip ink">${esc(folio)}</span></b>
+  return `<div id="cn-panel" class="form revision">
+    <b class="fs-sm">Nueva cotización <span class="chip ink">${esc(folio)}</span></b>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">
       <div><label>Cliente</label><select onchange="cnSet('cliente',this.value)">
         ${clientes().map(c=>`<option value="${esc(c.nombre)}"${_cotN.cliente===c.nombre?' selected':''}>${esc(c.corto)}${c.rut==='PENDIENTE'?' (datos pendientes)':''}</option>`).join('')}
@@ -1933,9 +1939,9 @@ function panelCotizacion(){
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:8px">
       <div><label>Email cliente</label><input value="${esc(_cotN.contacto_email)}" onchange="cnSet('contacto_email',this.value)">
-        <div class="small" style="margin-top:4px">${opc(cont,'emails',_cotN.contacto_email)}</div></div>
+        <div class="small mt-1">${opc(cont,'emails',_cotN.contacto_email)}</div></div>
       <div><label>Teléfono</label><input value="${esc(_cotN.contacto_fono)}" onchange="cnSet('contacto_fono',this.value)">
-        <div class="small" style="margin-top:4px">${opc(cont,'telefonos',_cotN.contacto_fono)}</div></div>
+        <div class="small mt-1">${opc(cont,'telefonos',_cotN.contacto_fono)}</div></div>
     </div>
     <datalist id="cn-unidades">${UNIDADES.map(u=>`<option value="${esc(u)}">`).join('')}</datalist>
     <datalist id="cn-prods">${prods.map(p=>`<option value="${esc(p.nombre)}">`).join('')}</datalist>
@@ -1944,9 +1950,9 @@ function panelCotizacion(){
       const oc=it.codigo?ultimoPrecio(it.codigo,'oc'):null, co=it.codigo?ultimoPrecio(it.codigo,'cot'):null;
       return `<tr class="cot-a">
       <td><button class="btn mini sec" onclick="cnQuitar(${i})" title="Quitar la línea"><i class="ph ph-x"></i></button></td>
-      <td data-et="Producto"><input list="cn-prods" style="width:100%" value="${esc(it.producto)}" onchange="cnItem(${i},'producto',this.value)">
+      <td data-et="Producto"><input class="w-full" list="cn-prods" value="${esc(it.producto)}" onchange="cnItem(${i},'producto',this.value)">
         <span class="small ${it.codigo?'muted':''}">${it.producto?(it.codigo?esc(it.codigo):'<span class="chip rojo">no está en el maestro</span>'):''}</span></td>
-      <td data-et="Descripción"><input style="width:100%" value="${esc(it.descripcion)}" onchange="cnItem(${i},'descripcion',this.value)"></td>
+      <td data-et="Descripción"><input class="w-full" value="${esc(it.descripcion)}" onchange="cnItem(${i},'descripcion',this.value)"></td>
       <td data-et="Bodega"><select onchange="cnItem(${i},'bodega',this.value)">
         ${bodegasDe(cl).concat('RETIRA CLIENTE').map(b=>`<option value="${esc(b)}"${it.bodega===b?' selected':''}>${esc(b)}</option>`).join('')}
       </select></td></tr><tr class="cot-b">
@@ -1958,14 +1964,14 @@ function panelCotizacion(){
         <button class="btn mini sec" ${co?'':'disabled'} onclick="cnPrecio(${i},'cot')" title="${co?`Ofertado el ${fFecha(co.fecha)} en ${esc(co.ref)}`:'Sin precio ofertado previo'}">Cot ${co?clp(co.precio):'—'}</button>
       </div></td></tr>`}).join('')}
     </tbody></table>
-    <button class="btn mini sec" style="margin-top:8px" onclick="cnAgregar()"><i class="ph ph-plus"></i> Agregar línea</button>
-    <label style="margin-top:12px">Texto de despacho ${_cotN.obsEditada?'<span class="chip ambar small">editado a mano</span>':'<span class="chip small">se arma solo</span>'}</label>
+    <button class="btn mini sec mt-2" onclick="cnAgregar()"><i class="ph ph-plus"></i> Agregar línea</button>
+    <label class="mt-3">Texto de despacho ${_cotN.obsEditada?'<span class="chip ambar small">editado a mano</span>':'<span class="chip small">se arma solo</span>'}</label>
     <textarea rows="5" onchange="cnSet('obsDespacho',this.value)">${esc(_cotN.obsDespacho)}</textarea>
-    ${_cotN.obsEditada?`<button class="btn mini sec" style="margin-top:4px" onclick="_cotN.obsEditada=false;cnTextoDespacho();render()">Volver al texto automático</button>`:''}
-    <label style="margin-top:12px">Otras observaciones (una por línea)</label>
+    ${_cotN.obsEditada?`<button class="btn mini sec mt-1" onclick="_cotN.obsEditada=false;cnTextoDespacho();render()">Volver al texto automático</button>`:''}
+    <label class="mt-3">Otras observaciones (una por línea)</label>
     <textarea rows="3" onchange="cnSet('observaciones',this.value)">${esc(_cotN.observaciones)}</textarea>
-    <div class="small muted" style="margin-top:8px">Neto ${clp(neto)} · IVA ${clp(Math.round(neto*0.19))} · Total ${clp(neto+Math.round(neto*0.19))}</div>
-    <div class="acciones" style="margin-top:12px">
+    <div class="small muted mt-2">Neto ${clp(neto)} · IVA ${clp(Math.round(neto*0.19))} · Total ${clp(neto+Math.round(neto*0.19))}</div>
+    <div class="acciones mt-3">
       <button class="btn" onclick="emitirCotizacion()"><i class="ph ph-file-pdf"></i> Generar y guardar</button>
       <button class="btn sec" onclick="cancelarCotizacion()">Cancelar</button>
     </div></div>`;
@@ -2157,7 +2163,7 @@ function selectorBodega(actual,porConfirmar,fn){
   return `<select onchange="${fn}(this.value)"><option value="">— elegir —</option>
     ${bodegasOrden().map(b=>`<option value="${esc(b)}"${!porConfirmar&&actual===b?' selected':''}>${esc(b)}</option>`).join('')}
     <option value="__otra__"${porConfirmar?' selected':''}>Otra (escribir)…</option></select>
-    ${porConfirmar?`<input style="margin-top:8px" value="${esc(actual||'')}" placeholder="Nombre de la bodega" onchange="${fn}Manual(this.value)">
+    ${porConfirmar?`<input class="mt-2" value="${esc(actual||'')}" placeholder="Nombre de la bodega" onchange="${fn}Manual(this.value)">
     <div class="small" style="color:var(--ambar);margin-top:4px">Queda como bodega por confirmar</div>`:''}`;
 }
 function medidaPendiente(codigo){
@@ -2299,13 +2305,13 @@ function rPanel(){
   /* ZONA SUPERIOR: resumen consolidado solo de confirmado (OC + Pendientes SAP) */
   const zonaResumen=`
   <h2>Resumen consolidado <span class="muted">· confirmado: OC + Pendientes SAP${psapMeta.actualizado?` (reporte del ${fFecha(psapMeta.actualizado)})`:''}</span></h2>
-  ${cons.length?`<div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:540px">
+  ${cons.length?`<div class="card scroll-x"><table class="tprod" style="min-width:540px">
     <colgroup><col><col style="width:8ch"><col style="width:8ch"><col style="width:7ch"><col style="width:14ch"></colgroup>
     <tr><th>Producto</th><th class="num">Total a despachar</th><th class="num">Pendiente</th><th class="num">Stock</th><th class="num">Compra</th></tr>
     ${cons.map(c=>`<tr class="${c.porComprar<=0?'fila-comprada':(c.comprada>0?'fila-comprada-parcial':'')}" title="${c.porComprar<=0?'Comprado':(c.comprada>0?`Comprado en parte: ${num(c.comprada)} de ${num(c.cantidad)}`:'Sin comprar')}">
       <td class="trunc" title="${esc(c.producto)} — ${esc([...c.bodegas].join(', '))}">${medidaPendiente(c.codigo)?'<i class="ph ph-ruler aviso-medida" title="El documento no especifica la medida o la talla: confirmar antes de despachar"></i>':''}${esc(c.producto)}<span class="small muted sep">${esc([...c.bodegas].join(' · '))}</span></td>
       <td class="num">${num(c.cantidad)}</td>
-      <td class="num" style="font-weight:600">${num(c.pendiente)}</td>
+      <td class="num fw-6">${num(c.pendiente)}</td>
       <td class="num" style="${c.stock<c.pendiente?'color:var(--rojo);font-weight:600':''}">${num(c.stock)}</td>
       <td class="num" style="white-space:nowrap">${c.porComprar>0
         ?`<button class="btn mini sec" onclick="marcarCompra('${encodeURIComponent(c.k)}')" title="Marcar la compra de ${num(c.porComprar)}"><i class="ph ph-shopping-cart-simple"></i> ${num(c.porComprar)}</button>`
@@ -2326,17 +2332,17 @@ function rPanel(){
     return (typeof va==='string'?va.localeCompare(vb,'es'):va-vb)*dS});
   const grupos={};
   filas.forEach(f=>{(grupos[f.bodega]=grupos[f.bodega]||[]).push(f)});
-  const th=(lbl,campo,cls='')=>`<th class="${cls}" style="cursor:pointer;user-select:none" onclick="sortPanel('${campo}')">${lbl}${panelSort.campo===campo?(panelSort.dir>0?' <i class="ph ph-sort-ascending" style="font-size:12px"></i>':' <i class="ph ph-sort-descending" style="font-size:12px"></i>'):''}</th>`;
+  const th=(lbl,campo,cls='')=>`<th class="${cls}" style="cursor:pointer;user-select:none" onclick="sortPanel('${campo}')">${lbl}${panelSort.campo===campo?(panelSort.dir>0?' <i class="ph ph-sort-ascending fs-xs"></i>':' <i class="ph ph-sort-descending fs-xs"></i>'):''}</th>`;
   const tablaGrupo=(dest,fs)=>`
-    <h2><i class="ph ph-warehouse" style="font-size:14px;color:var(--muted)"></i> ${esc(dest)} <span class="muted">· ${fs.length} ítem(s) pendiente(s)</span></h2>
-    <div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:600px">
+    <h2><i class="ph ph-warehouse fs-sm muted"></i> ${esc(dest)} <span class="muted">· ${fs.length} ítem(s) pendiente(s)</span></h2>
+    <div class="card scroll-x"><table class="tprod" style="min-width:600px">
       <colgroup><col style="width:12.5ch"><col><col style="width:7ch"><col style="width:8ch"><col style="width:7ch"><col style="width:9ch"></colgroup>
       <tr>${th('OC','oc')}${th('Producto','producto')}${th('Total','cantidad','num')}${th('Pendiente','pendiente','num')}${th('Stock','stock','num')}${th('Precio','precio','num')}</tr>
       ${fs.map(f=>`<tr>
         <td class="mono trunc" title="${esc(f.oc)}${f.origen==='sap'?' (Pendientes SAP)':''}">${esc(f.oc)||'—'}${f.origen==='sap'?' <span class="chip">SAP</span>':''}</td>
         <td class="trunc" title="${esc(f.producto)}">${medidaPendiente(f.codigo)?'<i class="ph ph-ruler aviso-medida" title="El documento no especifica la medida o la talla: confirmar antes de despachar"></i>':''}${esc(f.producto)}</td>
         <td class="num">${num(f.cantidad)}</td>
-        <td class="num" style="font-weight:600">${num(f.pendiente)}</td>
+        <td class="num fw-6">${num(f.pendiente)}</td>
         <td class="num" style="${f.stock<f.pendiente?'color:var(--rojo);font-weight:600':''}">${num(f.stock)}</td>
         <td class="num">${clp(f.precio)}</td>
       </tr>`).join('')}
@@ -2394,9 +2400,9 @@ function pedirMonto(o){
     const ov=document.createElement('div');ov.className='modal-ov';
     ov.innerHTML=`<div class="modal">
       <b>${esc(o.titulo)}</b>
-      ${o.producto?`<p class="small muted" style="margin-top:4px">${esc(o.producto)}</p>`:''}
+      ${o.producto?`<p class="small muted mt-1">${esc(o.producto)}</p>`:''}
       ${(o.contexto||[]).length?`<div class="monto-ctx">${o.contexto.map(c=>`<div><div class="et">${esc(c.et)}</div><div class="va">${esc(String(c.va))}</div></div>`).join('')}</div>`:''}
-      <label style="margin-top:12px">${esc(o.etiqueta||'Cantidad')}</label>
+      <label class="mt-3">${esc(o.etiqueta||'Cantidad')}</label>
       <div class="monto-campo">
         <input id="mo-val" type="text" inputmode="decimal" autocomplete="off" value="${o.valor??''}">
         ${o.unidad?`<span class="uni">${esc(o.unidad)}</span>`:''}
@@ -2450,8 +2456,8 @@ function confirmar(o){
     const ov=document.createElement('div');ov.className='modal-ov';
     ov.innerHTML=`<div class="modal">
       <b>${esc(o.titulo||primera)}</b>
-      ${o.titulo?`<p style="margin-top:8px">${esc(primera)}</p>`:''}
-      ${partes.map(t=>`<p class="small muted" style="margin-top:8px">${esc(t)}</p>`).join('')}
+      ${o.titulo?`<p class="mt-2">${esc(primera)}</p>`:''}
+      ${partes.map(t=>`<p class="small muted mt-2">${esc(t)}</p>`).join('')}
       <div class="acciones">
         <button class="btn${o.peligro?' peligro':''}" id="cf-ok">${esc(o.confirmar||'Aceptar')}</button>
         <button class="btn sec" id="cf-no">${esc(o.cancelar||'Cancelar')}</button>
@@ -2474,9 +2480,9 @@ function pedirTexto(o){
     const ov=document.createElement('div');ov.className='modal-ov';
     ov.innerHTML=`<div class="modal">
       <b>${esc(o.titulo)}</b>
-      ${o.producto?`<p class="small muted" style="margin-top:4px">${esc(o.producto)}</p>`:''}
+      ${o.producto?`<p class="small muted mt-1">${esc(o.producto)}</p>`:''}
       ${(o.contexto||[]).length?`<div class="monto-ctx">${o.contexto.map(c=>`<div><div class="et">${esc(c.et)}</div><div class="va">${esc(String(c.va))}</div></div>`).join('')}</div>`:''}
-      <label style="margin-top:12px">${esc(o.etiqueta||'Texto')}</label>
+      <label class="mt-3">${esc(o.etiqueta||'Texto')}</label>
       <div class="monto-campo"><input id="tx-val" type="text" autocomplete="off" value="${esc(o.valor||'')}"></div>
       <div class="monto-aviso bien" id="tx-aviso"></div>
       <div class="acciones">
@@ -2675,11 +2681,11 @@ function modalCompra(c,porBod){
       Lo que no ingreses queda pendiente. Si compraste de más por buen precio, ingrésalo igual: el excedente entra a bodega como stock libre.</p>
       ${varias
         ? `<p class="small muted">Este producto va a ${bods.length} bodegas. Indica cuánto compraste para cada una.</p>`+
-          bods.map(b=>`<label>${esc(b)} <span class="muted" style="text-transform:none;font-weight:400">· pendiente ${num(porBod[b])}</span></label>
+          bods.map(b=>`<label>${esc(b)} <span class="muted" style="font-weight:400">· pendiente ${num(porBod[b])}</span></label>
             <input type="number" class="cmp-inp" data-b="${esc(b)}" min="0" step="any" value="${porBod[b]}">`).join('')
-        : `<label>Cantidad comprada <span class="muted" style="text-transform:none;font-weight:400">· pendiente ${num(c.porComprar)}</span></label>
+        : `<label>Cantidad comprada <span class="muted" style="font-weight:400">· pendiente ${num(c.porComprar)}</span></label>
            <input type="number" class="cmp-inp" data-b="${esc(bods[0]||'')}" min="0" step="any" value="${c.porComprar}">`}
-      <p class="small mono" id="cmp-res" style="margin-top:12px"></p>
+      <p class="small mono mt-3" id="cmp-res"></p>
       <div class="acciones"><button class="btn mini" id="cmp-ok">Registrar compra</button><button class="btn mini sec" id="cmp-cancel">Cancelar</button></div>
     </div>`;
     document.body.appendChild(ov);
@@ -2765,7 +2771,7 @@ function tagOC(o){
     </div>
     ${(()=>{const pc=o.items.filter(i=>(+i.cantidad||0)-(+i.cantidad_comprada||0)>0);
       return pc.length?`<div class="small" style="margin-top:8px;color:var(--rojo)">Falta comprar: ${pc.map(i=>`${esc(i.producto)} <span class="mono">(${num((+i.cantidad||0)-(+i.cantidad_comprada||0))})</span>`).join(' · ')}</div>`:''})()}
-    ${pend.length?`<div class="small muted" style="margin-top:8px">Falta despachar: ${pend.map(i=>`${esc(i.producto)} <span class="mono">(${num((+i.cantidad||0)-(+i.cantidad_despachada||0))})</span>`).join(' · ')}</div>`:''}
+    ${pend.length?`<div class="small muted mt-2">Falta despachar: ${pend.map(i=>`${esc(i.producto)} <span class="mono">(${num((+i.cantidad||0)-(+i.cantidad_despachada||0))})</span>`).join(' · ')}</div>`:''}
   </div></div>`;
 }
 
@@ -3153,7 +3159,7 @@ function panelOCExistente(o){
     ${dif.length?`<div class="card" style="border-color:var(--ambar);margin-top:12px">
       <b>Diferencias entre el documento y la OC del sistema</b>
       <ul style="margin:8px 0 0 16px">${dif.map(d=>`<li class="small">${esc(d)}</li>`).join('')}</ul>
-      <p class="small muted" style="margin-top:8px">Para corregir la OC, usa Modificar en su ficha.</p>
+      <p class="small muted mt-2">Para corregir la OC, usa Modificar en su ficha.</p>
     </div>`:''}
     <div class="acciones">
       <button class="btn" onclick="adjuntarDocOC()">Adjuntar el documento a la OC ${esc(o.folio)}</button>
@@ -3170,7 +3176,7 @@ function panelGuiasPrevias(o){
     if(p.accion==='fusionar')return `<li class="small"><label style="display:flex;gap:8px;align-items:flex-start">
       <input type="checkbox"${p.fusionar?' checked':''}${esAdmin()?'':' disabled'} onchange="fijarFusionGuia(${jsq(p.codigoGuia)},this.checked)">
       <span>${dato}: lo creó la guía. Fusionarlo en <span class="mono">${esc(r.codigo||'el código de la línea')}</span> ("${esc(r.producto)}"), mismo precio. Su nombre queda como alias.${esAdmin()?'':' Solo el administrador puede fusionar: la OC se guarda y la fusión queda pendiente para él.'}</span></label></li>`;
-    return `<li class="small" style="color:var(--rojo)">${dato}: ${r?`calza por precio con "${esc(r.producto)}", pero el código ya tiene SAP o se usa en otros documentos`:'no calza con una sola línea de la OC por precio'}. No se imputa como despachado: revísalo a mano.</li>`};
+    return `<li class="small c-rojo">${dato}: ${r?`calza por precio con "${esc(r.producto)}", pero el código ya tiene SAP o se usa en otros documentos`:'no calza con una sola línea de la OC por precio'}. No se imputa como despachado: revísalo a mano.</li>`};
   return `<div class="card" style="border-color:var(--ambar);margin-top:12px">
     <b>Guías ya cargadas contra esta OC</b>
     <ul style="margin:8px 0 0 16px">${ps.map(linea).join('')}</ul>
@@ -3184,7 +3190,7 @@ function panelOCLeida(){
     const et=r.estado==='existente'?`<span class="chip verde">${esc(r.codigo)}</span>`
       :r.estado==='guia'?`<span class="chip verde">${esc(r.codigo)}</span> <span class="small muted">de la guía</span>`
       :r.estado==='nuevo'?'<span class="chip ambar">producto nuevo</span>'
-      :`<select onchange="fijarCodigo(${r.pos},this.value)" style="width:100%">
+      :`<select class="w-full" onchange="fijarCodigo(${r.pos},this.value)">
           <option value="">Elige el producto…</option>
           ${r.opciones.map(op=>`<option value="${esc(op.codigo)}"${r.codigo===op.codigo?' selected':''}>${esc(op.codigo)} · ${esc(op.nombre)}</option>`).join('')}
           <option value="__nuevo__">Crear un producto nuevo</option>
@@ -3218,9 +3224,9 @@ function panelOCLeida(){
     </table>
     ${panelGuiasPrevias(o)}
     ${err.length?`<div class="card" style="border-color:var(--rojo);margin-top:12px">
-      <b style="color:var(--rojo)">No se puede guardar hasta resolver esto:</b>
+      <b class="c-rojo">No se puede guardar hasta resolver esto:</b>
       <ul style="margin:8px 0 0 16px">${err.map(e=>`<li class="small">${esc(e)}</li>`).join('')}</ul>
-      <div class="acciones" style="margin-top:8px"><button class="btn mini sec" onclick="encolarOCLeida()">Dejar en cola</button></div>
+      <div class="acciones mt-2"><button class="btn mini sec" onclick="encolarOCLeida()">Dejar en cola</button></div>
     </div>`:''}
     <div class="acciones">
       <button class="btn" onclick="guardarOCLeida()" ${err.length?'disabled style="opacity:.45;cursor:not-allowed"':''}>Guardar esta orden de compra</button>
@@ -3484,19 +3490,19 @@ function rCot(){
           const orden=['Rancagua','San Francisco de Mostazal','El Peumo','Longovilo'];
           const grupos=orden.filter(b=>bodegas.includes(b)).concat(bodegas.filter(b=>!orden.includes(b)));
           html=grupos.map(b=>{const its=idx.filter(([i])=>i.bodega===b);
-            return `<div class="bodega-lbl"><i class="ph ph-map-pin" style="font-size:12px;color:var(--muted)"></i> ${esc(b)} <span class="muted">· ${its.length} ítem(s)</span></div>
+            return `<div class="bodega-lbl"><i class="ph ph-map-pin fs-xs muted"></i> ${esc(b)} <span class="muted">· ${its.length} ítem(s)</span></div>
             <table class="tprod" style="min-width:460px"><colgroup><col><col style="width:9ch"><col style="width:11ch"><col style="width:12ch"></colgroup><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(its)}</table>`;}).join('');
         } else {
           html=`<table class="tprod" style="margin-top:12px;min-width:460px"><colgroup><col><col style="width:9ch"><col style="width:11ch"><col style="width:12ch"></colgroup><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(idx)}
-            <tr><td colspan="3" style="border:none"></td><td class="num" style="font-weight:700">${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</td></tr></table>`;
+            <tr><td colspan="3" style="border:none"></td><td class="num fw-7">${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</td></tr></table>`;
         }
         if(conBodega)html+=`<div class="small" style="text-align:right;font-weight:700;margin-top:12px;padding-top:8px;border-top:1px solid var(--line)">Neto: ${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</div>`;
         return html;
       })()}
       ${(()=>{const x=cotFechaSospechosa(c);return x
         ?`<div class="chip ambar" style="display:block;white-space:normal;margin-top:12px" title="Los folios de Facto suben con la fecha. Si un folio mayor tiene fecha anterior, casi siempre es un documento duplicado que arrastró la fecha vieja.">Fecha sospechosa: en Facto los folios suben con la fecha, pero la ${esc(c.folio)} (${fFecha(c.fecha)}) no calza con la ${esc(x.folio)} (${fFecha(x.fecha)}), que es su vecina de folio. Si el documento se duplicó de otro, corrígelo con el botón Recotización.</div>`:''})()}
-      ${c.notas?`<p class="small muted" style="margin-top:12px">${esc(c.notas)}</p>`:''}
-      ${c.archivo?`<p class="small" style="margin-top:8px"><a href="#" onclick="event.preventDefault();descargarArchivo(${jsq(c.archivo)})"><i class="ph ph-download-simple" style="font-size:12px"></i> Descargar documento</a></p>`:''}
+      ${c.notas?`<p class="small muted mt-3">${esc(c.notas)}</p>`:''}
+      ${c.archivo?`<p class="small mt-2"><a href="#" onclick="event.preventDefault();descargarArchivo(${jsq(c.archivo)})"><i class="ph ph-download-simple fs-xs"></i> Descargar documento</a></p>`:''}
       <div class="acciones">
       ${c.estado==='abierta'?`
         <button class="btn mini" onclick="irASubirOC()"><i class="ph ph-cloud-arrow-up"></i> El cliente envió una OC · subir documento</button>
@@ -3613,7 +3619,7 @@ function panelRecot(id){
   const cand=C.filter(x=>x.id!==id&&String(x.fecha||'')<=String(c.fecha||'9999')
       &&x.items.some(i=>cods.has(i.codigo)))
     .sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
-  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:12px">
+  box.innerHTML=`<div class="sep pt-3">
     <b>Recotización de ${esc(c.folio)}</b>
     <label>Fecha real de emisión</label>
     <input type="date" id="rc-f-${esc(id)}" value="${esc(c.fecha||'')}">
@@ -3748,9 +3754,9 @@ function rOC(){
       <table class="tprod" style="margin-top:12px;min-width:940px"><colgroup><col style="width:12em"><col style="width:8ch"><col style="width:10ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">P. unit.</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th><th>Guía de despacho</th></tr>
       ${o.items.map((i,ix)=>{const comp=+i.cantidad_comprada||0;
         const pend=(+i.cantidad||0)-(+i.cantidad_despachada||0);
-        return `<tr${pend>0&&!o.baja?' class="fila-pend"':''}><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num" style="${comp<i.cantidad&&!o.baja?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(pend)}</td><td>${celdaGuiasOC(o,i)}</td></tr>`}).join('')}</table>
-      ${o.compras?.length?`<p class="small muted" style="margin-top:8px">Compras: ${o.compras.map(c=>`<span class="mono">${fFecha(c.fecha)}</span> ${esc(c.proveedor||'s/proveedor')} (${c.items.map(i=>`${esc(i.producto)} ×${num(i.cantidad)}`).join(', ')})`).join(' · ')}</p>`:''}
-      ${o.guias?.length?`<p class="small muted" style="margin-top:8px">Guías: <span class="mono">${o.guias.map(esc).join(', ')}</span></p>`:''}
+        return `<tr${pend>0&&!o.baja?' class="fila-pend"':''}><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num" style="${comp<i.cantidad&&!o.baja?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num fw-6">${num(pend)}</td><td>${celdaGuiasOC(o,i)}</td></tr>`}).join('')}</table>
+      ${o.compras?.length?`<p class="small muted mt-2">Compras: ${o.compras.map(c=>`<span class="mono">${fFecha(c.fecha)}</span> ${esc(c.proveedor||'s/proveedor')} (${c.items.map(i=>`${esc(i.producto)} ×${num(i.cantidad)}`).join(', ')})`).join(' · ')}</p>`:''}
+      ${o.guias?.length?`<p class="small muted mt-2">Guías: <span class="mono">${o.guias.map(esc).join(', ')}</span></p>`:''}
       ${o.archivo?`<p class="small"><a href="#" onclick="event.preventDefault();descargarArchivo(${jsq(o.archivo)})">Descargar documento</a></p>`:''}
       ${o.baja?'':`<div class="acciones">
         ${ocComp(o)<ocTot(o)?`<button class="btn mini sec" onclick="toggleCompra('${encodeURIComponent(o.folio)}')">Registrar compra</button>`:''}
@@ -3868,9 +3874,9 @@ function toggleCompra(fe){
     <div class="grid3">
       <div><label>Proveedor</label><input id="pc-prov-${fe}" placeholder="ej: Ferretería El Volcán"></div>
       <div><label>Fecha de compra</label><input id="pc-fecha-${fe}" type="date" value="${hoyISO()}"></div>
-      <div><label>Bodega</label><label style="text-transform:none;font-weight:400;letter-spacing:0;display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink)"><input type="checkbox" id="pc-bod-${fe}" checked style="width:auto"> Ingresar a inventario</label></div>
+      <div><label>Bodega</label><label style="font-weight:400;display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink)"><input type="checkbox" id="pc-bod-${fe}" checked style="width:auto"> Ingresar a inventario</label></div>
     </div>
-    <p class="small muted" style="margin-top:8px">El excedente entra como stock libre.</p>
+    <p class="small muted mt-2">El excedente entra como stock libre.</p>
     <table class="tprod" style="margin-top:8px;min-width:440px"><colgroup><col><col style="width:10ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Por comprar</th><th>Comprado ahora</th></tr>
     ${pend.map(i=>`<tr><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.porComprar)}</td><td><input type="number" data-ix="${i.ix}" min="0" step="any" placeholder="0"></td></tr>`).join('')}</table>
     <div class="acciones"><button class="btn mini" onclick="guardarCompra('${fe}')">Guardar compra</button><button class="btn mini sec" onclick="toggleCompra('${fe}')">Cancelar</button></div>
@@ -3926,7 +3932,7 @@ function rGuias(){
   ${(()=>{ // Hojas de ruta que quedaron SIN guías (p. ej. tras eliminar todas): no aparecerían
      // en ningún grupo de abajo, así que se avisan aquí para no perderlas de vista.
      const huerfanas=hrs.filter(h=>!(h.guias||[]).length);
-     return huerfanas.length?`<div class="card" style="border-color:var(--ambar)"><i class="ph ph-warning" style="color:var(--ambar)"></i> ${huerfanas.map(h=>`Hoja de Ruta N°${esc(String(h.numero))} (envío ${fFecha(h.fecha_envio||h.fecha)}) quedó sin guías.`).join(' ')} Reingresa una guía con esa fecha de envío para reincorporarla.</div>`:'';
+     return huerfanas.length?`<div class="card" style="border-color:var(--ambar)"><i class="ph ph-warning c-ambar"></i> ${huerfanas.map(h=>`Hoja de Ruta N°${esc(String(h.numero))} (envío ${fFecha(h.fecha_envio||h.fecha)}) quedó sin guías.`).join(' ')} Reingresa una guía con esa fecha de envío para reincorporarla.</div>`:'';
    })()}
   <h2>Guías registradas</h2>
   ${DB[ARCH.guias].data.guias.length?barraFichas():''}
@@ -4000,7 +4006,7 @@ function tarjetaGuia(g){
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
       <span class="mono" style="font-weight:700;font-size:var(--fs-lg)">Guía N° ${esc(g.numero)}</span>
       <span class="chip ${GUIA_ESTADO_COLOR[ge]}">${GUIA_ESTADO_LBL[ge]}</span>
-      <span class="chip"><i class="ph ph-warehouse" style="font-size:12px"></i> ${esc(normBodega(g.destino||'Sin destino'))}</span>${g.bodega_por_confirmar?'<span class="chip ambar">bodega por confirmar</span>':''}
+      <span class="chip"><i class="ph ph-warehouse fs-xs"></i> ${esc(normBodega(g.destino||'Sin destino'))}</span>${g.bodega_por_confirmar?'<span class="chip ambar">bodega por confirmar</span>':''}
       <span class="chip" title="Fecha de la guía">${fFecha(g.fecha)}</span>
       <span class="chip ink">OC ${esc(g.oc||g.folio_oc)}</span>
       ${(()=>{ /* Guía sin OC cargada: el reporte del cliente basta como respaldo (Jefe, 20-08-2026).
@@ -4013,7 +4019,7 @@ function tarjetaGuia(g){
            del todo, que no dejan registro con saldo. Una OC entregada completa igual existe. */
         const hay=((meta.folios_reporte||[]).includes(folio))
                ||(meta.registros||[]).some(r=>String(r.doc_compras||'')===folio);
-        return hay?`<span class="chip verde" title="El folio viene en el reporte de Pendientes SAP${meta.actualizado?` del ${fFecha(meta.actualizado)}`:''}: la OC existe, solo falta que el cliente la envíe"><i class="ph ph-seal-check" style="font-size:12px"></i> Respaldada por reporte SAP</span>`
+        return hay?`<span class="chip verde" title="El folio viene en el reporte de Pendientes SAP${meta.actualizado?` del ${fFecha(meta.actualizado)}`:''}: la OC existe, solo falta que el cliente la envíe"><i class="ph ph-seal-check fs-xs"></i> Respaldada por reporte SAP</span>`
                   :`<span class="chip rojo" title="Ni la OC ni el reporte del cliente respaldan esta guía">Sin OC ni respaldo</span>`;
       })()}
       ${g.hoja_ruta?'':'<span class="chip ambar">Sin documento asignado</span>'}
@@ -4030,13 +4036,13 @@ function tarjetaGuia(g){
       return `<tr>
         <td class="trunc" title="${esc(no||i.producto)}${dif?' — en la guía: '+esc(otro):''}">${esc(no||i.producto)}${dif?`<span class="small muted sep" title="Nombre con que salió en la guía">${esc(otro)}</span>`:''}</td>
         <td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}${falta>0?` <i class="ph ph-warning-circle alerta-cifra" title="Se despacharon ${num(i.cantidad)} pero faltan ${num(falta)} por registrar como comprados. Ingresa la compra para cuadrar el inventario."></i>`:''}</td></tr>`}).join('')}</table>
-    ${hayFalta?`<div style="margin-top:12px"><button class="btn mini" style="background:none;border:1.5px solid var(--rojo);color:var(--rojo)" onclick="compraFaltante(${jsq(g.numero)},this)"><i class="ph ph-shopping-cart-simple"></i> Ingresar compra faltante</button>
+    ${hayFalta?`<div class="mt-3"><button class="btn mini" style="background:none;border:1.5px solid var(--rojo);color:var(--rojo)" onclick="compraFaltante(${jsq(g.numero)},this)"><i class="ph ph-shopping-cart-simple"></i> Ingresar compra faltante</button>
       <div id="cf-${esc(g.numero)}"></div></div>`:''}
     ${(g.rectificaciones||[]).length?`<div class="small" style="margin-top:12px;border:1px solid var(--ambar);border-radius:8px;padding:8px 12px">
       ${g.rectificaciones.map((r,ri)=>`<div><b>Rectificada ${fFecha(r.fecha)}</b> — ${r.items.map(x=>`${esc(x.producto)} <span class="mono">−${num(x.cantidad)}</span> (${x.motivo==='merma'?'perdido o roto':'quedó en bodega'})`).join(' · ')}${r.nota?` · ${esc(r.nota)}`:''}
         <button class="btn mini sec" style="margin-left:8px" onclick="anularRectificacion(${jsq(g.numero)},${ri})" title="Deshacer esta rectificación y dejar la guía como estaba"><i class="ph ph-arrow-counter-clockwise"></i> Anular</button></div>`).join('')}
     </div>`:''}
-    <div class="acciones" style="margin-top:12px">
+    <div class="acciones mt-3">
       ${!hojaDeGuia(g)?'':`${g.conforme?'':`<button class="btn mini" onclick="conformarGuia(${jsq(g.numero)})" title="El despacho salió tal como dice la guía"><i class="ph ph-check"></i> Guía conforme</button>`}
       <button class="btn mini sec" onclick="rectificarGuia(${jsq(g.numero)})" title="Hubo productos que no se pudieron despachar"><i class="ph ph-arrow-counter-clockwise"></i> Rectificar${g.conforme?'':' guía'}</button>`}
       <button class="btn mini sec" onclick="moverGuia(${jsq(g.numero)})" title="Cambiar esta guía de viaje (hoja de ruta)"><i class="ph ph-flow-arrow"></i> Mover de hoja</button>
@@ -4071,7 +4077,7 @@ function moverGuia(numero){
     .sort((a,b)=>pesoTipo(a)-pesoTipo(b)||(+b.numero)-(+a.numero));
   const pre=abiertas.find(h=>hrTipo(h)==='ruta');
 
-  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:12px">
+  box.innerHTML=`<div class="sep pt-3">
     <b>Mover la guía N°${esc(numero)} a otro documento</b>
     <p class="small muted">Los documentos afectados quedan sin archivo hasta regenerarlos.</p>
     <label>Documento de destino</label>
@@ -4178,7 +4184,7 @@ function rectificarGuia(numero){
   if(!hojaDeGuia(g)){toast(GUIA_SIN_HOJA);return}
   const box=document.getElementById('rg-'+numero);
   if(box.innerHTML){box.innerHTML='';return}
-  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:12px">
+  box.innerHTML=`<div class="sep pt-3">
     <b>Rectificar la guía N°${esc(numero)}</b>
     <p class="small muted">Unidades que no se despacharon. Vuelven a quedar pendientes.</p>
     <table class="tprod" style="margin-top:8px;min-width:520px"><colgroup><col><col style="width:9ch"><col style="width:12ch"><col style="width:19ch"></colgroup>
@@ -4378,13 +4384,13 @@ function compraFaltante(numero,btn){
     const falta=Math.max((+i.cantidad_despachada||0)-(+i.cantidad_comprada||0),0);
     return falta>0?{ix:oc.items.indexOf(i),producto:i.producto,falta}:null;
   }).filter(Boolean);
-  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:8px">
+  box.innerHTML=`<div class="sep pt-2">
     <p class="small muted">Solo si la compra no se ingresó antes de la guía.</p>
     <div class="grid2">
       <div><label>Proveedor</label><input id="cf-prov-${numero}" placeholder="ej: Ferretería El Volcán"></div>
       <div><label>Fecha de compra</label><input id="cf-fecha-${numero}" type="date" value="${hoyISO()}"></div>
     </div>
-    <label style="text-transform:none;font-weight:400;letter-spacing:0;display:flex;gap:8px;align-items:center;margin-top:12px;color:var(--texto)"><input type="checkbox" id="cf-bod-${numero}" checked style="width:auto"> Ingresar al inventario</label>
+    <label style="font-weight:400;display:flex;gap:8px;align-items:center;margin-top:12px;color:var(--texto)"><input type="checkbox" id="cf-bod-${numero}" checked style="width:auto"> Ingresar al inventario</label>
     <table class="tprod" style="margin-top:12px;min-width:440px"><colgroup><col><col style="width:10ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Falta comprar</th><th>Comprado ahora</th></tr>
     ${faltas.map(f=>`<tr><td class="trunc" title="${esc(f.producto)}">${esc(f.producto)}</td><td class="num" style="color:var(--rojo);font-weight:600">${num(f.falta)}</td><td><input type="number" data-ix="${f.ix}" min="0" step="any" value="${f.falta}"></td></tr>`).join('')}</table>
     <div class="acciones"><button class="btn mini" onclick="guardarCompraFaltante('${numero}')">Guardar compra</button><button class="btn mini sec" onclick="compraFaltante('${numero}',this)">Cancelar</button></div>
@@ -4477,7 +4483,7 @@ function editOC(fe){
   const box=document.getElementById('eo-'+fe);
   if(box.innerHTML){box.innerHTML='';return}
   const conMov=o.items.some(i=>(+i.cantidad_despachada||0)>0||(+i.cantidad_comprada||0)>0);
-  box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:8px">
+  box.innerHTML=`<div class="sep pt-2">
     ${conMov?'<p class="small muted">No se puede bajar de lo despachado ni quitar ítems con movimiento.</p>':''}
     <div class="grid3">
       <div><label>Folio OC</label><input id="eo-folio-${fe}" value="${esc(o.folio)}"></div>
@@ -4614,7 +4620,7 @@ function rPrecios(){
     const d=ps[0].precio-ps[1].precio;
     if(!d)return '<span class="muted" title="Sin cambio respecto al precio anterior">=</span>';
     const pct=Math.round(Math.abs(d)/ps[1].precio*100);
-    return `<span style="color:var(--${d>0?'rojo':'verde'})" title="${d>0?'Subió':'Bajó'} ${clp(Math.abs(d))} respecto al precio anterior"><i class="ph ph-arrow-${d>0?'up':'down'}" style="font-size:12px"></i> ${pct}%</span>`;
+    return `<span style="color:var(--${d>0?'rojo':'verde'})" title="${d>0?'Subió':'Bajó'} ${clp(Math.abs(d))} respecto al precio anterior"><i class="ph ph-arrow-${d>0?'up':'down'} fs-xs"></i> ${pct}%</span>`;
   };
   return `
   <h2>Lista de precios <span class="muted">· ${conPrecio} de ${prods.length} artículos con precio de OC</span></h2>
@@ -4624,19 +4630,19 @@ function rPrecios(){
     <button class="btn mini sec" onclick="alternarNombres(this)"><i class="ph ph-arrows-out-cardinal"></i> Desplegar nombres</button>
     <span class="small muted">${filas.length} artículo(s) en pantalla</span>
   </div>
-  ${filas.length?`<div class="card" style="overflow-x:auto"><table class="tprod" style="min-width:960px">
+  ${filas.length?`<div class="card scroll-x"><table class="tprod" style="min-width:960px">
     <colgroup><col style="width:4em"><col style="width:12em"><col style="width:11ch"><col style="width:8ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"></colgroup>
     <tr><th></th><th>Producto</th><th class="num">Último precio</th><th class="num">Var.</th><th class="num">Anterior</th><th class="num">2 atrás</th><th class="num">3 atrás</th><th class="num">Cotizado</th></tr>
     ${filas.map(f=>{const ps=f.precios;
       return `<tr>
         <td>${f.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" aria-label="Editar el nombre del producto en el maestro" onclick="renombrarProducto(${jsq(f.codigo)})"><i class="ph ph-pencil-simple"></i></button>`:''}</td>
         <td class="trunc" title="${esc(f.nombre)}${f.codigo?' — '+esc(f.codigo):''}">${esc(f.nombre)}${f.codigo?` <span class="muted small mono">${esc(f.codigo)}</span>`:''}</td>
-        <td class="num" style="font-weight:700">${ps[0]?celda(ps[0]):'<span class="muted">—</span>'}</td>
+        <td class="num fw-7">${ps[0]?celda(ps[0]):'<span class="muted">—</span>'}</td>
         <td class="num small">${variacion(ps)}</td>
         <td class="num muted">${ps[1]?celda(ps[1]):''}</td>
         <td class="num muted">${ps[2]?celda(ps[2]):''}</td>
         <td class="num muted">${ps[3]?celda(ps[3]):''}</td>
-        <td class="num">${f.cot?`<span class="mono" style="color:var(--muted)" title="COT ${esc(f.cot.folio)} · ${fFecha(f.cot.fecha)}${ps[0]?' · adjudicada en '+clp(ps[0].precio):''}">${clp(f.cot.precio)}</span>`:''}</td>
+        <td class="num">${f.cot?`<span class="mono muted" title="COT ${esc(f.cot.folio)} · ${fFecha(f.cot.fecha)}${ps[0]?' · adjudicada en '+clp(ps[0].precio):''}">${clp(f.cot.precio)}</span>`:''}</td>
       </tr>`}).join('')}
   </table></div>
   <p class="small muted"><b>Cotizado</b> es referencia: no cuenta para la variación.</p>`
@@ -4997,14 +5003,14 @@ function panelGuiaLeida(){
     const ls=(doc?doc.items:[]).map(x=>`<option value="${esc(x.codigo)}"${it.codigo===x.codigo?' selected':''}${usados.includes(x.codigo)?' disabled':''}>${esc(x.producto)} · ${num(x.cantidad)} @ ${clp(x.precio_unitario)}</option>`).join('');
     return `<option value="">— sin asignar —</option>${ls}<option value="__nuevo__"${it.codigo==='__nuevo__'?' selected':''}>No está en la OC: usar el nombre de la guía</option>`;
   };
-  return `<div id="gl-panel" class="form" style="border:2px solid var(--ambar);border-radius:8px;padding:16px;margin:12px 0">
-    <b style="font-size:14px">Revisar la guía N°${esc(g.numero||'?')} antes de guardar</b>
+  return `<div id="gl-panel" class="form revision">
+    <b class="fs-sm">Revisar la guía N°${esc(g.numero||'?')} antes de guardar</b>
     <p class="small muted">Al confirmar se descuenta inventario.
       ${doc?`Los productos se emparejaron contra la <b>${esc(fuente)}</b> ${esc(g.oc||'')}.`:''}</p>
     ${g.avisos.length?`<div class="chip ambar" style="display:block;white-space:normal;margin:8px 0">${g.avisos.map(esc).join(' · ')}</div>`:''}
     ${(()=>{const d=guiaDescuadre(g);return d?`<div class="card" style="border-color:var(--rojo);margin:8px 0">
-      <b style="color:var(--rojo)">Esta guía no se puede guardar: las líneas no suman el neto</b>
-      <p class="small" style="margin-top:8px">Las líneas leídas suman ${clp(g.neto-d)} y el neto del documento es ${clp(g.neto)}: ${d>0?`faltan ${clp(d)}`:`sobran ${clp(-d)}`}. El lector no tomó bien alguna línea del documento. Si corregiste una cantidad a mano, revísala; si no, súbela a la cola de guías para que la procese el administrador.</p>
+      <b class="c-rojo">Esta guía no se puede guardar: las líneas no suman el neto</b>
+      <p class="small mt-2">Las líneas leídas suman ${clp(g.neto-d)} y el neto del documento es ${clp(g.neto)}: ${d>0?`faltan ${clp(d)}`:`sobran ${clp(-d)}`}. El lector no tomó bien alguna línea del documento. Si corregiste una cantidad a mano, revísala; si no, súbela a la cola de guías para que la procese el administrador.</p>
     </div>`:''})()}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
       <div><label>N° Guía</label><input value="${esc(g.numero||'')}" onchange="glCab('numero',this.value)"></div>
@@ -5014,15 +5020,15 @@ function panelGuiaLeida(){
       <div><label>Chofer</label><input value="${esc(g.chofer||'')}" onchange="glCab('chofer',this.value)"></div>
       <div><label>Patente</label><input value="${esc(g.patente||'')}" onchange="glCab('patente',this.value)"></div>
     </div>
-    <table style="margin-top:12px"><tr><th>Producto en la guía</th><th class="num">Cant.</th><th class="num">Precio</th><th>Producto del sistema</th></tr>
+    <table class="mt-3"><tr><th>Producto en la guía</th><th class="num">Cant.</th><th class="num">Precio</th><th>Producto del sistema</th></tr>
     ${g.items.map((it,i)=>{const m=MATCH[it.match]||MATCH.sin_match;return `<tr>
       <td class="trunc" title="${esc(it.nombre_guia)}">${esc(it.nombre_guia)}<br><span class="chip ${m[0]} small" title="${esc(m[1])}">${esc(it.match||'—')}</span></td>
       <td class="num"><input style="width:70px" value="${esc(String(it.cantidad))}" onchange="glSet(${i},'cantidad',+this.value||0)"></td>
       <td class="num mono">${clp(it.precio_unitario)}</td>
       <td><select onchange="glSet(${i},'codigo',this.value)">${opciones(it)}</select></td></tr>`}).join('')}
     </table>
-    <div class="small muted" style="margin-top:8px">Neto ${clp(g.neto)} · IVA ${clp(g.iva)} · Total ${clp(g.total)}</div>
-    <div class="acciones" style="margin-top:12px">
+    <div class="small muted mt-2">Neto ${clp(g.neto)} · IVA ${clp(g.iva)} · Total ${clp(g.total)}</div>
+    <div class="acciones mt-3">
       <button class="btn" onclick="guardarGuiaLeida()">Guardar la guía</button>
       <button class="btn sec" onclick="cancelarGuiaLeida()">Cancelar</button>
     </div></div>`;
@@ -5104,7 +5110,7 @@ async function guardarGuiaLeida(){
 }
 function formLeerGuia(){
   return `<details class="form" ${ficha('form:guia',true)}><summary>Cargar guía de despacho</summary><div class="inner">
-    <div class="dropzone" role="button" tabindex="0" style="margin-top:12px" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDropGuia(event)" onclick="document.getElementById('guia-pdf').click()">
+    <div class="dropzone mt-3" role="button" tabindex="0" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDropGuia(event)" onclick="document.getElementById('guia-pdf').click()">
       <input id="guia-pdf" type="file" accept=".pdf" style="display:none" onchange="leerGuiaPDF(this)" onclick="event.stopPropagation()">
       <div class="dz-icono"><i class="ph ph-cloud-arrow-up"></i></div>
       <div><b>Arrastra el PDF de Facto aquí</b> o haz clic para elegirlo</div>
@@ -5408,18 +5414,18 @@ async function cargarPlantillaInv(){
    se subió la planilla equivocada. */
 function confirmarPlantillaInv(plan){
   return new Promise(res=>{
-    const filas=[...plan.cambios.slice(0,12).map(c=>`<tr><td class="mono small">${esc(c.codigo)}</td><td class="trunc" title="${esc(c.nombre)}">${esc(c.nombre)}</td><td class="num">${num(c.antes)}</td><td class="num" style="font-weight:600">${num(c.cant)}</td></tr>`),
-      ...plan.nuevos.slice(0,6).map(n=>`<tr><td class="mono small" style="color:var(--verde)">nuevo</td><td class="trunc" title="${esc(n.nombre)}">${esc(n.nombre)}</td><td class="num">—</td><td class="num" style="font-weight:600">${num(n.cant)}</td></tr>`)];
+    const filas=[...plan.cambios.slice(0,12).map(c=>`<tr><td class="mono small">${esc(c.codigo)}</td><td class="trunc" title="${esc(c.nombre)}">${esc(c.nombre)}</td><td class="num">${num(c.antes)}</td><td class="num fw-6">${num(c.cant)}</td></tr>`),
+      ...plan.nuevos.slice(0,6).map(n=>`<tr><td class="mono small c-verde">nuevo</td><td class="trunc" title="${esc(n.nombre)}">${esc(n.nombre)}</td><td class="num">—</td><td class="num fw-6">${num(n.cant)}</td></tr>`)];
     const resto=(plan.cambios.length>12?plan.cambios.length-12:0)+(plan.nuevos.length>6?plan.nuevos.length-6:0);
     const ov=document.createElement('div');ov.className='modal-ov';
     ov.innerHTML=`<div class="modal" style="max-width:640px">
       <b>Revisa antes de cargar el inventario</b>
-      <div class="monto-ctx" style="margin-top:12px">
+      <div class="monto-ctx mt-3">
         <div><div class="et">Ajustes de stock</div><div class="va">${plan.cambios.length}</div></div>
         <div><div class="et">Productos nuevos</div><div class="va">${plan.nuevos.length}</div></div>
         <div><div class="et">Sin cambio</div><div class="va">${plan.iguales}</div></div>
       </div>
-      ${plan.ignoradas?`<p class="small muted" style="margin-top:8px">${plan.ignoradas} fila(s) sin datos válidos se omiten.</p>`:''}
+      ${plan.ignoradas?`<p class="small muted mt-2">${plan.ignoradas} fila(s) sin datos válidos se omiten.</p>`:''}
       <div style="max-height:260px;overflow:auto;margin-top:12px"><table class="tprod"><colgroup><col style="width:11ch"><col><col style="width:8ch"><col style="width:8ch"></colgroup>
         <tr><th>Código</th><th>Producto</th><th class="num">Antes</th><th class="num">Queda</th></tr>${filas.join('')}</table></div>
       ${resto?`<p class="small muted">y ${resto} más…</p>`:''}
@@ -5444,16 +5450,16 @@ function rInv(){
   const movs=[...inv.movimientos].reverse().slice(0,40);
   return `${dlProd()}
   <details class="form" ${ficha('form:inv-planilla')}><summary>Inventario por planilla — descargar y cargar</summary><div class="inner">
-    <p class="small muted" style="margin-top:12px">Descárgala, anota el conteo y súbela.</p>
+    <p class="small muted mt-3">Descárgala, anota el conteo y súbela.</p>
     <p class="small muted"><b>Importante:</b> es una foto completa del stock. La cantidad que escribas reemplaza a la anterior, y una celda de cantidad vacía se toma como cero. Si agregas filas nuevas sin código, esos productos se dan de alta en el maestro.</p>
-    <div class="acciones" style="margin-top:12px"><button class="btn sec" onclick="descargarPlantillaInv()"><i class="ph ph-file-arrow-down"></i> Descargar plantilla</button></div>
-    <label style="margin-top:16px">Planilla completada</label>
+    <div class="acciones mt-3"><button class="btn sec" onclick="descargarPlantillaInv()"><i class="ph ph-file-arrow-down"></i> Descargar plantilla</button></div>
+    <label class="mt-4">Planilla completada</label>
     <div class="dropzone" role="button" tabindex="0" onclick="document.getElementById('inv-plantilla').click()">
       <input id="inv-plantilla" type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="dzContarInv()" onclick="event.stopPropagation()">
       <div class="dz-icono"><i class="ph ph-cloud-arrow-up"></i></div>
       <div><b>Haz clic para elegir la planilla</b></div>
       <div class="small muted">Excel (.xlsx / .xls) o CSV</div>
-      <div id="inv-plantilla-n" class="mono small" style="margin-top:8px;color:var(--verde)"></div>
+      <div id="inv-plantilla-n" class="mono small mt-2 c-verde"></div>
     </div>
     <div class="acciones"><button class="btn" onclick="cargarPlantillaInv()">Cargar inventario</button></div>
   </div></details>
