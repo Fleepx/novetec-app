@@ -5415,15 +5415,61 @@ async function agregarInv(nombre){
   velo(false);
 }
 
+/* ================= Reapertura ================= */
+const REAP_MS=120000,TABS=['panel','cot','oc','guias','precios','inv'];
+const reapUid=()=>FBS&&FBS.usuario?FBS.usuario.uid:'';
+function reapDB(){
+  return new Promise((ok,mal)=>{const r=indexedDB.open('novetec_reapertura',1);
+    r.onupgradeneeded=()=>r.result.createObjectStore('estado');r.onsuccess=()=>ok(r.result);r.onerror=()=>mal(r.error)});
+}
+async function reapOp(fn){
+  const db=await reapDB();
+  try{return await new Promise((ok,mal)=>{const tx=db.transaction('estado','readwrite');let v;
+    const r=fn(tx.objectStore('estado'));if(r)r.onsuccess=()=>{v=r.result};
+    tx.oncomplete=()=>ok(v);tx.onerror=tx.onabort=()=>mal(tx.error)})}
+  finally{db.close()}
+}
+async function reapGuardar(){
+  try{
+    if(modoFirebase()&&!reapUid())return;
+    const archivo=x=>x instanceof Blob?x:null;
+    await reapOp(st=>st.put({t:Date.now(),uid:reapUid(),tab,y:scrollY,fichas:[...fichasAbiertas],
+      ocFile:ocLeida?archivo(ocLeida.archivo):null,gFile:_gLeida?archivo(_gLeida.file):null},'ultimo'));
+  }catch{}
+}
+async function reapLeer(){
+  try{
+    const v=await reapOp(st=>st.get('ultimo'));
+    await reapOp(st=>{st.delete('ultimo')});
+    return v&&Date.now()-v.t<REAP_MS?v:null;
+  }catch{return null}
+}
+function reapAplicar(v){
+  if(!v||v.uid!==reapUid())return null;
+  if(TABS.includes(v.tab)){tab=v.tab;document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab))}
+  (v.fichas||[]).forEach(([k,a])=>fichasAbiertas.set(k,a));
+  return v;
+}
+function reapRetomar(v){
+  scrollTo(0,v.y||0);
+  if(v.gFile&&tab==='guias')leerGuiaPDF({files:[v.gFile],value:''});
+  else if(v.ocFile&&tab==='oc')leerOCpdf(v.ocFile);
+}
+document.addEventListener('click',e=>{if(e.target.matches&&e.target.matches('input[type=file]'))reapGuardar()},true);
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden')reapGuardar();
+  else reapOp(st=>{st.delete('ultimo')}).catch(()=>{});
+});
+
 /* ================= Arranque ================= */
-let splashDesde=Date.now();
+let splashDesde=Date.now(),splashMin=1500;
 function abrirSplash(){
   const sp=document.getElementById('splash');
   if(sp.style.display==='none'||sp.classList.contains('out')){sp.classList.remove('out');sp.style.display='flex';splashDesde=Date.now()}
 }
 async function cerrarSplash(){
   const sp=document.getElementById('splash');
-  const falta=1500-(Date.now()-splashDesde);
+  const falta=splashMin-(Date.now()-splashDesde);
   if(falta>0)await new Promise(r=>setTimeout(r,falta));
   sp.classList.add('out');
   setTimeout(()=>{if(sp.classList.contains('out'))sp.style.display='none'},700);
@@ -5432,7 +5478,7 @@ async function cerrarSplashALogin(){
   const sp=document.getElementById('splash'),img=sp.querySelector('img');
   const card=document.querySelector('#login .card'),logo=document.querySelector('#login .login-logo');
   if(!img||!logo||!card||!img.complete||matchMedia('(prefers-reduced-motion: reduce)').matches){await cerrarSplash();return}
-  const falta=1500-(Date.now()-splashDesde);
+  const falta=splashMin-(Date.now()-splashDesde);
   if(falta>0)await new Promise(r=>setTimeout(r,falta));
   const E='cubic-bezier(0.32,0.72,0,1)';
   const resto=[...document.querySelectorAll('#login .login-sub,#login .btn-google,#login .login-err,#l-otra')].filter(e=>getComputedStyle(e).display!=='none');
@@ -5454,6 +5500,8 @@ async function cerrarSplashALogin(){
 }
 async function iniciar(){
   abrirSplash();
+  const reap=await reapLeer();let retomar=null;
+  if(reap)splashMin=400;
   document.getElementById('setup').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('hoy-lbl').textContent=new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
@@ -5464,7 +5512,7 @@ async function iniciar(){
       if(c)c.textContent=`${FBS.usuario.nombre} · salir`;
       const ac=document.getElementById('btn-accesos');if(ac)ac.style.display=esAdmin()?'':'none';
     }
-    await cargarTodo();render();
+    await cargarTodo();retomar=reapAplicar(reap);render();
   }
   catch(e){
     if(e.status===401){pedirTokenNuevo();await cerrarSplash();return}
@@ -5472,6 +5520,7 @@ async function iniciar(){
     toast('Error al cargar datos: '+(e.code?errorFirebase(e).message:e.message))
   }
   await cerrarSplash();
+  if(retomar)reapRetomar(retomar);
 }
 (function(){
   if(modoFirebase()){iniciar();return}
