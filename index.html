@@ -998,7 +998,7 @@ function formPendiente(tipo,accept){
   const esOC=tipo==='ordenes_compra';
   const titulo=esOC?'Cargar orden de compra o reporte SAP':`Subir ${TIPO_LBL[tipo].toLowerCase()}`;
   const pista=esOC?'PDF de SAP: se lee al instante · imagen, Excel o escaneo: queda en cola':'PDF, Excel, Word o imagen · varios a la vez';
-  return `<details class="form"><summary>${titulo}</summary><div class="inner">
+  return `<details class="form" ${ficha('form:'+tipo)}><summary>${titulo}</summary><div class="inner">
     <div class="dropzone" style="margin-top:12px" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'${tipo}')" onclick="document.getElementById('pd-file-${tipo}').click()">
       <input id="pd-file-${tipo}" type="file" accept="${accept}" multiple style="display:none" onchange="dzContar('${tipo}')" onclick="event.stopPropagation()">
       <div class="dz-icono"><i class="ph ph-cloud-arrow-up"></i></div>
@@ -2142,12 +2142,13 @@ function rPanel(){
 }
 /* Fichas plegables de documento: se recuerda cuáles quedaron abiertas para que un render
    (tras guardar una compra, editar, etc.) no las vuelva a cerrar todas. */
-const fichasAbiertas=new Set();
-function fichaAbierta(k){return fichasAbiertas.has(k)}
+const fichasAbiertas=new Map();
+function fichaAbierta(k,porDefecto){return fichasAbiertas.has(k)?fichasAbiertas.get(k):!!porDefecto}
 function recordarFicha(el){
   const k=el.dataset.k;if(!k)return;
-  el.open?fichasAbiertas.add(k):fichasAbiertas.delete(k);
+  fichasAbiertas.set(k,el.open);
 }
+const ficha=(k,porDefecto)=>`data-k="${esc(k)}"${fichaAbierta(k,porDefecto)?' open':''} ontoggle="recordarFicha(this)"`;
 function alternarFichas(btn){
   const ds=[...document.querySelectorAll('#vista details.doc, #vista details.acc-fecha, #vista details.acc-mes, #vista details.acc-anio')];
   if(!ds.length)return;
@@ -3489,7 +3490,7 @@ function rOC(){
   const psapReg=psapD.registros||[];
   return `${dlProd()}
   ${ocLeida?panelOCLeida():formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
-  ${psapReg.length?`<details class="form"><summary>Ver el reporte de pendientes SAP tal como llegó (${psapReg.length} líneas)${psapD.actualizado?` · cargado el ${fFecha(psapD.actualizado)}`:''}</summary><div class="inner" style="overflow-x:auto">
+  ${psapReg.length?`<details class="form" ${ficha('form:psap')}><summary>Ver el reporte de pendientes SAP tal como llegó (${psapReg.length} líneas)${psapD.actualizado?` · cargado el ${fFecha(psapD.actualizado)}`:''}</summary><div class="inner" style="overflow-x:auto">
         <table class="tprod" style="min-width:820px"><colgroup><col style="width:10ch"><col style="width:12ch"><col><col style="width:8ch"><col style="width:12ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"></colgroup><tr><th>Fecha doc</th><th>Doc. compras</th><th>Producto</th><th class="num">Cantidad</th><th>Bodega</th><th class="num">Por entregar</th><th class="num">Prc. neto</th><th class="num">Comprado</th></tr>
     ${psapReg.map(r=>`<tr>
       <td class="mono small">${fFecha(r.fecha_doc)}</td>
@@ -3743,7 +3744,7 @@ function rGuias(){
         :`<b>${esc(hrLbl(tp))} N°${esc(num)}</b>${tp==='retiro'?'<span class="chip" title="La mercadería la retira el cliente">retiro</span>':''}${chipEstado}${hoja?` <span class="chip">Envío ${fFecha(hoja.fecha_envio||hoja.fecha)}</span>`:''}`;
       const key='hoja:'+k;
       return{lista,fecha:sin?null:(hoja?(hoja.fecha_envio||hoja.fecha):null),
-        html:`<details class="acc-fecha ${sin?'':'hr-'+ESTADO_COLOR[he]}" data-k="${esc(key)}"${sin||fichaAbierta(key)?' open':''} ontoggle="recordarFicha(this)"><summary>${titulo}<span class="muted small">${esc(dests.join(' · '))}</span><span class="cnt">${lista.length} guía(s)</span>${desc}</summary><div class="cuerpo">
+        html:`<details class="acc-fecha ${sin?'':'hr-'+ESTADO_COLOR[he]}" ${ficha(key,sin)}><summary>${titulo}<span class="muted small">${esc(dests.join(' · '))}</span><span class="cnt">${lista.length} guía(s)</span>${desc}</summary><div class="cuerpo">
         ${lista.map(tarjetaGuia).join('')}
       </div></details>`};
     };
@@ -4206,7 +4207,7 @@ function irASubir(t){
     // abrir la zona de carga de archivos (la que tiene dropzone), no el primer details cualquiera
     const ds=[...document.querySelectorAll('#vista details.form')];
     const d=ds.find(x=>x.querySelector('.dropzone'))||ds[0];
-    if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'center'})}},60);
+    if(d){d.open=true;recordarFicha(d);d.scrollIntoView({behavior:'smooth',block:'center'})}},60);
 }
 function irASubirOC(){
   tab='oc';
@@ -4214,7 +4215,7 @@ function irASubirOC(){
   render();
   setTimeout(()=>{
     const d=[...document.querySelectorAll('#vista details.form')].find(x=>x.querySelector('#pd-file-ordenes_compra'));
-    if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'center'})}},60);
+    if(d){d.open=true;recordarFicha(d);d.scrollIntoView({behavior:'smooth',block:'center'})}},60);
 }
 function filaEdit(i,ix){
   return `<tr data-ix="${ix}">
@@ -4861,7 +4862,7 @@ async function guardarGuiaLeida(){
   velo(false);
 }
 function formLeerGuia(){
-  return `<details class="form" open><summary>Cargar guía de despacho</summary><div class="inner">
+  return `<details class="form" ${ficha('form:guia',true)}><summary>Cargar guía de despacho</summary><div class="inner">
     <div class="dropzone" style="margin-top:12px" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDropGuia(event)" onclick="document.getElementById('guia-pdf').click()">
       <input id="guia-pdf" type="file" accept=".pdf" style="display:none" onchange="leerGuiaPDF(this)" onclick="event.stopPropagation()">
       <div class="dz-icono"><i class="ph ph-cloud-arrow-up"></i></div>
@@ -5201,7 +5202,7 @@ function rInv(){
   const prods=[...inv.productos].sort((a,b)=>a.nombre.localeCompare(b.nombre));
   const movs=[...inv.movimientos].reverse().slice(0,40);
   return `${dlProd()}
-  <details class="form"><summary>Inventario por planilla — descargar y cargar</summary><div class="inner">
+  <details class="form" ${ficha('form:inv-planilla')}><summary>Inventario por planilla — descargar y cargar</summary><div class="inner">
     <p class="small muted" style="margin-top:12px">Descárgala, anota el conteo y súbela.</p>
     <p class="small muted"><b>Importante:</b> es una foto completa del stock. La cantidad que escribas reemplaza a la anterior, y una celda de cantidad vacía se toma como cero. Si agregas filas nuevas sin código, esos productos se dan de alta en el maestro.</p>
     <div class="acciones" style="margin-top:12px"><button class="btn sec" onclick="descargarPlantillaInv()"><i class="ph ph-file-arrow-down"></i> Descargar plantilla</button></div>
@@ -5215,7 +5216,7 @@ function rInv(){
     </div>
     <div class="acciones"><button class="btn" onclick="cargarPlantillaInv()">Cargar inventario</button></div>
   </div></details>
-  <details class="form"><summary>Registrar ingreso a bodega</summary><div class="inner">
+  <details class="form" ${ficha('form:inv-ingreso')}><summary>Registrar ingreso a bodega</summary><div class="inner">
     <div class="grid3">
       <div><label>Producto</label><input id="i-prod" list="dl-prod"></div>
       <div><label>Cantidad</label><input id="i-cant" type="number" min="0" step="any"></div>
