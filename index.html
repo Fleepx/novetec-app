@@ -289,9 +289,15 @@ td.num,th.num{text-align:right;font-family:var(--mono);letter-spacing:-.01em}
 @media(max-width:640px){.item-row{grid-template-columns:1fr 80px 100px 30px}}
 .item-row button{border:none;background:none;color:var(--rojo);font-size:18px;cursor:pointer}
 .acciones{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;align-items:center}
-.vacio{text-align:center;color:var(--muted);padding:32px;font-size:var(--fs-sm)}
+.vacio{display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;color:var(--muted);padding:40px 16px;font-size:var(--fs-base)}
+.vacio .vacio-ic{width:48px;height:48px;border-radius:9999px;background:var(--gris-bg);color:var(--texto);display:flex;align-items:center;justify-content:center;font-size:24px}
+.vacio b{color:var(--texto);font-weight:600}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--btn-bg);color:var(--btn-fg);font-family:var(--mono);font-size:var(--fs-sm);padding:12px 16px;border-radius:8px;display:none;z-index:99;max-width:90vw}
-#velo{position:fixed;inset:0;background:rgba(22,35,46,.35);display:none;align-items:center;justify-content:center;z-index:50;font-family:var(--mono);color:#fff;font-size:var(--fs-md)}
+#velo{position:fixed;inset:0;background:rgba(22,35,46,.35);display:none;align-items:center;justify-content:center;z-index:50}
+#velo-msg{position:relative;overflow:hidden;background:var(--card);color:var(--texto);border-radius:12px;padding:16px 24px;font-size:var(--fs-base);font-weight:600;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+#velo-msg::after{content:'';position:absolute;left:0;width:40%;bottom:0;height:3px;border-radius:9999px;background:var(--marca);animation:veloBarra 1.4s cubic-bezier(0.32,0.72,0,1) infinite}
+@keyframes veloBarra{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+@media(prefers-reduced-motion:reduce){#velo-msg::after{animation:none;opacity:.6}}
 #splash{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:200;opacity:1;transition:opacity 700ms cubic-bezier(0.32,0.72,0,1)}
 #splash.out{opacity:0;pointer-events:none}
 #splash img{width:min(46vw,260px);animation:splashIn .8s cubic-bezier(0.32,0.72,0,1)}
@@ -833,6 +839,9 @@ function fechaCompromiso(desde){
 }
 function fFecha(iso){if(!iso)return '—';const[a,m,d]=iso.split('-');return `${d}-${m}-${a}`}
 function dias(iso){if(!iso)return null;const[a,m,d]=iso.split('-').map(Number);const f=new Date(a,m-1,d);const h=new Date();h.setHours(0,0,0,0);return Math.round((f-h)/86400000)}
+function vacio(icono,texto,accion,fn){
+  return `<div class="vacio"><span class="vacio-ic"><i class="ph ph-${icono}"></i></span><b>${texto}</b>${accion?`<button class="btn mini sec" onclick="${fn}">${accion}</button>`:''}</div>`;
+}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';clearTimeout(t._x);t._x=setTimeout(()=>t.style.display='none',4200)}
 function velo(on,msg){document.getElementById('velo').style.display=on?'flex':'none';if(msg)document.getElementById('velo-msg').textContent=msg}
 
@@ -2318,7 +2327,7 @@ function rPanel(){
         :`<button class="btn mini" onclick="ocultarDelResumen('${encodeURIComponent(c.k)}')" title="Comprada · pulsa para quitarla del resumen"><i class="ph ph-check"></i></button>`}${revertible(c)>0?`
         <button class="btn mini sec" onclick="revertirCompra('${encodeURIComponent(c.k)}')" title="Revertir una compra ingresada por error (hasta ${num(revertible(c))})"><i class="ph ph-arrow-counter-clockwise"></i></button>`:''}</td>
     </tr>`).join('')}
-  </table></div>`:`<div class="card vacio">${nOcultos?'Todo lo confirmado está comprado y oculto del resumen.':'No hay pendientes confirmados (OC ni Pendientes SAP).'}</div>`}
+  </table></div>`:`<div class="card">${nOcultos?vacio('seal-check','Todo lo confirmado está comprado'):vacio('seal-check','Sin pendientes confirmados','Cargar orden de compra','irASubirOC()')}</div>`}
   ${nOcultos?`<p class="small muted" style="margin:-8px 0 16px">${nOcultos} producto(s) comprados ocultos del resumen · <a href="#" onclick="event.preventDefault();mostrarOcultos()">volver a mostrarlos</a></p>`:''}`;
 
   /* ZONA INFERIOR: detalle por bodega, orden fijo Rancagua → San Francisco Mostazal → El Peumo → Longovilo.
@@ -2355,7 +2364,7 @@ function rPanel(){
   </div>
   ${zonaResumen}
   ${DB[ARCH.pend].data.pendientes.length?`<div class="card" style="border-color:var(--ambar)"><i class="ph ph-file-text"></i> <b>${DB[ARCH.pend].data.pendientes.length}</b> documento(s) en cola esperando ser procesados por el administrador.</div>`:''}
-  ${destOrden.length?destOrden.map(dst=>tablaGrupo(dst,grupos[dst])).join(''):'<div class="card vacio">No hay ítems pendientes de despacho.</div>'}`;
+  ${destOrden.length?destOrden.map(dst=>tablaGrupo(dst,grupos[dst])).join(''):`<div class="card">${vacio('seal-check','Nada por despachar')}</div>`}`;
 }
 /* Fichas plegables de documento: se recuerda cuáles quedaron abiertas para que un render
    (tras guardar una compra, editar, etc.) no las vuelva a cerrar todas. */
@@ -3521,7 +3530,7 @@ function rCot(){
       </details>
     </div>`}).join('')
     ))
-    :'<div class="card vacio">Aún no hay cotizaciones registradas.</div>'}`;
+    :`<div class="card">${vacio('file-plus','Aún no hay cotizaciones','Nueva cotización','nuevaCotizacion()')}</div>`}`;
 }
 async function borrarCot(id){
   if(!esAdmin()){toast('Solo el administrador puede hacer esto.');return}
@@ -3772,7 +3781,7 @@ function rOC(){
     </div></div>`}).join('')
     );
   })
-  :'<div class="card vacio">No hay órdenes de compra.</div>'}`;
+  :`<div class="card">${vacio('file-plus','No hay órdenes de compra','Cargar orden de compra','irASubirOC()')}</div>`}`;
 }
 async function borrarOC(fe){
   if(!esAdmin()){toast('Solo el administrador puede hacer esto.');return}
@@ -3938,7 +3947,7 @@ function rGuias(){
   ${DB[ARCH.guias].data.guias.length?barraFichas():''}
   ${(()=>{
     const gs=DB[ARCH.guias].data.guias;
-    if(!gs.length)return '<div class="card vacio">Aún no hay guías registradas.</div>';
+    if(!gs.length)return `<div class="card">${vacio('file-plus','Aún no hay guías',"Cargar guía","document.getElementById('guia-pdf').click()")}</div>`;
     /* Agrupadas por HOJA DE RUTA (Jefe, 24-07-2026): una hoja = un viaje, y ese es el orden
        en que se recorre el despacho. Dentro de cada hoja, si el viaje tuvo varios destinos,
        las guías se ordenan por bodega en el orden fijo de recorrido. Las guías que aún no
@@ -4646,7 +4655,7 @@ function rPrecios(){
       </tr>`}).join('')}
   </table></div>
   <p class="small muted"><b>Cotizado</b> es referencia: no cuenta para la variación.</p>`
-  :'<div class="card vacio">No hay artículos que coincidan con la búsqueda.</div>'}`;
+  :`<div class="card">${vacio('funnel','Sin resultados','Limpiar búsqueda',"preFiltro='';preSoloCon=false;render()")}</div>`}`;
 }
 
 /* ================= Plantilla de inventario (Jefe, 30-07-2026) =================
@@ -5479,7 +5488,7 @@ function rInv(){
   <h2>Últimos movimientos</h2>
   <div class="card">${movs.length?`<table class="tprod" style="min-width:720px"><colgroup><col style="width:11ch"><col style="width:11ch"><col style="width:9ch"><col><col style="width:8ch"><col style="width:20ch"></colgroup><tr><th>Fecha</th><th>Código</th><th>Tipo</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
     ${movs.map(m=>`<tr><td class="mono small">${fFecha(m.fecha)}</td><td class="mono small">${esc(m.codigo||'—')}</td><td><span class="chip ${m.tipo==='salida'?'rojo':m.tipo==='ingreso'?'verde':''}">${m.tipo}</span></td><td class="trunc" title="${esc(m.producto)}">${esc(m.producto)}</td><td class="num">${num(m.cantidad)}</td><td class="trunc small muted" title="${esc(m.referencia||'')}">${esc(m.referencia||'')}</td></tr>`).join('')}</table>`
-    :'<div class="vacio">Sin movimientos aún.</div>'}</div>`;
+    :vacio('arrows-clockwise','Sin movimientos aún')}</div>`;
 }
 async function ingresoInv(){
   const nombre=v('i-prod').trim(),cant=+v('i-cant');
