@@ -2004,6 +2004,13 @@ function normBodega(b){
   return hit?hit.nombre:s;
 }
 
+function selectorBodega(actual,porConfirmar,fn){
+  return `<select onchange="${fn}(this.value)"><option value="">— elegir —</option>
+    ${bodegasOrden().map(b=>`<option value="${esc(b)}"${!porConfirmar&&actual===b?' selected':''}>${esc(b)}</option>`).join('')}
+    <option value="__otra__"${porConfirmar?' selected':''}>Otra (escribir)…</option></select>
+    ${porConfirmar?`<input style="margin-top:8px" value="${esc(actual||'')}" placeholder="Nombre de la bodega" onchange="${fn}Manual(this.value)">
+    <div class="small" style="color:var(--ambar);margin-top:4px">Queda como bodega por confirmar</div>`:''}`;
+}
 function medidaPendiente(codigo){
   if(!codigo)return false;
   const p=DB[ARCH.prod].data.productos.find(x=>x.codigo===codigo);
@@ -2877,6 +2884,17 @@ async function leerOCpdf(f){
   }catch(e){toast('No se pudo leer el PDF: '+e.message)}
   velo(false);
 }
+function ocBodega(v){
+  if(!ocLeida)return;
+  if(v==='__otra__'){ocLeida.bodega_por_confirmar=true;ocLeida.destino=null}
+  else{ocLeida.bodega_por_confirmar=false;ocLeida.destino=v||null}
+  ocLeida.errores=validarOC(ocLeida);render();
+}
+function ocBodegaManual(t){
+  if(!ocLeida)return;
+  ocLeida.destino=String(t||'').trim()||null;ocLeida.bodega_por_confirmar=true;
+  ocLeida.errores=validarOC(ocLeida);render();
+}
 function descartarOCLeida(){ocLeida=null;render();toast('Lectura descartada')}
 function fijarCodigo(pos,val){const r=ocLeida.resueltos.find(x=>x.pos===pos);if(r)r.codigo=val}
 async function guardarOCLeida(){
@@ -2919,6 +2937,7 @@ async function guardarOCLeida(){
     DB[ARCH.oc].data.ordenes.push({folio:o.folio,cotizacion_id:null,cotizacion_sap:o.cotizacion_sap,
       emisor:o.emisor,fecha_emision:o.fecha_emision,fecha_carga:o.fecha_carga||hoyISO(),
       fecha_entrega:o.fecha_entrega||fechaCompromiso(),destino:o.destino,
+      ...(o.bodega_por_confirmar?{bodega_por_confirmar:true}:{}),
       cliente:'Agricola Super Ltda',items,compras:[],guias:[],archivo:ruta,
       notas:'Leída automáticamente desde el PDF y confirmada en pantalla. Fecha de entrega = carga + 10 días.'});
     (DB[ARCH.arch].data.archivos).push({hash:o.hash,nombre:o.archivo.name,tipo:'ordenes_compra',
@@ -3038,7 +3057,7 @@ function panelOCLeida(){
     <div class="grid3">
       <div><label>Emisión</label><div class="mono">${fFecha(o.fecha_emision)}</div></div>
       <div><label>Entrega (carga + 10 días)</label><div class="mono">${fFecha(o.fecha_entrega)}</div><div class="small muted">plazo propio: la fecha del documento no es fiable</div></div>
-      <div><label>Destino</label><div class="mono">${esc(o.destino||'—')}</div><div class="small muted">documento: "${esc(o.destino_texto||'')}"</div></div>
+      <div><label>Destino</label>${o.destino&&!o.bodega_por_confirmar&&bodegasOrden().includes(o.destino)?`<div class="mono">${esc(o.destino)}</div>`:selectorBodega(o.destino,o.bodega_por_confirmar,'ocBodega')}<div class="small muted">documento: "${esc(o.destino_texto||'')}"</div></div>
       <div><label>Emisor</label><div class="mono small">${esc(o.emisor||'—')}</div></div>
       <div><label>Cotización SAP</label><div class="mono small">${esc(o.cotizacion_sap||'sin cotización')}</div></div>
       <div><label>Total sin IVA</label><div class="mono">${clp(o.total_documento)}</div></div>
@@ -3588,6 +3607,7 @@ function rOC(){
         <span class="chip ${ESTADO_COLOR[e]}">${ESTADO_LBL[e]}</span>
         ${e!=='despachada'&&s.c!=='gris'?`<span class="chip ${s.c}" title="Plazo de entrega">${s.txt}</span>`:''}
         ${o.baja?'':chipCompra(o)}
+        ${o.bodega_por_confirmar?'<span class="chip ambar">bodega por confirmar</span>':''}
         ${!o.baja&&(o.sin_documento||!o.archivo)?'<span class="chip ambar" title="Todavía no tiene su documento. Si llega, se adjunta a esta misma OC, sin crear otra.">sin documento</span>':''}
         <span class="muted small">Emisión ${fFecha(o.fecha_emision)}${o.fecha_carga&&o.fecha_carga!==o.fecha_emision?` · <span title="Día en que se cargó al sistema">cargada ${fFecha(o.fecha_carga)}</span>`:''}${o.fecha_entrega?` · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b>`:''} · ${esc(o.destino||'—')}</span>
         <span class="resumen">${o.baja?`${o.items.length} ítem(s) · dada de baja`:`${o.items.length} ítem(s) · ${num(pendD)} por despachar`}</span>
@@ -3848,7 +3868,7 @@ function tarjetaGuia(g){
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
       <span class="mono" style="font-weight:700;font-size:var(--fs-lg)">Guía N° ${esc(g.numero)}</span>
       <span class="chip ${GUIA_ESTADO_COLOR[ge]}">${GUIA_ESTADO_LBL[ge]}</span>
-      <span class="chip"><i class="ph ph-warehouse" style="font-size:12px"></i> ${esc(normBodega(g.destino||'Sin destino'))}</span>
+      <span class="chip"><i class="ph ph-warehouse" style="font-size:12px"></i> ${esc(normBodega(g.destino||'Sin destino'))}</span>${g.bodega_por_confirmar?'<span class="chip ambar">bodega por confirmar</span>':''}
       <span class="chip" title="Fecha de la guía">${fFecha(g.fecha)}</span>
       <span class="chip ink">OC ${esc(g.oc||g.folio_oc)}</span>
       ${(()=>{ /* Guía sin OC cargada: el reporte del cliente basta como respaldo (Jefe, 20-08-2026).
@@ -4824,6 +4844,13 @@ function guiaDescuadre(g){
   return Math.abs(suma-g.neto)>1?g.neto-suma:0;
 }
 function glCab(campo,v){if(_gLeida)_gLeida.g[campo]=v}
+function glBodega(v){
+  if(!_gLeida)return;const g=_gLeida.g;
+  if(v==='__otra__'){g.bodega_por_confirmar=true;g.destino=''}
+  else{g.bodega_por_confirmar=false;g.destino=v}
+  render();
+}
+function glBodegaManual(t){if(!_gLeida)return;_gLeida.g.destino=String(t||'').trim();_gLeida.g.bodega_por_confirmar=true;render()}
 /* Panel de revisión. Jefe pidió revisar SIEMPRE antes de guardar: una cantidad mal
    leída entra al inventario y a la OC, y desandarlo cuesta más que mirarlo. */
 function panelGuiaLeida(){
@@ -4851,8 +4878,7 @@ function panelGuiaLeida(){
       <div><label>N° Guía</label><input value="${esc(g.numero||'')}" onchange="glCab('numero',this.value)"></div>
       <div><label>Fecha</label><input type="date" value="${esc(g.fecha||'')}" onchange="glCab('fecha',this.value)"></div>
       <div><label>Folio OC</label><input value="${esc(g.oc||'')}" onchange="glCab('oc',this.value)"></div>
-      <div><label>Destino</label><select onchange="glCab('destino',this.value)"><option value="">— elegir —</option>
-        ${bodegasOrden().map(b=>`<option value="${esc(b)}"${g.destino===b?' selected':''}>${esc(b)}</option>`).join('')}</select></div>
+      <div><label>Destino</label>${selectorBodega(g.destino,g.bodega_por_confirmar,'glBodega')}</div>
       <div><label>Chofer</label><input value="${esc(g.chofer||'')}" onchange="glCab('chofer',this.value)"></div>
       <div><label>Patente</label><input value="${esc(g.patente||'')}" onchange="glCab('patente',this.value)"></div>
     </div>
@@ -4916,7 +4942,7 @@ async function guardarGuiaLeida(){
     if(oc)oc.guias=[...new Set([...(oc.guias||[]),String(g.numero)])];
     const ruta=await subirDocumento('guias_despacho',file,`GD_${g.numero}.pdf`);
     DB[ARCH.guias].data.guias.push({numero:String(g.numero),fecha:g.fecha,fecha_envio:null,
-      oc:String(g.oc||''),folio_oc:String(g.oc||''),destino:g.destino,
+      oc:String(g.oc||''),folio_oc:String(g.oc||''),destino:g.destino,...(g.bodega_por_confirmar?{bodega_por_confirmar:true}:{}),
       cliente:g.cliente||'Agricola Super Ltda',chofer:g.chofer||null,patente:g.patente||null,
       items,neto:g.neto,iva:g.iva,total:g.total,hoja_ruta:null,
       /* Se deja preseleccionado el tipo, pero SIN asignar documento: el número y la fecha
