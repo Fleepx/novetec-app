@@ -158,12 +158,17 @@ tr.fila-comprada-parcial>td{background:var(--ambar-bg)}
 .alerta-cifra{color:var(--rojo);margin-left:4px;cursor:help}
 /* Acordeón de guías: hoja de ruta -> guías de ese viaje */
 .acc-bodega{margin-bottom:12px}
-.acc-fecha>summary{list-style:none;cursor:pointer;padding:12px 16px;border:1px solid var(--line);border-radius:8px;background:var(--card);display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-top:8px;font-weight:600}
+.acc-fecha>summary{list-style:none;cursor:pointer;padding:12px 16px;border:1px solid var(--line);border-radius:8px;background:var(--card);display:flex;align-items:center;flex-wrap:nowrap;gap:8px 12px;margin-top:8px;font-weight:600;white-space:nowrap}
+.acc-fecha>summary .dests{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acc-fecha[open]>summary{flex-wrap:wrap}
+.acc-fecha[open]>summary .dests{order:10;flex:1 1 100%;white-space:normal;overflow:visible;padding-left:32px}
+.acc-fecha[open]>summary .cnt{margin-left:auto}
+@media (max-width:640px){.acc-fecha>summary{flex-wrap:wrap}.acc-fecha>summary .dests{order:10;flex:1 1 100%}}
 .acc-fecha>summary .btn{flex:none}
 .acc-fecha>summary::-webkit-details-marker{display:none}
 .acc-fecha>summary::before{content:'\e13a';font-family:'Phosphor';font-weight:400;color:var(--muted);transition:transform 300ms cubic-bezier(0.32,0.72,0,1)}
 .acc-fecha[open]>summary::before{transform:rotate(90deg)}
-.acc-fecha>summary .cnt{margin-left:auto;font-family:var(--mono);font-size:var(--fs-xs);color:var(--muted);font-weight:400}
+.acc-fecha>summary .cnt{flex:none;font-family:var(--mono);font-size:var(--fs-xs);color:var(--muted);font-weight:400}
 .acc-fecha>summary .chip{font-weight:400}
 .acc-fecha .cuerpo{padding:8px 0 4px 8px;min-width:0}
 /* Pestaña de color de la hoja de ruta, igual criterio que las OC (Jefe, 24-07-2026) */
@@ -174,13 +179,15 @@ tr.fila-comprada-parcial>td{background:var(--ambar-bg)}
 /* Acordeón de MES (Jefe, 30-07-2026): agrupa cotizaciones, OC y guías. Va por fuera de todo lo
    demás (incluida la agrupación por Hoja de Ruta de las guías, que se conserva adentro). Un
    nivel más grande que acc-fecha para que se note que es el contenedor exterior. */
-.acc-mes{margin-bottom:12px}
+.acc-mes{margin-bottom:12px;border:1px solid transparent;border-radius:12px}
+.acc-mes[open]{background:var(--gris-bg);border-color:var(--line);padding:0 12px 12px}
+.acc-mes[open]>summary{border-color:transparent;background:transparent;padding:16px 4px 8px;font-size:var(--fs-lg)}
 .acc-mes>summary{list-style:none;cursor:pointer;padding:12px 16px;border:1px solid var(--line);border-radius:8px;background:var(--sub-bg);display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;font-weight:700;font-size:var(--fs-md)}
 .acc-mes>summary::-webkit-details-marker{display:none}
 .acc-mes>summary::before{content:'\e13a';font-family:'Phosphor';font-weight:400;color:var(--muted);transition:transform 300ms cubic-bezier(0.32,0.72,0,1)}
 .acc-mes[open]>summary::before{transform:rotate(90deg)}
 .acc-mes>summary .cnt{margin-left:auto;font-family:var(--mono);font-size:var(--fs-sm);color:var(--muted);font-weight:500}
-.acc-mes .cuerpo{padding:12px 0 2px 2px}
+.acc-mes .cuerpo{padding:0}
 /* Acordeón de AÑO (Jefe, 30-07-2026): solo aparece cuando la data cruza más de un año
    calendario. Sin esto, dos meses del mismo nombre en años distintos (dos "Junio") quedaban
    uno junto al otro y se leían como un mes duplicado. Un nivel más grande que acc-mes. */
@@ -3744,7 +3751,7 @@ function rGuias(){
         :`<b>${esc(hrLbl(tp))} N°${esc(num)}</b>${tp==='retiro'?'<span class="chip" title="La mercadería la retira el cliente">retiro</span>':''}${chipEstado}${hoja?` <span class="chip">Envío ${fFecha(hoja.fecha_envio||hoja.fecha)}</span>`:''}`;
       const key='hoja:'+k;
       return{lista,fecha:sin?null:(hoja?(hoja.fecha_envio||hoja.fecha):null),
-        html:`<details class="acc-fecha ${sin?'':'hr-'+ESTADO_COLOR[he]}" ${ficha(key,sin)}><summary>${titulo}<span class="muted small">${esc(dests.join(' · '))}</span><span class="cnt">${lista.length} guía(s)</span>${desc}</summary><div class="cuerpo">
+        html:`<details class="acc-fecha ${sin?'':'hr-'+ESTADO_COLOR[he]}" ${ficha(key,sin)}><summary>${titulo}<span class="muted small dests" title="${esc(dests.join(' · '))}">${esc(dests.join(' · '))}</span><span class="cnt">${lista.length} guía(s)</span>${desc}</summary><div class="cuerpo">
         ${lista.map(tarjetaGuia).join('')}
       </div></details>`};
     };
