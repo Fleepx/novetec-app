@@ -55,7 +55,10 @@ header .conn{font-family:var(--mono);font-size:var(--fs-xs);color:#9FB0BE;cursor
 .hbtn i{font-size:14px}
 .hbtn .nivel{position:absolute;bottom:-1px;right:-1px;background:var(--btn-bg);color:var(--btn-fg);font-family:var(--mono);font-size:12px;font-weight:600;line-height:1;padding:2px 4px;border-radius:6px}
 #btn-salir{display:none}
-@media(max-width:640px){.hacciones .conn{display:none}#btn-salir{display:flex}}
+@media(max-width:640px){.hacciones .conn{display:none}#btn-salir{display:flex}
+  header{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;column-gap:12px;row-gap:12px;padding:12px 16px}
+  header .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  header .hacciones{grid-column:1/-1;margin-left:0;justify-content:flex-end}}
 nav{background:var(--card);border-bottom:1px solid var(--line);display:flex;overflow-x:auto;position:sticky;top:0;z-index:10}
 nav button{font-family:var(--sans);font-size:var(--fs-md);font-weight:600;letter-spacing:.01em;padding:16px 16px;border:none;background:none;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;transition:color 300ms cubic-bezier(0.32,0.72,0,1)}
 nav button:hover{color:var(--texto)}
@@ -325,7 +328,7 @@ a{color:var(--texto)}
 
 <div id="app" style="display:none">
 <header>
-  <h1>Novetec · Despacho</h1>
+  <h1>Novetec</h1>
   <span class="sub" id="hoy-lbl"></span>
   <div class="hacciones">
     <button class="hbtn" id="btn-tema" onclick="alternarTema()" title="Modo oscuro" aria-label="Modo oscuro"><img src="logo-marca.png" alt=""></button>
