@@ -8,7 +8,7 @@ const GUIAS = path.join(DATOS, 'documentos', 'guias_despacho');
 
 const js = fs.readFileSync(path.join(APP, 'index.html'), 'utf8').match(/<script>([\s\S]*)<\/script>/)[1];
 const nodo = () => ({
-  value: '', innerHTML: '', textContent: '', style: {setProperty() {}}, dataset: {},
+  value: '', innerHTML: '', textContent: '', style: {setProperty() {}, removeProperty() {}}, dataset: {},
   classList: {toggle() {}, add() {}, remove() {}, contains: () => false},
   querySelector: () => nodo(), querySelectorAll: () => [], addEventListener() {},
   setAttribute() {}, insertAdjacentHTML() {}, focus() {}, scrollIntoView() {},
@@ -17,7 +17,7 @@ const nodo = () => ({
 globalThis.document = {
   getElementById: () => nodo(), querySelector: () => nodo(), querySelectorAll: () => [],
   addEventListener() {}, createElement: () => nodo(), body: nodo(),
-  documentElement: {setAttribute() {}, style: {setProperty() {}}}
+  documentElement: {setAttribute() {}, style: {setProperty() {}, removeProperty() {}}}
 };
 globalThis.window = {};
 globalThis.localStorage = {getItem: () => null, setItem() {}};

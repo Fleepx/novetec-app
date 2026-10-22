@@ -26,7 +26,7 @@ if (abre !== cierra) { console.error('FALLA: los estilos tienen ' + abre + ' lla
 
 /* ---- DOM mínimo: solo lo que las vistas tocan al renderizar ---- */
 const nodo = () => ({
-  value: '', innerHTML: '', textContent: '', style: { setProperty() {} }, dataset: {},
+  value: '', innerHTML: '', textContent: '', style: { setProperty() {}, removeProperty() {} }, dataset: {},
   classList: { toggle() {}, add() {}, remove() {}, contains: () => false },
   querySelector: () => nodo(), querySelectorAll: () => [], addEventListener() {},
   setAttribute() {}, insertAdjacentHTML() {}, focus() {}, scrollIntoView() {},
@@ -35,7 +35,7 @@ const nodo = () => ({
 global.document = {
   getElementById: () => nodo(), querySelector: () => nodo(), querySelectorAll: () => [],
   addEventListener() {}, createElement: () => nodo(), body: nodo(),
-  documentElement: { setAttribute() {}, style: { setProperty() {} } }
+  documentElement: { setAttribute() {}, style: { setProperty() {}, removeProperty() {} } }
 };
 global.window = {};
 global.localStorage = { getItem: () => null, setItem() {} };

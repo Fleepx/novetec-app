@@ -25,7 +25,7 @@
   --campo:#FFFFFF; --hover:#EEF3F7; --sub-bg:#FAFBFC;
   --rojo:#C7392F; --rojo-bg:#FBEAE8; --ambar:#B57708; --ambar-bg:#FCF3E1;
   --verde:#2E7D4F; --verde-bg:#E7F3EC; --gris-bg:#EAEDF0; --vencida:#7A1F17;
-  --radius:8px; --mono:'Geist Mono',ui-monospace,monospace; --sans:'Manrope',system-ui,-apple-system,sans-serif;
+  --marca:var(--btn-bg); --radius:8px; --mono:'Geist Mono',ui-monospace,monospace; --sans:'Manrope',system-ui,-apple-system,sans-serif;
   /* Escala tipográfica (guía Learn UI Design, diseño interaction-heavy).
      16px es el piso del cuerpo y de TODOS los campos: bajo eso iOS hace zoom al tocarlos.
      --escala la controla el botón de zoom de la barra superior (1 · 1,15 · 1,3). */
@@ -49,15 +49,33 @@ h1,h2,h3{text-wrap:balance}
 body{font-family:var(--sans);background:var(--paper);color:var(--texto);font-size:var(--fs-base);line-height:1.55;-webkit-font-smoothing:antialiased}
 header{background:var(--barra);color:#fff;padding:12px 24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 header h1{font-size:16px;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
-header .sub{font-family:var(--mono);font-size:var(--fs-sm);color:#9FB0BE;letter-spacing:.02em}
-header .conn{font-family:var(--mono);font-size:var(--fs-xs);color:#9FB0BE;cursor:pointer;text-decoration:underline dotted}
+header .sub{font-family:var(--mono);font-size:var(--fs-sm);color:rgba(255,255,255,.66);letter-spacing:.02em}
+header .conn{font-family:var(--mono);font-size:var(--fs-xs);color:rgba(255,255,255,.66);cursor:pointer;text-decoration:underline dotted}
 /* Acciones de la barra: botones redondos */
 .hacciones{margin-left:auto;display:flex;align-items:center;gap:12px}
 .hbtn{width:38px;height:38px;flex:none;border-radius:50%;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.06);color:#E4EBF1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;overflow:hidden;position:relative;transition:background 300ms cubic-bezier(0.32,0.72,0,1),border-color 300ms cubic-bezier(0.32,0.72,0,1)}
 .hbtn:hover{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.45)}
 .hbtn img{width:100%;height:100%;object-fit:cover;display:block}
 .hbtn i{font-size:14px}
-.hbtn .nivel{position:absolute;bottom:-1px;right:-1px;background:var(--btn-bg);color:var(--btn-fg);font-family:var(--mono);font-size:12px;font-weight:600;line-height:1;padding:2px 4px;border-radius:6px}
+.aj-cab{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.aj-cab b{font-size:var(--fs-lg)}
+.hbtn.aj-cerrar{border-color:var(--line);background:none;color:var(--texto)}
+.hbtn.aj-cerrar:hover{background:var(--hover);border-color:var(--line)}
+.paletas{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media(max-width:480px){.paletas{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.pal{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:12px;border:1.5px solid var(--line);border-radius:8px;background:var(--card);color:var(--texto);font-family:var(--sans);font-size:var(--fs-sm);font-weight:600;cursor:pointer;text-align:left;transition:border-color 300ms cubic-bezier(0.32,0.72,0,1),transform 300ms cubic-bezier(0.32,0.72,0,1)}
+.pal:hover{border-color:var(--muted)}
+.pal:active{transform:scale(0.98)}
+.pal.on{border-color:var(--btn-bg);box-shadow:0 0 0 1px var(--btn-bg)}
+.pal-muestra{display:flex;gap:4px}
+.pal-muestra span{width:24px;height:24px;border-radius:9999px;border:1px solid rgba(127,127,127,.25)}
+.aj-color{display:flex;align-items:center;gap:12px;margin-top:12px}
+.aj-color input{width:48px;height:40px;padding:2px;cursor:pointer;flex:none}
+.seg{display:flex;padding:4px;gap:4px;border:1px solid var(--line);border-radius:8px;background:var(--sub-bg)}
+.seg button{flex:1;padding:8px 12px;border:none;border-radius:4px;background:none;color:var(--muted);font-family:var(--sans);font-size:var(--fs-sm);font-weight:600;cursor:pointer;transition:background 300ms cubic-bezier(0.32,0.72,0,1),color 300ms cubic-bezier(0.32,0.72,0,1)}
+.seg button:hover{color:var(--texto)}
+.seg button.on{background:var(--btn-bg);color:var(--btn-fg)}
+.pal:focus-visible,.seg button:focus-visible,.hbtn:focus-visible{outline:2px solid var(--marca);outline-offset:2px}
 #btn-salir{display:none}
 .acc-fila{display:inline-flex;gap:8px;flex-wrap:nowrap;justify-content:flex-end}
 @media(max-width:640px){.hacciones .conn{display:none}#btn-salir{display:flex}
@@ -67,7 +85,7 @@ header .conn{font-family:var(--mono);font-size:var(--fs-xs);color:#9FB0BE;cursor
 nav{background:var(--card);border-bottom:1px solid var(--line);display:flex;overflow-x:auto;position:sticky;top:0;z-index:10}
 nav button{font-family:var(--sans);font-size:var(--fs-md);font-weight:600;letter-spacing:.01em;padding:16px 16px;border:none;background:none;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;transition:color 300ms cubic-bezier(0.32,0.72,0,1)}
 nav button:hover{color:var(--texto)}
-nav button.on{color:var(--texto);border-bottom-color:var(--texto);font-weight:700}
+nav button.on{color:var(--texto);border-bottom-color:var(--marca);font-weight:700}
 main{max-width:1080px;margin:0 auto;padding:24px 16px 80px}
 h2{font-size:var(--fs-lg);font-weight:700;letter-spacing:-.005em;margin:32px 0 12px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;line-height:1.3}
 h2:first-child{margin-top:0}
@@ -337,7 +355,7 @@ a{color:var(--texto)}
   <span class="sub" id="hoy-lbl"></span>
   <div class="hacciones">
     <button class="hbtn" id="btn-tema" onclick="alternarTema()" title="Modo oscuro" aria-label="Modo oscuro"><img src="logo-marca.png" alt=""></button>
-    <button class="hbtn" id="btn-zoom" onclick="ciclarZoom()" title="Ampliar la vista" aria-label="Ampliar la vista"><i class="ph ph-magnifying-glass-plus"></i><span class="nivel" id="zoom-nivel" style="display:none"></span></button>
+    <button class="hbtn" id="btn-ajustes" onclick="abrirAjustes()" title="Ajustes" aria-label="Ajustes"><i class="ph ph-gear-six"></i></button>
     <button class="hbtn" id="btn-accesos" onclick="gestionarAccesos()" title="Accesos" aria-label="Accesos" style="display:none"><i class="ph ph-user-plus"></i></button>
     <button class="hbtn" id="btn-salir" onclick="cambiarConexion()" title="Salir" aria-label="Salir"><i class="ph ph-sign-out"></i></button>
     <span class="conn" onclick="cambiarConexion()">cambiar conexión</span>
@@ -1116,36 +1134,109 @@ async function borrarPendiente(id){
   velo(false);
 }
 
-/* ================= Tema y zoom de la vista ================= */
-const TEMA_KEY='novetec_tema', ZOOM_KEY='novetec_zoom';
-const ZOOMS=[1,1.15,1.3];
-function aplicarTema(t){
-  document.documentElement.setAttribute('data-tema',t);
+/* ================= Ajustes de la vista ================= */
+const AJ_KEY='novetec_ajustes', ZOOMS=[1,1.15,1.3];
+const PALETAS={
+  grafito:{nombre:'Grafito',claro:null,oscuro:null},
+  novetec:{nombre:'Novetec',
+    claro:{barra:'#0E3F44',btn:'#15696A',h:'#0F5455',fg:'#FFFFFF',marca:'#C9A227'},
+    oscuro:{barra:'#000000',btn:'#5CC6C0',h:'#86D6D1',fg:'#181818',marca:'#D9B44A'}},
+  oceano:{nombre:'Océano',
+    claro:{barra:'#0B3352',btn:'#1D5F96',h:'#174D7A',fg:'#FFFFFF',marca:'#1D5F96'},
+    oscuro:{barra:'#000000',btn:'#7DB4E6',h:'#A3CBEF',fg:'#181818',marca:'#7DB4E6'}},
+  bosque:{nombre:'Bosque',
+    claro:{barra:'#1C3527',btn:'#2F6A47',h:'#25563A',fg:'#FFFFFF',marca:'#2F6A47'},
+    oscuro:{barra:'#000000',btn:'#86C9A0',h:'#A8D9BA',fg:'#181818',marca:'#86C9A0'}},
+  vino:{nombre:'Vino',
+    claro:{barra:'#3F1621',btn:'#8A2E42',h:'#722536',fg:'#FFFFFF',marca:'#8A2E42'},
+    oscuro:{barra:'#000000',btn:'#E5939F',h:'#EDB0B9',fg:'#181818',marca:'#E5939F'}},
+  propia:{nombre:'Personalizada'}};
+const AJ_BASE={paleta:'grafito',color:'#15696A',tema:'claro',escala:1};
+let AJ={...AJ_BASE};
+const hexRgb=h=>{const n=parseInt(String(h).slice(1),16);return [n>>16&255,n>>8&255,n&255]};
+const rgbHex=c=>'#'+c.map(v=>Math.round(Math.max(0,Math.min(255,v))).toString(16).padStart(2,'0')).join('').toUpperCase();
+const mezcla=(h,con,t)=>{const a=hexRgb(h),b=hexRgb(con);return rgbHex(a.map((v,i)=>v+(b[i]-v)*t))};
+const luz=h=>{const [r,g,b]=hexRgb(h).map(v=>{v/=255;return v<=.03928?v/12.92:((v+.055)/1.055)**2.4});return .2126*r+.7152*g+.0722*b};
+function paletaPropia(c,oscuro){
+  if(!/^#[0-9A-Fa-f]{6}$/.test(c||''))c=AJ_BASE.color;
+  if(oscuro){let b=c;for(let k=0;luz(b)<.42&&k<12;k++)b=mezcla(b,'#FFFFFF',.15);
+    return {barra:'#000000',btn:b,h:mezcla(b,'#FFFFFF',.25),fg:'#181818',marca:b}}
+  let b=c;for(let k=0;luz(b)>.18&&k<12;k++)b=mezcla(b,'#000000',.12);
+  return {barra:mezcla(b,'#000000',.45),btn:b,h:mezcla(b,'#000000',.18),fg:'#FFFFFF',marca:b};
+}
+const MQ_OSCURO=window.matchMedia?matchMedia('(prefers-color-scheme: dark)'):null;
+const temaEfectivo=()=>AJ.tema==='sistema'?(MQ_OSCURO&&MQ_OSCURO.matches?'oscuro':'claro'):AJ.tema;
+function aplicarAjustes(){
+  const t=temaEfectivo(),r=document.documentElement;
+  r.setAttribute('data-tema',t);
+  const pal=AJ.paleta==='propia'?paletaPropia(AJ.color,t==='oscuro'):(PALETAS[AJ.paleta]||PALETAS.grafito)[t];
+  [['--barra','barra'],['--btn-bg','btn'],['--btn-bg-h','h'],['--btn-fg','fg'],['--marca','marca']]
+    .forEach(([v,k])=>pal?r.style.setProperty(v,pal[k]):r.style.removeProperty(v));
+  r.style.setProperty('--escala',AJ.escala);
+  const m=document.querySelector('meta[name=theme-color]');if(m)m.content=pal?pal.barra:(t==='oscuro'?'#000000':'#16232E');
   const b=document.getElementById('btn-tema');
   if(b)b.title=b.ariaLabel=(t==='oscuro'?'Modo claro':'Modo oscuro');
 }
+function normAjustes(x){
+  const o={...AJ_BASE};if(!x||typeof x!=='object')return o;
+  if(PALETAS[x.paleta])o.paleta=x.paleta;
+  if(/^#[0-9A-Fa-f]{6}$/.test(x.color||''))o.color=x.color.toUpperCase();
+  if(['claro','oscuro','sistema'].includes(x.tema))o.tema=x.tema;
+  const z=ZOOMS.find(z=>Math.abs(z-(+x.escala||0))<0.01);if(z)o.escala=z;
+  return o;
+}
+let _ajT=null;
+function guardarAjustes(){
+  try{localStorage.setItem(AJ_KEY,JSON.stringify(AJ))}catch{}
+  if(!modoFirebase()||!FBS||!FBS.usuario)return;
+  clearTimeout(_ajT);
+  _ajT=setTimeout(()=>FBS.store.escribir('preferencias',FBS.usuario.uid,{...AJ}).catch(()=>{}),600);
+}
+function cambiarAjuste(k,v){AJ=normAjustes({...AJ,[k]:v});aplicarAjustes();guardarAjustes();pintarAjustes()}
+async function cargarAjustesUsuario(){
+  try{
+    const d=await FBS.store.leerDoc('preferencias',FBS.usuario.uid);
+    if(!d)return guardarAjustes();
+    AJ=normAjustes(d);aplicarAjustes();
+    try{localStorage.setItem(AJ_KEY,JSON.stringify(AJ))}catch{}
+  }catch{}
+}
 function alternarTema(){
-  const nuevo=document.documentElement.getAttribute('data-tema')==='oscuro'?'claro':'oscuro';
-  localStorage.setItem(TEMA_KEY,nuevo);aplicarTema(nuevo);
-  toast(nuevo==='oscuro'?'Modo oscuro activado':'Modo claro activado');
+  cambiarAjuste('tema',temaEfectivo()==='oscuro'?'claro':'oscuro');
+  toast(AJ.tema==='oscuro'?'Modo oscuro activado':'Modo claro activado');
 }
-function aplicarZoom(z){
-  document.documentElement.style.setProperty('--escala',z);
-  const el=document.getElementById('zoom-nivel');
-  if(el){el.textContent=Math.round(z*100)+'%';el.style.display=z===1?'none':'block'}
-  const b=document.getElementById('btn-zoom');
-  if(b)b.querySelector('i').className=z===ZOOMS[ZOOMS.length-1]?'ph ph-magnifying-glass-minus':'ph ph-magnifying-glass-plus';
+function pintarAjustes(){
+  const ov=document.getElementById('aj-ov');if(!ov)return;
+  const seg=(k,ops)=>`<div class="seg" role="radiogroup">${ops.map(([v,t])=>`<button role="radio" aria-checked="${AJ[k]===v}" class="${AJ[k]===v?'on':''}" onclick="cambiarAjuste('${k}',${jsq(v)})">${t}</button>`).join('')}</div>`;
+  const t=temaEfectivo();
+  const muestra=id=>{const p=id==='propia'?paletaPropia(AJ.color,t==='oscuro'):PALETAS[id][t]||{barra:t==='oscuro'?'#000000':'#16232E',btn:t==='oscuro'?'#E4EBF1':'#16232E'};
+    return `<span class="pal-muestra"><span style="background:${p.barra}"></span><span style="background:${p.btn}"></span>${p.marca&&p.marca!==p.btn?`<span style="background:${p.marca}"></span>`:''}</span>`};
+  ov.querySelector('.modal').innerHTML=`
+    <div class="aj-cab"><b>Ajustes</b><button class="hbtn aj-cerrar" onclick="cerrarAjustes()" title="Cerrar" aria-label="Cerrar"><i class="ph ph-x"></i></button></div>
+    <label>Paleta</label>
+    <div class="paletas" role="radiogroup">${Object.keys(PALETAS).map(id=>`<button role="radio" aria-checked="${AJ.paleta===id}" class="pal${AJ.paleta===id?' on':''}" onclick="cambiarAjuste('paleta','${id}')">${muestra(id)}<span>${PALETAS[id].nombre}</span></button>`).join('')}</div>
+    ${AJ.paleta==='propia'?`<div class="aj-color"><input type="color" value="${esc(AJ.color)}" onchange="cambiarAjuste('color',this.value)" aria-label="Color propio"><span class="mono small">${esc(AJ.color)}</span></div>`:''}
+    <label>Tema</label>
+    ${seg('tema',[['claro','Claro'],['oscuro','Oscuro'],['sistema','Sistema']])}
+    <label>Tamaño del texto</label>
+    ${seg('escala',ZOOMS.map(z=>[z,Math.round(z*100)+'%']))}`;
 }
-function ciclarZoom(){
-  const actual=+(localStorage.getItem(ZOOM_KEY)||1);
-  const i=ZOOMS.indexOf(ZOOMS.find(z=>Math.abs(z-actual)<0.01));
-  const z=ZOOMS[(i+1)%ZOOMS.length];
-  localStorage.setItem(ZOOM_KEY,z);aplicarZoom(z);
-  toast('Vista al '+Math.round(z*100)+'%');
+function abrirAjustes(){
+  if(document.getElementById('aj-ov'))return;
+  const ov=document.createElement('div');ov.className='modal-ov';ov.id='aj-ov';
+  ov.innerHTML='<div class="modal" role="dialog" aria-label="Ajustes" style="max-width:520px"></div>';
+  ov.addEventListener('click',e=>{if(e.target===ov)cerrarAjustes()});
+  document.body.appendChild(ov);pintarAjustes();
+  const b=ov.querySelector('.pal.on');if(b)b.focus();
 }
+function cerrarAjustes(){const ov=document.getElementById('aj-ov');if(ov)ov.remove()}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarAjustes()});
+if(MQ_OSCURO)MQ_OSCURO.addEventListener('change',()=>{if(AJ.tema==='sistema'){aplicarAjustes();pintarAjustes()}});
 (function preferencias(){
-  aplicarTema(localStorage.getItem(TEMA_KEY)||'claro');
-  aplicarZoom(+(localStorage.getItem(ZOOM_KEY)||1));
+  let x=null;
+  try{x=JSON.parse(localStorage.getItem(AJ_KEY)||'null')}catch{}
+  if(!x)try{x={tema:localStorage.getItem('novetec_tema')||'claro',escala:+(localStorage.getItem('novetec_zoom')||1)}}catch{}
+  AJ=normAjustes(x);aplicarAjustes();
 })();
 
 /* ================= Navegación ================= */
@@ -5511,6 +5602,7 @@ async function iniciar(){
       const c=document.querySelector('.conn');
       if(c)c.textContent=`${FBS.usuario.nombre} · salir`;
       const ac=document.getElementById('btn-accesos');if(ac)ac.style.display=esAdmin()?'':'none';
+      cargarAjustesUsuario();
     }
     await cargarTodo();retomar=reapAplicar(reap);render();
   }

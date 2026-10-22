@@ -6,8 +6,8 @@ const DATOS = process.argv[2] || path.join(__dirname, '..', '..', 'novetec-datos
 const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const js = html.match(/<script>([\s\S]*)<\/script>/)[1];
 
-const nodo = () => ({ value: '', innerHTML: '', textContent: '', style: { setProperty() {} }, dataset: {}, classList: { toggle() {}, add() {}, remove() {}, contains: () => false }, querySelector: () => nodo(), querySelectorAll: () => [], addEventListener() {}, setAttribute() {}, insertAdjacentHTML() {}, focus() {}, scrollIntoView() {}, dispatchEvent() {}, closest: () => null, remove() {}, appendChild() {} });
-global.document = { getElementById: () => nodo(), querySelector: () => nodo(), querySelectorAll: () => [], addEventListener() {}, createElement: () => nodo(), body: nodo(), documentElement: { setAttribute() {}, style: { setProperty() {} } } };
+const nodo = () => ({ value: '', innerHTML: '', textContent: '', style: { setProperty() {}, removeProperty() {} }, dataset: {}, classList: { toggle() {}, add() {}, remove() {}, contains: () => false }, querySelector: () => nodo(), querySelectorAll: () => [], addEventListener() {}, setAttribute() {}, insertAdjacentHTML() {}, focus() {}, scrollIntoView() {}, dispatchEvent() {}, closest: () => null, remove() {}, appendChild() {} });
+global.document = { getElementById: () => nodo(), querySelector: () => nodo(), querySelectorAll: () => [], addEventListener() {}, createElement: () => nodo(), body: nodo(), documentElement: { setAttribute() {}, style: { setProperty() {}, removeProperty() {} } } };
 global.window = {}; global.localStorage = { getItem: () => null, setItem() {} }; global.fetch = () => Promise.reject(new Error('sin red'));
 global.setTimeout = () => 0; global.matchMedia = () => ({ matches: false });
 Object.assign(global, fb);

@@ -27,6 +27,16 @@ service cloud.firestore {
       allow write: if admin();
     }
 
+    match /preferencias/{uid} {
+      allow read: if habilitado() && request.auth.uid == uid;
+      allow write: if habilitado() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['paleta', 'color', 'tema', 'escala'])
+        && request.resource.data.paleta in ['grafito', 'novetec', 'oceano', 'bosque', 'vino', 'propia']
+        && request.resource.data.color is string && request.resource.data.color.matches('^#[0-9A-Fa-f]{6}$')
+        && request.resource.data.tema in ['claro', 'oscuro', 'sistema']
+        && request.resource.data.escala in [1, 1.15, 1.3];
+    }
+
     match /historial/{id} {
       allow read: if habilitado();
       allow create: if habilitado() && request.resource.data.usuario == request.auth.token.email;
