@@ -55,6 +55,7 @@ header .conn{font-family:var(--mono);font-size:var(--fs-xs);color:#9FB0BE;cursor
 .hbtn i{font-size:14px}
 .hbtn .nivel{position:absolute;bottom:-1px;right:-1px;background:var(--btn-bg);color:var(--btn-fg);font-family:var(--mono);font-size:12px;font-weight:600;line-height:1;padding:2px 4px;border-radius:6px}
 #btn-salir{display:none}
+.acc-fila{display:inline-flex;gap:8px;flex-wrap:nowrap;justify-content:flex-end}
 @media(max-width:640px){.hacciones .conn{display:none}#btn-salir{display:flex}
   header{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;column-gap:12px;row-gap:12px;padding:12px 16px}
   header .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;justify-self:end;text-align:right}
@@ -1952,7 +1953,7 @@ async function compartirCotizacion(id){
   }
 }
 function formCotizacion(){
-  return `<div style="margin:12px 0">
+  return `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0">
     <button class="btn" onclick="nuevaCotizacion()"><i class="ph ph-file-plus"></i> Nueva cotización</button>
     <button class="btn sec" title="Sube la planilla del cliente, pon los precios y te la devuelvo completada" onclick="document.getElementById('pl-file').click()"><i class="ph ph-file-xls"></i> Cotizar planilla del cliente</button>
     <input type="file" id="pl-file" accept=".xlsx,.xlsm" style="display:none" onchange="cargarPlanilla(this)">
@@ -5339,9 +5340,9 @@ function rInv(){
     <div class="acciones"><button class="btn" onclick="ingresoInv()">Registrar ingreso</button></div>
   </div></details>
   <h2>Stock actual (${prods.length} productos)</h2>
-  <div class="card">${prods.length?`<table class="tprod" style="min-width:500px"><colgroup><col style="width:11ch"><col><col style="width:9ch"><col style="width:14ch"></colgroup><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
+  <div class="card">${prods.length?`<table class="tprod" style="min-width:500px"><colgroup><col style="width:11ch"><col><col style="width:9ch"><col style="width:136px"></colgroup><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
     ${prods.map(p=>`<tr><td class="mono small">${esc(p.codigo||'—')}</td><td class="trunc" title="${esc(p.nombre)}">${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
-    <td class="num"><button class="btn mini sec" title="Ajustar: fijar la cantidad exacta" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="ph ph-pencil-simple"></i></button> <button class="btn mini sec" title="Agregar: sumar unidades al stock" onclick="agregarInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="ph ph-plus"></i></button>${p.codigo?` <button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto('${esc(p.codigo)}')"><i class="ph ph-tag"></i></button>`:''}</td></tr>`).join('')}</table>`
+    <td class="num"><div class="acc-fila"><button class="btn mini sec" title="Ajustar: fijar la cantidad exacta" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="ph ph-pencil-simple"></i></button><button class="btn mini sec" title="Agregar: sumar unidades al stock" onclick="agregarInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="ph ph-plus"></i></button>${p.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto('${esc(p.codigo)}')"><i class="ph ph-tag"></i></button>`:''}</div></td></tr>`).join('')}</table>`
     :'<div class="vacio">Bodega sin productos registrados. Usa "Registrar ingreso" para la carga inicial.</div>'}</div>
   <h2>Últimos movimientos</h2>
   <div class="card">${movs.length?`<table class="tprod" style="min-width:720px"><colgroup><col style="width:11ch"><col style="width:11ch"><col style="width:9ch"><col><col style="width:8ch"><col style="width:20ch"></colgroup><tr><th>Fecha</th><th>Código</th><th>Tipo</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
