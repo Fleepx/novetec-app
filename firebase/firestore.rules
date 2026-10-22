@@ -33,6 +33,12 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /borrados/{id} {
+      allow read: if habilitado();
+      allow create, update: if habilitado() && request.resource.data._t == request.time;
+      allow delete: if false;
+    }
+
     match /documentos/{id} {
       allow read, create, update, delete: if habilitado();
     }
@@ -46,6 +52,7 @@ service cloud.firestore {
       allow read: if datos(col) && habilitado();
       allow create, update: if datos(col) && habilitado()
         && request.resource.data._v is int
+        && request.resource.data._t == request.time
         && (resource == null || request.resource.data._v == resource.data._v + 1);
       allow delete: if datos(col) && (admin() || (habilitado()
         && !(col in ['productos', 'ordenes_compra', 'guias_despacho', 'cotizaciones'])));

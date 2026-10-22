@@ -393,12 +393,28 @@ async function fbAbrir(){
   if(FBS)return FBS;
   const [a,au,fs]=await Promise.all(['firebase-app.js','firebase-auth.js','firebase-firestore.js'].map(f=>import(FB_SDK+f)));
   const app=a.initializeApp(FIREBASE_CONFIG);
-  const auth=au.getAuth(app),db=fs.getFirestore(app);
+  const auth=au.getAuth(app);
+  let db;
+  try{db=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager(),cacheSizeBytes:fs.CACHE_SIZE_UNLIMITED})})}
+  catch(_){db=fs.getFirestore(app)}
   const ref=(c,id)=>fs.doc(db,c,id);
+  const filas=q=>q.docs.map(d=>({id:d.id,data:d.data()}));
+  const desdeSerial=x=>{const [a,b]=String(x).split('.');return new fs.Timestamp(+a,+b)};
   const store={
+    sync:null,
     nuevoId:()=>fs.doc(fs.collection(db,FB_HIST)).id,
-    async leerDoc(c,id){const s=await fs.getDoc(ref(c,id));return s.exists()?s.data():null},
-    async leerColeccion(c){return (await fs.getDocs(fs.collection(db,c))).docs.map(d=>({id:d.id,data:d.data()}))},
+    ahora:()=>fs.serverTimestamp(),
+    serial:t=>t&&typeof t.seconds==='number'?String(t.seconds).padStart(12,'0')+'.'+String(t.nanoseconds||0).padStart(9,'0'):null,
+    async cacheColeccion(c){return filas(await fs.getDocsFromCache(fs.collection(db,c)))},
+    async servidorColeccion(c){return filas(await fs.getDocsFromServer(fs.collection(db,c)))},
+    async servidorDesde(c,serial){return filas(await fs.getDocsFromServer(fs.query(fs.collection(db,c),fs.where('_t','>',desdeSerial(serial)))))},
+    async servidorDoc(c,id){const s=await fs.getDocFromServer(ref(c,id));return s.exists()?s.data():null},
+    async leerDoc(c,id){
+      if(store.sync&&store.sync[c])return store.sync[c].get(id)||null;
+      const s=await fs.getDoc(ref(c,id));return s.exists()?s.data():null},
+    async leerColeccion(c){
+      if(store.sync&&store.sync[c])return [...store.sync[c]].map(([id,data])=>({id,data}));
+      return filas(await fs.getDocs(fs.collection(db,c)))},
     escribir:(c,id,d)=>fs.setDoc(ref(c,id),d),
     borrar:(c,id)=>fs.deleteDoc(ref(c,id)),
     aBytes:u8=>fs.Bytes.fromUint8Array(u8),
@@ -607,7 +623,18 @@ async function descargarArchivo(p,nombre){
   }catch(e){toast('Error al descargar: '+e.message)}
   velo(false);
 }
+const SYNC_DIAS=7;
+async function fbSincronizarApp(){
+  const k=`novetec_sync:${FIREBASE_CONFIG.projectId}:${FBS.usuario?FBS.usuario.uid:''}`;
+  let est=null;try{est=JSON.parse(localStorage.getItem(k)||'null')}catch(_){}
+  if(est&&(!est.completo||Date.now()-est.completo>SYNC_DIAS*864e5))est=null;
+  const r=await fbSincronizar(FBS.store,est,FB_COLECCIONES);
+  FBS.store.sync=r.mapa;
+  try{localStorage.setItem(k,JSON.stringify({...r.estado,completo:est?est.completo:Date.now()}))}catch(_){}
+  FBS.lecturas=r.lecturas;
+}
 async function cargarTodo(){
+  if(modoFirebase()){try{await fbSincronizarApp()}catch(e){FBS.store.sync=null;throw errorFirebase(e)}}
   await Promise.all(Object.values(ARCH).map(cargarArchivo));
   if(!modoFirebase()&&DB[ARCH.conf]&&DB[ARCH.conf].data.migrado_firebase){
     const e=new Error(`Los datos se migraron a Firebase el ${fFecha(DB[ARCH.conf].data.migrado_firebase)}. Este repositorio quedó como respaldo de solo lectura: conéctate con «cambiar conexión» usando Firebase.`);

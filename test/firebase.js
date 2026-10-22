@@ -101,6 +101,43 @@ const ok = (cond, msg) => { console.log((cond ? '  OK    ' : '  FALLA ') + msg);
   ar.data.archivos = editado;
   ok(await fb.fbGuardar(store, 'data/archivos.json', ar.data, ar.base, {}) === 2, 'importar un JSON editado fuera de la app reconoce los registros sin id (1 cambio + 1 nuevo)');
 
+  console.log('\nSincronización incremental (dos navegadores):');
+  const servidor = memoria();
+  let reloj = 1000;
+  const AHORA = { ahora: true };
+  const conMarca = d => d && d._t === AHORA ? { ...d, _t: ++reloj } : d;
+  const tx0 = servidor.transaccion;
+  servidor.ahora = () => AHORA;
+  servidor.transaccion = fn => tx0(t => fn({ ...t, escribir: (c, id, d) => t.escribir(c, id, conMarca(d)) }));
+  const cliente = () => {
+    const cache = new Map(); let leidas = 0;
+    const guardar = (c, id, d) => { if (!cache.has(c)) cache.set(c, new Map()); d ? cache.get(c).set(id, d) : cache.get(c).delete(id); };
+    return {
+      get leidas() { return leidas; }, cache,
+      serial: t => typeof t === 'number' ? String(t).padStart(12, '0') : null,
+      async cacheColeccion(c) { return [...(cache.get(c) || new Map())].map(([id, data]) => ({ id, data })); },
+      async servidorColeccion(c) { const r = await servidor.leerColeccion(c); leidas += Math.max(1, r.length); r.forEach(d => guardar(c, d.id, d.data)); return r; },
+      async servidorDesde(c, serial) { const r = (await servidor.leerColeccion(c)).filter(d => typeof d.data._t === 'number' && String(d.data._t).padStart(12, '0') > serial); leidas += Math.max(1, r.length); r.forEach(d => guardar(c, d.id, d.data)); return r; },
+      async servidorDoc(c, id) { leidas++; const d = await servidor.leerDoc(c, id); guardar(c, id, d); return d; }
+    };
+  };
+  for (const f of archivos) await fb.fbGuardar(servidor, 'data/' + f, JSON.parse(JSON.stringify(original['data/' + f])), fb.baseVacia(), {});
+  const A = cliente();
+  const s1 = await fb.fbSincronizar(A, null, fb.FB_COLECCIONES);
+  ok(s1.completas === fb.FB_COLECCIONES.length && A.leidas > 1500, `primera apertura lee todo (${A.leidas} lecturas)`);
+  let antes = A.leidas; const s2 = await fb.fbSincronizar(A, s1.estado, fb.FB_COLECCIONES);
+  ok(A.leidas - antes <= fb.FB_COLECCIONES.length + 1 && s2.completas === 0, `reabrir sin cambios: ${A.leidas - antes} lecturas`);
+  const ocB = await fb.fbCargar(servidor, 'data/ordenes_compra.json'); ocB.data.ordenes[2].notas = 'cambio desde B';
+  await fb.fbGuardar(servidor, 'data/ordenes_compra.json', ocB.data, ocB.base, {});
+  const mv = await fb.fbCargar(servidor, 'data/inventario.json'); const borrado = mv.data.movimientos[5]._id; mv.data.movimientos.splice(5, 1);
+  await fb.fbGuardar(servidor, 'data/inventario.json', mv.data, mv.base, {});
+  antes = A.leidas; const s3 = await fb.fbSincronizar(A, s2.estado, fb.FB_COLECCIONES);
+  const ocs = [...s3.mapa.ordenes_compra.values()];
+  ok(ocs.some(o => o.notas === 'cambio desde B') && !s3.mapa.movimientos.has(borrado), `ve el cambio y el borrado hechos en el otro navegador (${A.leidas - antes} lecturas)`);
+  ok(s3.mapa.movimientos.size === (await servidor.leerColeccion('movimientos')).length, 'la colección queda igual que en el servidor');
+  A.cache.get('ordenes_compra').clear();
+  antes = A.leidas; const s4 = await fb.fbSincronizar(A, s3.estado, fb.FB_COLECCIONES);
+  ok(s4.mapa.ordenes_compra.size === (await servidor.leerColeccion('ordenes_compra')).length && s4.completas === 1, `caché borrada de una colección: se relee completa y no se da por vacía (${A.leidas - antes} lecturas)`);
   console.log(fallas ? `\n${fallas} prueba(s) fallaron.` : '\nTodo correcto.');
   process.exit(fallas ? 1 : 0);
 })().catch(e => { console.error('FALLA:', e); process.exit(1); });
