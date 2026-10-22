@@ -101,6 +101,23 @@ const ok = (cond, msg) => { console.log((cond ? '  OK    ' : '  FALLA ') + msg);
   ar.data.archivos = editado;
   ok(await fb.fbGuardar(store, 'data/archivos.json', ar.data, ar.base, {}) === 2, 'importar un JSON editado fuera de la app reconoce los registros sin id (1 cambio + 1 nuevo)');
 
+  {
+    console.log('\nGuardar varios archivos en una sola operación:');
+    const st = memoria();
+    for (const f of archivos) await fb.fbGuardar(st, 'data/' + f, JSON.parse(JSON.stringify(original['data/' + f])), fb.baseVacia(), {});
+    const O = await fb.fbCargar(st, 'data/ordenes_compra.json'), I = await fb.fbCargar(st, 'data/inventario.json'), Gd = await fb.fbCargar(st, 'data/guias_despacho.json');
+    O.data.ordenes[0].notas = 'lote'; I.data.movimientos.push({ fecha: '2026-10-22', tipo: 'salida', codigo: 'NOV-0001', producto: 'X', cantidad: 1, referencia: 'lote' }); Gd.data.guias[0].notas = 'lote';
+    const n = await fb.fbGuardarVarios(st, [{ p: 'data/ordenes_compra.json', ...O }, { p: 'data/inventario.json', ...I }, { p: 'data/guias_despacho.json', ...Gd }], { usuario: 'prueba', mensaje: 'tres archivos' });
+    const hist = (await st.leerColeccion(fb.FB_HIST)).filter(h => h.data.mensaje === 'tres archivos');
+    ok(n === 3 && hist.length === 1, `tres archivos, ${n} registros, un solo registro en el historial`);
+    const O2 = await fb.fbCargar(st, 'data/ordenes_compra.json'), I2 = await fb.fbCargar(st, 'data/inventario.json');
+    const otro = await fb.fbCargar(st, 'data/inventario.json'); otro.data.movimientos[0].referencia = 'cambio del otro usuario';
+    await fb.fbGuardar(st, 'data/inventario.json', otro.data, otro.base, {});
+    O2.data.ordenes[1].notas = 'no debe quedar'; I2.data.movimientos[0].referencia = 'choca';
+    let err = null; try { await fb.fbGuardarVarios(st, [{ p: 'data/ordenes_compra.json', ...O2 }, { p: 'data/inventario.json', ...I2 }], {}); } catch (e) { err = e; }
+    const O3 = await fb.fbCargar(st, 'data/ordenes_compra.json');
+    ok(err && err.status === 409 && O3.data.ordenes[1].notas !== 'no debe quedar', 'si un archivo choca con otro usuario, no se guarda ninguno (antes quedaba la OC guardada sin el inventario)');
+  }
   console.log('\nSincronización incremental (dos navegadores):');
   {
     const viejo = memoria(); for (const f of archivos) await fb.fbGuardar(viejo, 'data/' + f, JSON.parse(JSON.stringify(original['data/' + f])), fb.baseVacia(), {});

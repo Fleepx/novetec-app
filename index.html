@@ -534,7 +534,22 @@ async function cargarArchivo(p){
     } else throw e;
   }
 }
+let LOTE=null;
+function abrirLote(){LOTE={t:Date.now(),ps:new Map()}}
+async function cerrarLote(){
+  const l=LOTE;LOTE=null;
+  if(!l||!l.ps.size)return;
+  if(!modoFirebase()){for(const [p,msgs] of l.ps)await guardarArchivo(p,msgs.join(' · '));return}
+  const ps=[...l.ps.keys()];
+  try{await fbGuardarVarios(FBS.store,ps.map(p=>({p,data:DB[p].data,base:DB[p].base})),{usuario:FBS.usuario&&FBS.usuario.email,mensaje:[...l.ps.values()].flat().join(' · ')})}
+  catch(e){
+    if(e.status===409){toast('Atención: otro usuario guardó cambios en lo mismo. No se guardó nada; recargando datos…');await cargarTodo();render();throw new Error('conflicto')}
+    const err=errorFirebase(e);toast(err.message);throw err;
+  }
+}
 async function guardarArchivo(p,msg){
+  if(LOTE&&Date.now()-LOTE.t<5000){if(!LOTE.ps.has(p))LOTE.ps.set(p,[]);LOTE.ps.get(p).push(msg);return}
+  LOTE=null;
   if(modoFirebase()){
     try{await fbGuardar(FBS.store,p,DB[p].data,DB[p].base,{usuario:FBS.usuario&&FBS.usuario.email,mensaje:msg})}
     catch(e){
@@ -1004,8 +1019,10 @@ async function encolar(tipo,files,nota){
       DB[ARCH.pend].data.pendientes.push({id:'P-'+Date.now()+'-'+i,tipo,archivo:ruta,nombre:f.name,hash:porNombre[f.name],subido:hoyISO(),nota});
       reg.push({hash:porNombre[f.name],nombre:f.name,tipo,ruta,estado:'en_cola',fecha:hoyISO(),referencia:null});
     }
+    abrirLote();
     await guardarArchivo(ARCH.pend,`${files.length} documento(s) en cola (${tipo})`);
     await guardarArchivo(ARCH.arch,`Registro de archivos: ${files.length} documento(s)`);
+    await cerrarLote();
     toast(`${files.length} archivo(s) en cola.`);ocLeida=null;render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
@@ -1545,9 +1562,11 @@ async function generarPlanilla(){
     cot.forEach(f=>{if(f.codigo)H.cotizaciones.push({codigo:f.codigo,codigo_sap:f.material||null,
       producto:f.producto,fecha:hoyISO(),folio,precio:+f.precio,origen:'cotizacion',folio_oc:folio})});
     H.actualizado=hoyISO();
+    abrirLote();
     await guardarArchivo(ARCH.hprec,`Precios ofertados de la planilla ${folio}`);
     await sincronizarFolioCot(folio,'planilla cotizada desde la app');
     await guardarArchivo(ARCH.cot,`Planilla ${folio} cotizada desde la app`);
+    await cerrarLote();
     _pl=null;
     bajarBlob(blob,nombre);
     toast(avisoNotas
@@ -1856,9 +1875,11 @@ async function emitirCotizacion(){
     items.forEach(i=>{if(i.codigo)H.cotizaciones.push({codigo:i.codigo,codigo_sap:null,
       producto:i.producto,fecha:hoyISO(),folio,precio:+i.precio,origen:'cotizacion',folio_oc:folio})});
     H.actualizado=hoyISO();
+    abrirLote();
     await guardarArchivo(ARCH.hprec,`Precios ofertados de la cotización ${folio}`);
     await sincronizarFolioCot(folio,'emitida desde la app');
     await guardarArchivo(ARCH.cot,`Cotización ${folio} emitida desde la app`);
+    await cerrarLote();
     _cotN=null;
     bajarBlob(blob,nombre);                       // bajarBlob cierra el velo
     toast(`Cotización ${folio} generada por ${clp(total)}. Descargada y guardada.`);
@@ -2362,6 +2383,7 @@ async function renombrarProducto(codigo){
     p.alias=p.alias||[];
     if(!p.alias.some(a=>a.toLowerCase()===anterior.toLowerCase()))p.alias.push(anterior);
     p.nombre=nuevo;
+    abrirLote();
     await guardarArchivo(ARCH.prod,`Producto ${codigo} renombrado: "${anterior}" → "${nuevo}"`);
     const inv=DB[ARCH.inv].data;
     const ip=(inv.productos||[]).find(x=>x.codigo===codigo);
@@ -2369,6 +2391,7 @@ async function renombrarProducto(codigo){
       ip.nombre=nuevo;
       await guardarArchivo(ARCH.inv,`Inventario: nombre de ${codigo} actualizado a "${nuevo}"`);
     }
+    await cerrarLote();
     toast('Nombre actualizado');render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
@@ -2425,6 +2448,7 @@ async function revertirCompra(ke){
     }
     // si estaba oculto del resumen, vuelve a la vista porque otra vez hay algo que comprar
     const conf=DB[ARCH.conf].data;
+    abrirLote();
     if((conf.resumen_ocultos||[]).includes(k)){
       conf.resumen_ocultos=conf.resumen_ocultos.filter(x=>x!==k);
       await guardarArchivo(ARCH.conf,`Resumen: ${c.producto} vuelve a la vista`);
@@ -2432,6 +2456,7 @@ async function revertirCompra(ke){
     if(tocado.oc)await guardarArchivo(ARCH.oc,`Reverso de compra: ${c.producto} -${cant}`);
     if(tocado.sap)await guardarArchivo(ARCH.psap,`Reverso de compra: ${c.producto} -${cant}`);
     if(p)await guardarArchivo(ARCH.inv,`Inventario: reverso de compra ${c.producto} -${cant}`);
+    await cerrarLote();
     toast(`Compra revertida: ${c.producto} -${num(cant)}`);render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
@@ -2557,10 +2582,12 @@ async function aplicarCompra(c,reparto){
     const repTxt=Object.entries(reparto).map(([b,q])=>`${b} ${num(q)}`).join(', ');
     if(total>0)inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:total,referencia:`Compra marcada (Panel)${repTxt?' · reparto: '+repTxt:''}`});
     if(sobrante>0)inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:sobrante,referencia:'Sobrestock (compra sobre lo pedido)'});
+    abrirLote();
     await guardarMaestroSiNuevo();
     if(tocaOC)await guardarArchivo(ARCH.oc,`Compra marcada: ${m.nombre}`);
     if(tocaPsap)await guardarArchivo(ARCH.psap,`Compra marcada (Pendientes SAP): ${m.nombre}`);
     await guardarArchivo(ARCH.inv,`Inventario: ingreso por compra marcada (${m.nombre} +${ingresado})`);
+    await cerrarLote();
     const resta=c.porComprar-total;
     toast(`Compra registrada: ${m.nombre} +${num(ingresado)} al inventario`
       +(sobrante>0?` · ${num(sobrante)} como stock libre`:'')
@@ -2896,6 +2923,7 @@ async function guardarOCLeida(){
       notas:'Leída automáticamente desde el PDF y confirmada en pantalla. Fecha de entrega = carga + 10 días.'});
     (DB[ARCH.arch].data.archivos).push({hash:o.hash,nombre:o.archivo.name,tipo:'ordenes_compra',
       ruta,estado:'procesado',fecha:hoyISO(),referencia:'OC '+o.folio});
+    abrirLote();
     await guardarArchivo(ARCH.prod,`Maestro: productos de la OC ${o.folio}`);
     await guardarArchivo(ARCH.oc,`OC ${o.folio} cargada desde el PDF`);
     await guardarArchivo(ARCH.arch,`Registro de archivos: OC ${o.folio}`);
@@ -2915,6 +2943,7 @@ async function guardarOCLeida(){
     }
     const res=nueva?adjudicarOCAuto(nueva):{auto:0,sug:0,sin:0};
     if(res.auto)await guardarArchivo(ARCH.adj,`OC ${o.folio}: ${res.auto} línea(s) adjudicada(s) automáticamente a cotización`);
+    await cerrarLote();
     ocLeida=null;
     toast(`Orden de compra ${o.folio} cargada`+(recon?` · ${recon} guía(s) ya cargada(s) reconciliada(s)`:'')+(res.auto?` · ${res.auto} línea(s) adjudicada(s) a cotización`:'')+(res.sug?` · ${res.sug} por confirmar`:''));
     render();
@@ -2934,8 +2963,10 @@ async function adjuntarDocOC(){
     if(reg){reg.estado='procesado';reg.ruta=ruta;reg.referencia='OC '+o.folio}
     else A.push({hash:o.hash,nombre:o.archivo.name,tipo:'ordenes_compra',ruta,estado:'procesado',
       fecha:hoyISO(),referencia:'OC '+o.folio});
+    abrirLote();
     await guardarArchivo(ARCH.oc,`OC ${o.folio}: documento adjuntado`);
     await guardarArchivo(ARCH.arch,`Registro de archivos: OC ${o.folio}`);
+    await cerrarLote();
     ocLeida=null;
     toast(`Documento adjuntado a la OC ${o.folio}`);
     render();
@@ -3329,12 +3360,14 @@ async function borrarCot(id){
   velo(true,'Eliminando…');
   try{
     arr.splice(arr.indexOf(c),1);
+    abrirLote();
     if(regs.length){
       const d=DB[ARCH.adj].data;
       d.registros=d.registros.filter(r=>r.cot!==id);
       await guardarArchivo(ARCH.adj,`Adjudicaciones liberadas por eliminación de cotización ${c.folio}`);
     }
     await guardarArchivo(ARCH.cot,`Cotización ${c.folio} eliminada`);
+    await cerrarLote();
     if(c.archivo)await borrarArchivoRepo(c.archivo,`Borrado documento de cotización ${c.folio}`);
     toast('Cotización eliminada');render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
@@ -3612,9 +3645,11 @@ async function borrarOC(fe){
       d.descartes=d.descartes.filter(r=>r.oc!==String(folio));
     }
     o.baja={fecha:hoyISO(),motivo};
+    abrirLote();
     await guardarArchivo(ARCH.oc,`OC ${folio} dada de baja: ${motivo}`);
     if(adjOC)await guardarArchivo(ARCH.adj,`Adjudicaciones de la OC ${folio} liberadas por su baja`);
     if(comprasBod.length)await guardarArchivo(ARCH.inv,`Inventario: reverso por baja de OC ${folio}`);
+    await cerrarLote();
     toast(`OC ${folio} dada de baja`);render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
@@ -3660,11 +3695,13 @@ async function borrarGuia(numero){
     const huellas=(DB[ARCH.arch].data.archivos||[]).filter(a=>a.tipo==='guias_despacho'&&a.estado==='procesado'
       &&((g.archivo&&a.ruta===g.archivo)||String(a.referencia)===String(numero)));
     huellas.forEach(a=>{a.estado='descartado';a.referencia=`Guía N°${numero} eliminada el ${hoyISO()}`});
+    abrirLote();
     await guardarArchivo(ARCH.guias,`Guía N°${numero} eliminada`);
     if(huellas.length)await guardarArchivo(ARCH.arch,`Registro de archivos: guía N°${numero} eliminada, su PDF se puede volver a subir`);
     if(o)await guardarArchivo(ARCH.oc,`OC ${g.folio_oc}: reverso de guía N°${numero}`);
     await guardarArchivo(ARCH.inv,`Inventario: reverso de guía N°${numero}`);
     if(hoja)await guardarArchivo(ARCH.hr,`${hrLbl(hrTipo(hoja))} N°${hoja.numero}: quitada la guía N°${numero}, pendiente de regenerar`);
+    await cerrarLote();
     toast(`Guía N°${numero} eliminada y cantidades devueltas`);render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
@@ -3944,6 +3981,7 @@ async function guardarMoverGuia(numero){
       .sort((a,b)=>bodegasOrden().indexOf(a)-bodegasOrden().indexOf(b));
     hNueva.destinos=dests(hNueva);
     if(hVieja)hVieja.destinos=dests(hVieja);
+    abrirLote();
     if(hVieja&&!hVieja.guias.length){
       const tpV=hrTipo(hVieja), claveV=HR_TIPOS[tpV].conf;
       hojas.splice(hojas.indexOf(hVieja),1);
@@ -3956,6 +3994,7 @@ async function guardarMoverGuia(numero){
     if(creada)await guardarArchivo(ARCH.conf,`${destLbl} N°${destNum} creado (${hNueva.fecha_envio})`);
     await guardarArchivo(ARCH.guias,`Guía N°${numero} movida a ${destLbl} N°${destNum}`);
     await guardarArchivo(ARCH.hr,`${destLbl} N°${destNum}: entra la guía N°${numero}`);
+    await cerrarLote();
     toast(`Guía N°${numero} ${creada?`en el NUEVO ${destLbl} N°${destNum} (${fFecha(hNueva.fecha_envio)})`:`movida a ${destLbl} N°${destNum}`}${aviso}. Documento pendiente de regenerar.`);
     render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
@@ -4070,9 +4109,11 @@ async function guardarRectificacion(numero){
     g.rectificaciones=g.rectificaciones||[];
     g.rectificaciones.push({fecha,items:detalle,nota,conforme_previo:!!g.conforme});
     g.conforme=true;g.fecha_conforme=fecha;
+    abrirLote();
     await guardarArchivo(ARCH.guias,`Guía N°${numero} rectificada`);
     if(o)await guardarArchivo(ARCH.oc,`OC ${folio}: rectificación de la guía N°${numero}`);
     await guardarArchivo(ARCH.inv,`Inventario: rectificación de la guía N°${numero}`);
+    await cerrarLote();
     const merma=detalle.filter(d=>d.motivo==='merma').reduce((s,d)=>s+d.cantidad,0);
     toast(`Guía N°${numero} rectificada`+(merma>0?` · ${num(merma)} como merma, vuelven a estar por comprar`:''));
     render();
@@ -4162,9 +4203,11 @@ async function anularRectificacion(numero,idx){
       g.conforme=r.conforme_previo;
       if(!g.conforme)delete g.fecha_conforme;
     }
+    abrirLote();
     await guardarArchivo(ARCH.guias,`Guía N°${numero}: rectificación anulada`);
     if(o)await guardarArchivo(ARCH.oc,`OC ${folio}: anulada la rectificación de la guía N°${numero}`);
     await guardarArchivo(ARCH.inv,`Inventario: anulada la rectificación de la guía N°${numero}`);
+    await cerrarLote();
     toast(`Rectificación anulada · la guía N°${numero} vuelve a su estado anterior`);
     render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
@@ -4216,6 +4259,7 @@ async function guardarCompraFaltante(numero){
       it.cantidad_comprada=(+it.cantidad_comprada||0)+imputa;
       sobra+=f.cant-imputa;});
     oc.compras=oc.compras||[];oc.compras.push({fecha,proveedor:prov,ingreso_bodega:aBodega,items:itemsC,posterior_guia:numero});
+    abrirLote();
     if(aBodega){
       const inv=DB[ARCH.inv].data;
       itemsC.forEach(it=>{const p=invProdDe(it.producto);p.cantidad+=it.cantidad;
@@ -4224,6 +4268,7 @@ async function guardarCompraFaltante(numero){
     }
     await guardarArchivo(ARCH.oc,`OC ${folio}: compra posterior a guía N°${numero}`);
     if(aBodega)await guardarArchivo(ARCH.inv,`Inventario: ingreso por compra posterior a guía N°${numero}`);
+    await cerrarLote();
     toast('Compra registrada'+(sobra>0?` · ${num(sobra)} sobre lo pedido quedan como stock libre`:''));render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
@@ -4319,6 +4364,7 @@ async function guardarEditOC(fe){
     o.destino=document.getElementById('eo-dest-'+fe).value.trim();
     o.items=items.map(({_ix,...r})=>({cantidad_comprada:0,cantidad_despachada:0,...r}));
     let tocaGuias=false;
+    abrirLote();
     if(nuevoFolio!==folio){
       o.folio=nuevoFolio;
       DB[ARCH.guias].data.guias.forEach(g=>{
@@ -4332,6 +4378,7 @@ async function guardarEditOC(fe){
     }
     await guardarArchivo(ARCH.oc,`OC ${nuevoFolio} modificada`);
     if(tocaGuias)await guardarArchivo(ARCH.guias,`Guías actualizadas: OC ${folio} renumerada a ${nuevoFolio}`);
+    await cerrarLote();
     toast('OC actualizada');render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
@@ -4884,11 +4931,13 @@ async function guardarGuiaLeida(){
     if(reg){reg.estado='procesado';reg.ruta=ruta;reg.referencia=String(g.numero)}
     else A.push({hash,nombre:file.name,tipo:'guias_despacho',ruta,estado:'procesado',
       fecha:hoyISO(),referencia:String(g.numero)});
+    abrirLote();
     await guardarMaestroSiNuevo();
     await guardarArchivo(ARCH.inv,`Guía N°${g.numero}: salida de ${g.items.length} producto(s)`);
     if(oc)await guardarArchivo(ARCH.oc,`OC ${g.oc}: despachada la guía N°${g.numero}`);
     await guardarArchivo(ARCH.arch,`Guía N°${g.numero} registrada`);
     await guardarArchivo(ARCH.guias,`Guía N°${g.numero} leída del PDF y cargada`);
+    await cerrarLote();
     _gLeida=null;
     toast(`Guía N°${g.numero} cargada. Asígnala a una Hoja de Ruta o a un Resumen de Retiros.`);
     render();
