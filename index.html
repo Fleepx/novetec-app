@@ -3578,25 +3578,8 @@ function rOC(){
   const lista=ordenesUnificadas().filter(o=>!ocFiltro
     ||String(o.folio).toLowerCase().includes(ocFiltro)
     ||ocEstado(o).includes(ocFiltro));
-  const psapD=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{registros:[]};
-  const psapReg=psapD.registros||[];
   return `${dlProd()}
   ${ocLeida?panelOCLeida():formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
-  ${psapReg.length?`<details class="form" ${ficha('form:psap')}><summary>Ver el reporte de pendientes SAP tal como llegó (${psapReg.length} líneas)${psapD.actualizado?` · cargado el ${fFecha(psapD.actualizado)}`:''}</summary><div class="inner" style="overflow-x:auto">
-        <table class="tprod" style="min-width:820px"><colgroup><col style="width:10ch"><col style="width:12ch"><col><col style="width:8ch"><col style="width:12ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"></colgroup><tr><th>Fecha doc</th><th>Doc. compras</th><th>Producto</th><th class="num">Cantidad</th><th>Bodega</th><th class="num">Por entregar</th><th class="num">Prc. neto</th><th class="num">Comprado</th></tr>
-    ${psapReg.map(r=>`<tr>
-      <td class="mono small">${fFecha(r.fecha_doc)}</td>
-      <td class="mono">${esc(String(r.doc_compras||'—'))}${(()=>{const b=DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===String(r.doc_compras)&&o.baja);return b?` <span class="chip rojo" title="${esc(avisoBaja(b))}">baja</span>`:''})()}</td>
-      <td class="trunc" title="${esc(r.producto)}">${r.codigo?`<span class="mono small muted">${esc(r.codigo)}</span> `:''}${esc(r.producto)}</td>
-      <td class="num">${num(r.cantidad)}</td>
-      <td class="small">${esc(r.bodega||bodegaDeCentro(r.centro)||String(r.centro||'—'))}</td>
-      <td class="num" style="font-weight:600">${num(r.por_entregar)}</td>
-      <td class="num">${clp(r.precio_neto)}</td>
-      <td class="num">${num(r.cantidad_comprada||0)}</td>
-    </tr>`).join('')}</table>
-    ${(()=>{const ar=[].concat(psapD.archivo_origen||[]).filter(Boolean);
-      return ar.length?`<p class="small" style="margin-top:8px">Archivos de origen: ${ar.map(a=>`<a href="#" onclick="event.preventDefault();descargarArchivo('${esc(a)}')">${esc(a.split('/').pop())}</a>`).join(' · ')}</p>`:'';})()}
-  </div></details>`:''}
   ${listaPend(['ordenes_compra','pendientes_sap'])}
   <div class="filtro"><input placeholder="Filtrar por folio o estado…" value="${esc(ocFiltro)}" oninput="ocFiltro=this.value.toLowerCase();render();this.focus()"></div>
   ${lista.length?barraFichas():''}
