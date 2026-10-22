@@ -446,6 +446,7 @@ function errorFirebase(e){
     c.includes('unauthorized-domain')?`Este sitio (${location.hostname}) no está autorizado en Firebase: agrégalo en Authentication → Settings → Authorized domains.`:
     c.includes('popup-closed')||c.includes('cancelled-popup')?'Se cerró la ventana de Google antes de terminar.':
     c.includes('too-many-requests')?'Demasiados intentos. Espera unos minutos.':
+    c.includes('resource-exhausted')?'Se agotó la cuota diaria de Firebase. No se guardó nada; vuelve a intentarlo después de las 4:00.':
     (e&&e.message)||'Error de Firebase';
   const err=new Error(t);err.status=e&&e.status;err.code=c;return err;
 }
@@ -752,6 +753,7 @@ async function gestionarAccesos(){
 
 /* ================= Utilidades ================= */
 const v=id=>document.getElementById(id).value;
+const jsq=v=>esc(JSON.stringify(String(v??'')));
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clp=n=>new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP'}).format(n||0);
 const num=n=>new Intl.NumberFormat('es-CL').format(n||0);
@@ -1095,9 +1097,9 @@ function listaPend(tipo){
   <div class="cuerpo">
   ${ps.map(p=>`<div class="small" style="margin-top:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
     <span class="mono">${fFecha(p.subido)}</span>
-    <a href="#" onclick="event.preventDefault();descargarArchivo('${esc(p.archivo)}')">${esc(p.nombre)}</a>
+    <a href="#" onclick="event.preventDefault();descargarArchivo(${jsq(p.archivo)})">${esc(p.nombre)}</a>
     ${p.nota?`<span class="muted">· ${esc(p.nota)}</span>`:''}
-    <button class="btn mini peligro" onclick="borrarPendiente('${esc(p.id)}')">Quitar</button>
+    <button class="btn mini peligro" onclick="borrarPendiente(${jsq(p.id)})">Quitar</button>
   </div>`).join('')}
   </div></details>`;
 }
@@ -1589,7 +1591,7 @@ async function generarPlanilla(){
 /* ══════════════════ EMISIÓN DE COTIZACIONES ══════════════════
    La app pasa a emitir cotizaciones, hasta hoy hechas en Facto. Una cotización NO es un DTE
    (sin timbre SII ni folio tributario), así que podemos emitirla nosotros. */
-const COT_PDF_CDN='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+const COT_PDF_CDN='./lib/jspdf.umd.min.js';
 let _jspdfProm=null;
 function cargarJsPDF(){
   if(window.jspdf&&window.jspdf.jsPDF)return Promise.resolve(window.jspdf.jsPDF);
@@ -1772,7 +1774,7 @@ function panelCotizacion(){
     .sort((a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es',{sensitivity:'base'}));
   const opc=(lista,tipo,valor)=>{
     if(!cont||!(cont[tipo]||[]).length)return '';
-    return (cont[tipo]||[]).map(x=>`<button class="btn mini ${x.valor===valor?'':'sec'}" title="${x.principal?'Es el principal':'Marcar como principal'}" onclick="cnPrincipal('${tipo}','${esc(x.valor)}')"><i class="ph${x.principal?'-fill':''} ph-star"></i> ${esc(x.valor)}</button>`).join(' ');
+    return (cont[tipo]||[]).map(x=>`<button class="btn mini ${x.valor===valor?'':'sec'}" title="${x.principal?'Es el principal':'Marcar como principal'}" onclick="cnPrincipal('${tipo}',${jsq(x.valor)})"><i class="ph${x.principal?'-fill':''} ph-star"></i> ${esc(x.valor)}</button>`).join(' ');
   };
   const neto=_cotN.items.reduce((s,i)=>s+(+i.cantidad||0)*(+i.precio||0),0);
   return `<div id="cn-panel" class="form" style="border:2px solid var(--ambar);border-radius:8px;padding:16px;margin:12px 0">
@@ -3029,7 +3031,7 @@ function panelGuiasPrevias(o){
     const dato=`<b>${esc(p.nombreGuia)}</b> <span class="mono small">${esc(p.codigoGuia)}</span> · ${num(p.cantidad)} en la ${g}`;
     if(p.accion==='usar')return `<li class="small">${dato}: la línea "${esc(r.producto)}" usa el mismo código, sin crear uno nuevo.</li>`;
     if(p.accion==='fusionar')return `<li class="small"><label style="display:flex;gap:8px;align-items:flex-start">
-      <input type="checkbox"${p.fusionar?' checked':''}${esAdmin()?'':' disabled'} onchange="fijarFusionGuia('${esc(p.codigoGuia)}',this.checked)">
+      <input type="checkbox"${p.fusionar?' checked':''}${esAdmin()?'':' disabled'} onchange="fijarFusionGuia(${jsq(p.codigoGuia)},this.checked)">
       <span>${dato}: lo creó la guía. Fusionarlo en <span class="mono">${esc(r.codigo||'el código de la línea')}</span> ("${esc(r.producto)}"), mismo precio. Su nombre queda como alias.${esAdmin()?'':' Solo el administrador puede fusionar: la OC se guarda y la fusión queda pendiente para él.'}</span></label></li>`;
     return `<li class="small" style="color:var(--rojo)">${dato}: ${r?`calza por precio con "${esc(r.producto)}", pero el código ya tiene SAP o se usa en otros documentos`:'no calza con una sola línea de la OC por precio'}. No se imputa como despachado: revísalo a mano.</li>`};
   return `<div class="card" style="border-color:var(--ambar);margin-top:12px">
@@ -3357,21 +3359,21 @@ function rCot(){
       ${(()=>{const x=cotFechaSospechosa(c);return x
         ?`<div class="chip ambar" style="display:block;white-space:normal;margin-top:12px" title="Los folios de Facto suben con la fecha. Si un folio mayor tiene fecha anterior, casi siempre es un documento duplicado que arrastró la fecha vieja.">Fecha sospechosa: en Facto los folios suben con la fecha, pero la ${esc(c.folio)} (${fFecha(c.fecha)}) no calza con la ${esc(x.folio)} (${fFecha(x.fecha)}), que es su vecina de folio. Si el documento se duplicó de otro, corrígelo con el botón Recotización.</div>`:''})()}
       ${c.notas?`<p class="small muted" style="margin-top:12px">${esc(c.notas)}</p>`:''}
-      ${c.archivo?`<p class="small" style="margin-top:8px"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(c.archivo)}')"><i class="ph ph-download-simple" style="font-size:12px"></i> Descargar documento</a></p>`:''}
+      ${c.archivo?`<p class="small" style="margin-top:8px"><a href="#" onclick="event.preventDefault();descargarArchivo(${jsq(c.archivo)})"><i class="ph ph-download-simple" style="font-size:12px"></i> Descargar documento</a></p>`:''}
       <div class="acciones">
       ${c.estado==='abierta'?`
         <button class="btn mini" onclick="irASubirOC()"><i class="ph ph-cloud-arrow-up"></i> El cliente envió una OC · subir documento</button>
-        <button class="btn mini sec" onclick="cerrarCot('${esc(c.id)}')" title="La excluye de las búsquedas de match de nuevas OC">Cerrar cotización</button>
-        <button class="btn mini peligro" onclick="rechazarCot('${esc(c.id)}')">Cliente la rechazó</button>`:''}
-      ${c.estado==='cerrada'?`<button class="btn mini sec" onclick="reabrirCot('${esc(c.id)}')">Reabrir</button>`:''}
-      <button class="btn mini sec" onclick="panelRecot('${esc(c.id)}')" title="Corregir la fecha y declarar a qué cotización reemplaza"><i class="ph ph-arrows-clockwise"></i> Recotización</button>
-      ${c.origen==='app'?`<button class="btn mini sec" onclick="correoCotizacion('${esc(c.id)}')" title="Abre el programa de correo predeterminado de Windows. El PDF hay que adjuntarlo a mano."><i class="ph ph-envelope-simple"></i> Enviar por correo</button>
-      <button class="btn mini sec" onclick="correoCotizacion('${esc(c.id)}','web')" title="Abre Outlook en el navegador, sin pasar por el programa instalado"><i class="ph ph-globe"></i> Outlook web</button>
-      <button class="btn mini sec" onclick="correoCotizacion('${esc(c.id)}','copiar')" title="Copia destinatario, asunto y cuerpo para pegarlos donde quieras"><i class="ph ph-copy"></i> Copiar texto</button>`:''}
-      ${c.origen==='app'&&c.archivo&&puedeCompartirPDF()?`<button class="btn mini sec" onclick="compartirCotizacion('${esc(c.id)}')" title="Abre el menú de compartir del sistema CON el PDF adjunto"><i class="ph ph-share-network"></i> Compartir con el PDF</button>`:''}
+        <button class="btn mini sec" onclick="cerrarCot(${jsq(c.id)})" title="La excluye de las búsquedas de match de nuevas OC">Cerrar cotización</button>
+        <button class="btn mini peligro" onclick="rechazarCot(${jsq(c.id)})">Cliente la rechazó</button>`:''}
+      ${c.estado==='cerrada'?`<button class="btn mini sec" onclick="reabrirCot(${jsq(c.id)})">Reabrir</button>`:''}
+      <button class="btn mini sec" onclick="panelRecot(${jsq(c.id)})" title="Corregir la fecha y declarar a qué cotización reemplaza"><i class="ph ph-arrows-clockwise"></i> Recotización</button>
+      ${c.origen==='app'?`<button class="btn mini sec" onclick="correoCotizacion(${jsq(c.id)})" title="Abre el programa de correo predeterminado de Windows. El PDF hay que adjuntarlo a mano."><i class="ph ph-envelope-simple"></i> Enviar por correo</button>
+      <button class="btn mini sec" onclick="correoCotizacion(${jsq(c.id)},'web')" title="Abre Outlook en el navegador, sin pasar por el programa instalado"><i class="ph ph-globe"></i> Outlook web</button>
+      <button class="btn mini sec" onclick="correoCotizacion(${jsq(c.id)},'copiar')" title="Copia destinatario, asunto y cuerpo para pegarlos donde quieras"><i class="ph ph-copy"></i> Copiar texto</button>`:''}
+      ${c.origen==='app'&&c.archivo&&puedeCompartirPDF()?`<button class="btn mini sec" onclick="compartirCotizacion(${jsq(c.id)})" title="Abre el menú de compartir del sistema CON el PDF adjunto"><i class="ph ph-share-network"></i> Compartir con el PDF</button>`:''}
       </div><div id="rc-${esc(c.id)}"></div><div class="acciones">
-      ${c.estado==='rechazada'?`<button class="btn mini sec" onclick="deshacerRechazoCot('${esc(c.id)}')">Deshacer el rechazo</button>`:''}
-      ${esAdmin()?`<button class="btn mini peligro" onclick="borrarCot('${esc(c.id)}')">Eliminar</button>`:''}
+      ${c.estado==='rechazada'?`<button class="btn mini sec" onclick="deshacerRechazoCot(${jsq(c.id)})">Deshacer el rechazo</button>`:''}
+      ${esAdmin()?`<button class="btn mini peligro" onclick="borrarCot(${jsq(c.id)})">Eliminar</button>`:''}
       </div>
       </details>
     </div>`}).join('')
@@ -3484,8 +3486,8 @@ function panelRecot(id){
       ${cand.map(x=>`<option value="${esc(x.id)}"${c.reemplaza_a===x.id?' selected':''}>COT ${esc(x.folio)} · ${fFecha(x.fecha)} · ${esc(x.estado)} · ${x.items.length} línea(s)</option>`).join('')}
     </select>
     ${cand.length?'':'<p class="small muted">Sin cotizaciones anteriores con productos en común.</p>'}
-    <div class="acciones"><button class="btn mini" onclick="guardarRecot('${esc(id)}')">Guardar</button>
-    <button class="btn mini sec" onclick="panelRecot('${esc(id)}')">Cancelar</button></div>
+    <div class="acciones"><button class="btn mini" onclick="guardarRecot(${jsq(id)})">Guardar</button>
+    <button class="btn mini sec" onclick="panelRecot(${jsq(id)})">Cancelar</button></div>
   </div>`;
 }
 async function guardarRecot(id){
@@ -3612,7 +3614,7 @@ function rOC(){
         return `<tr${pend>0&&!o.baja?' class="fila-pend"':''}><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num" style="${comp<i.cantidad&&!o.baja?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num" style="font-weight:600">${num(pend)}</td><td>${celdaGuiasOC(o,i)}</td></tr>`}).join('')}</table>
       ${o.compras?.length?`<p class="small muted" style="margin-top:8px">Compras: ${o.compras.map(c=>`<span class="mono">${fFecha(c.fecha)}</span> ${esc(c.proveedor||'s/proveedor')} (${c.items.map(i=>`${esc(i.producto)} ×${num(i.cantidad)}`).join(', ')})`).join(' · ')}</p>`:''}
       ${o.guias?.length?`<p class="small muted" style="margin-top:8px">Guías: <span class="mono">${o.guias.map(esc).join(', ')}</span></p>`:''}
-      ${o.archivo?`<p class="small"><a href="#" onclick="event.preventDefault();descargarArchivo('${esc(o.archivo)}')">Descargar documento</a></p>`:''}
+      ${o.archivo?`<p class="small"><a href="#" onclick="event.preventDefault();descargarArchivo(${jsq(o.archivo)})">Descargar documento</a></p>`:''}
       ${o.baja?'':`<div class="acciones">
         ${ocComp(o)<ocTot(o)?`<button class="btn mini sec" onclick="toggleCompra('${encodeURIComponent(o.folio)}')">Registrar compra</button>`:''}
         ${e!=='despachada'?`<button class="btn mini" onclick="irASubir('guias')" title="Sube la guía de despacho de esta OC"><i class="ph ph-cloud-arrow-up"></i> Despachar</button>`:''}
@@ -3816,9 +3818,9 @@ function rGuias(){
       const tp=hoja?hrTipo(hoja):'ruta', num=hoja?String(hoja.numero):String(k).split(':')[1];
       const dests=[...new Set(lista.map(g=>normBodega(g.destino||'Sin destino')))]
         .sort((a,b)=>bodegasOrden().indexOf(a)-bodegasOrden().indexOf(b));
-      const btnGen=sin?'':`<button class="btn mini sec" title="${hoja&&hoja.archivo?'Rehacer el documento con las guías que tiene hoy':'Crear el documento Word'}" onclick="event.preventDefault();event.stopPropagation();generarDocumento('${esc(tp)}','${esc(num)}')"><i class="ph ph-file-doc"></i> ${hoja&&hoja.archivo?'Regenerar':'Generar'}</button>`;
+      const btnGen=sin?'':`<button class="btn mini sec" title="${hoja&&hoja.archivo?'Rehacer el documento con las guías que tiene hoy':'Crear el documento Word'}" onclick="event.preventDefault();event.stopPropagation();generarDocumento(${jsq(tp)},${jsq(num)})"><i class="ph ph-file-doc"></i> ${hoja&&hoja.archivo?'Regenerar':'Generar'}</button>`;
       const desc=(hoja&&hoja.archivo
-        ?`<button class="btn mini" title="Descargar ${esc(hrLbl(tp))} N°${esc(num)}" onclick="event.preventDefault();event.stopPropagation();descargarArchivo('${esc(hoja.archivo)}','${esc(HR_TIPOS[tp].archivo)}_N${esc(num)}_${esc(fFecha(hoja.fecha_envio||hoja.fecha))}.docx')"><i class="ph ph-download-simple"></i> ${esc(hrLbl(tp))}</button>`
+        ?`<button class="btn mini" title="Descargar ${esc(hrLbl(tp))} N°${esc(num)}" onclick="event.preventDefault();event.stopPropagation();descargarArchivo(${jsq(hoja.archivo)},${jsq(`${HR_TIPOS[tp].archivo}_N${num}_${fFecha(hoja.fecha_envio||hoja.fecha)}.docx`)})"><i class="ph ph-download-simple"></i> ${esc(hrLbl(tp))}</button>`
         :(sin?'':'<span class="chip ambar" title="El documento aún no se ha generado">sin archivo</span>'))+btnGen;
       const he=hojaEstado(lista);
       const nConf=lista.filter(g=>g.conforme).length;
@@ -3878,7 +3880,7 @@ function tarjetaGuia(g){
                   :`<span class="chip rojo" title="Ni la OC ni el reporte del cliente respaldan esta guía">Sin OC ni respaldo</span>`;
       })()}
       ${g.hoja_ruta?'':'<span class="chip ambar">Sin documento asignado</span>'}
-      ${esAdmin()?`<button class="btn mini peligro" style="margin-left:auto" onclick="borrarGuia('${esc(g.numero)}')">Eliminar</button>`:''}
+      ${esAdmin()?`<button class="btn mini peligro" style="margin-left:auto" onclick="borrarGuia(${jsq(g.numero)})">Eliminar</button>`:''}
     </div>
     <table class="tprod" style="margin-top:12px;min-width:380px"><colgroup><col><col style="width:11ch"></colgroup>
       <tr><th>Producto</th><th class="num">Cantidad</th></tr>
@@ -3891,19 +3893,19 @@ function tarjetaGuia(g){
       return `<tr>
         <td class="trunc" title="${esc(no||i.producto)}${dif?' — en la guía: '+esc(otro):''}">${esc(no||i.producto)}${dif?`<span class="small muted sep" title="Nombre con que salió en la guía">${esc(otro)}</span>`:''}</td>
         <td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}${falta>0?` <i class="ph ph-warning-circle alerta-cifra" title="Se despacharon ${num(i.cantidad)} pero faltan ${num(falta)} por registrar como comprados. Ingresa la compra para cuadrar el inventario."></i>`:''}</td></tr>`}).join('')}</table>
-    ${hayFalta?`<div style="margin-top:12px"><button class="btn mini" style="background:none;border:1.5px solid var(--rojo);color:var(--rojo)" onclick="compraFaltante('${esc(g.numero)}',this)"><i class="ph ph-shopping-cart-simple"></i> Ingresar compra faltante</button>
+    ${hayFalta?`<div style="margin-top:12px"><button class="btn mini" style="background:none;border:1.5px solid var(--rojo);color:var(--rojo)" onclick="compraFaltante(${jsq(g.numero)},this)"><i class="ph ph-shopping-cart-simple"></i> Ingresar compra faltante</button>
       <div id="cf-${esc(g.numero)}"></div></div>`:''}
     ${(g.rectificaciones||[]).length?`<div class="small" style="margin-top:12px;border:1px solid var(--ambar);border-radius:8px;padding:8px 12px">
       ${g.rectificaciones.map((r,ri)=>`<div><b>Rectificada ${fFecha(r.fecha)}</b> — ${r.items.map(x=>`${esc(x.producto)} <span class="mono">−${num(x.cantidad)}</span> (${x.motivo==='merma'?'perdido o roto':'quedó en bodega'})`).join(' · ')}${r.nota?` · ${esc(r.nota)}`:''}
-        <button class="btn mini sec" style="margin-left:8px" onclick="anularRectificacion('${esc(g.numero)}',${ri})" title="Deshacer esta rectificación y dejar la guía como estaba"><i class="ph ph-arrow-counter-clockwise"></i> Anular</button></div>`).join('')}
+        <button class="btn mini sec" style="margin-left:8px" onclick="anularRectificacion(${jsq(g.numero)},${ri})" title="Deshacer esta rectificación y dejar la guía como estaba"><i class="ph ph-arrow-counter-clockwise"></i> Anular</button></div>`).join('')}
     </div>`:''}
     <div class="acciones" style="margin-top:12px">
-      ${!hojaDeGuia(g)?'':`${g.conforme?'':`<button class="btn mini" onclick="conformarGuia('${esc(g.numero)}')" title="El despacho salió tal como dice la guía"><i class="ph ph-check"></i> Guía conforme</button>`}
-      <button class="btn mini sec" onclick="rectificarGuia('${esc(g.numero)}')" title="Hubo productos que no se pudieron despachar"><i class="ph ph-arrow-counter-clockwise"></i> Rectificar${g.conforme?'':' guía'}</button>`}
-      <button class="btn mini sec" onclick="moverGuia('${esc(g.numero)}')" title="Cambiar esta guía de viaje (hoja de ruta)"><i class="ph ph-flow-arrow"></i> Mover de hoja</button>
+      ${!hojaDeGuia(g)?'':`${g.conforme?'':`<button class="btn mini" onclick="conformarGuia(${jsq(g.numero)})" title="El despacho salió tal como dice la guía"><i class="ph ph-check"></i> Guía conforme</button>`}
+      <button class="btn mini sec" onclick="rectificarGuia(${jsq(g.numero)})" title="Hubo productos que no se pudieron despachar"><i class="ph ph-arrow-counter-clockwise"></i> Rectificar${g.conforme?'':' guía'}</button>`}
+      <button class="btn mini sec" onclick="moverGuia(${jsq(g.numero)})" title="Cambiar esta guía de viaje (hoja de ruta)"><i class="ph ph-flow-arrow"></i> Mover de hoja</button>
       ${/* Descargar el PDF original de Facto, igual que en las OC (Jefe, 20-08-2026).
            Se baja con el nombre Guia_N.pdf, no con el nombre largo del DTE. */''}
-      ${g.archivo?`<button class="btn mini sec" onclick="descargarArchivo('${esc(g.archivo)}','Guia_${esc(g.numero)}.pdf')" title="Descargar el PDF de la guía N°${esc(g.numero)}"><i class="ph ph-download-simple"></i> Descargar guía</button>`:''}
+      ${g.archivo?`<button class="btn mini sec" onclick="descargarArchivo(${jsq(g.archivo)},'Guia_${esc(g.numero)}.pdf')" title="Descargar el PDF de la guía N°${esc(g.numero)}"><i class="ph ph-download-simple"></i> Descargar guía</button>`:''}
     </div>
     
     <div id="mv-${esc(g.numero)}"></div>
@@ -3946,7 +3948,7 @@ function moverGuia(numero){
       <input type="date" id="mv-fecha-${esc(numero)}" value="${hoyISO()}">
       <p class="small muted">Hoja de Ruta N°${esc(String(DB[ARCH.conf].data.proxima_hoja_ruta||1))} · Resumen de Retiros N°${esc(String(DB[ARCH.conf].data.proximo_resumen_retiro||1))}, según lo que elijas arriba.</p>
     </div>
-    <div class="acciones"><button class="btn mini" onclick="guardarMoverGuia('${esc(numero)}')">Mover</button><button class="btn mini sec" onclick="moverGuia('${esc(numero)}')">Cancelar</button></div>
+    <div class="acciones"><button class="btn mini" onclick="guardarMoverGuia(${jsq(numero)})">Mover</button><button class="btn mini sec" onclick="moverGuia(${jsq(numero)})">Cancelar</button></div>
   </div>`;
 }
 async function guardarMoverGuia(numero){
@@ -4055,7 +4057,7 @@ function rectificarGuia(numero){
       </tr>`).join('')}
     </table>
     <label>Nota (opcional)</label><input id="rg-nota-${esc(numero)}" placeholder="ej: se quebró al cargar el camión">
-    <div class="acciones"><button class="btn mini" onclick="guardarRectificacion('${esc(numero)}')">Guardar rectificación</button><button class="btn mini sec" onclick="rectificarGuia('${esc(numero)}')">Cancelar</button></div>
+    <div class="acciones"><button class="btn mini" onclick="guardarRectificacion(${jsq(numero)})">Guardar rectificación</button><button class="btn mini sec" onclick="rectificarGuia(${jsq(numero)})">Cancelar</button></div>
   </div>`;
 }
 async function guardarRectificacion(numero){
@@ -4490,7 +4492,7 @@ function rPrecios(){
     <tr><th></th><th>Producto</th><th class="num">Último precio</th><th class="num">Var.</th><th class="num">Anterior</th><th class="num">2 atrás</th><th class="num">3 atrás</th><th class="num">Cotizado</th></tr>
     ${filas.map(f=>{const ps=f.precios;
       return `<tr>
-        <td>${f.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto('${esc(f.codigo)}')"><i class="ph ph-pencil-simple"></i></button>`:''}</td>
+        <td>${f.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto(${jsq(f.codigo)})"><i class="ph ph-pencil-simple"></i></button>`:''}</td>
         <td class="trunc" title="${esc(f.nombre)}${f.codigo?' — '+esc(f.codigo):''}">${esc(f.nombre)}${f.codigo?` <span class="muted small mono">${esc(f.codigo)}</span>`:''}</td>
         <td class="num" style="font-weight:700">${ps[0]?celda(ps[0]):'<span class="muted">—</span>'}</td>
         <td class="num small">${variacion(ps)}</td>
@@ -4524,7 +4526,7 @@ function cargarXLSX(){
   if(_xlsxProm)return _xlsxProm;
   _xlsxProm=new Promise((ok,mal)=>{
     const s=document.createElement('script');
-    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.src='./lib/xlsx.full.min.js';
     s.onload=()=>ok(window.XLSX);
     s.onerror=()=>{_xlsxProm=null;mal(new Error('No se pudo cargar el lector de Excel. Revisa la conexión.'))};
     document.head.appendChild(s);
@@ -5002,7 +5004,7 @@ function cargarJSZip(){
   if(_zipProm)return _zipProm;
   _zipProm=new Promise((ok,mal)=>{
     const s=document.createElement('script');
-    s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s.src='./lib/jszip.min.js';
     s.onload=()=>ok(window.JSZip);
     s.onerror=()=>{_zipProm=null;mal(new Error('No se pudo cargar el generador de Word. Revisa la conexión.'))};
     document.head.appendChild(s);
@@ -5329,7 +5331,7 @@ function rInv(){
   <h2>Stock actual (${prods.length} productos)</h2>
   <div class="card">${prods.length?`<table class="tprod" style="min-width:500px"><colgroup><col style="width:11ch"><col><col style="width:9ch"><col style="width:136px"></colgroup><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
     ${prods.map(p=>`<tr><td class="mono small">${esc(p.codigo||'—')}</td><td class="trunc" title="${esc(p.nombre)}">${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
-    <td class="num"><div class="acc-fila"><button class="btn mini sec" title="Ajustar: fijar la cantidad exacta" onclick="ajusteInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="ph ph-pencil-simple"></i></button><button class="btn mini sec" title="Agregar: sumar unidades al stock" onclick="agregarInv('${esc(p.nombre).replace(/'/g,"\\'")}')"><i class="ph ph-plus"></i></button>${p.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto('${esc(p.codigo)}')"><i class="ph ph-tag"></i></button>`:''}</div></td></tr>`).join('')}</table>`
+    <td class="num"><div class="acc-fila"><button class="btn mini sec" title="Ajustar: fijar la cantidad exacta" onclick="ajusteInv(${jsq(p.nombre)})"><i class="ph ph-pencil-simple"></i></button><button class="btn mini sec" title="Agregar: sumar unidades al stock" onclick="agregarInv(${jsq(p.nombre)})"><i class="ph ph-plus"></i></button>${p.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto(${jsq(p.codigo)})"><i class="ph ph-tag"></i></button>`:''}</div></td></tr>`).join('')}</table>`
     :'<div class="vacio">Bodega sin productos registrados. Usa "Registrar ingreso" para la carga inicial.</div>'}</div>
   <h2>Últimos movimientos</h2>
   <div class="card">${movs.length?`<table class="tprod" style="min-width:720px"><colgroup><col style="width:11ch"><col style="width:11ch"><col style="width:9ch"><col><col style="width:8ch"><col style="width:20ch"></colgroup><tr><th>Fecha</th><th>Código</th><th>Tipo</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
