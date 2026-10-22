@@ -166,6 +166,9 @@ button.sem-box{display:block;width:100%;text-align:left;font-family:var(--sans);
 button.sem-box:hover{border-color:var(--muted)}
 button.sem-box:active{transform:scale(0.98)}
 .sem-box .n,.sem-box .l{display:block}
+.oc-faltan{margin-bottom:16px}
+.oc-faltan-lista{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.oc-faltan-lista .chip{background:var(--card);color:var(--texto)}
 .sem-box.ind:not(.rojo):not(.ambar):not(.vencida) .l{color:var(--muted)}
 .sem-box.rojo{background:var(--rojo-bg)}.sem-box.rojo .n,.sem-box.rojo .l{color:var(--rojo)}
 .sem-box.ambar{background:var(--ambar-bg)}.sem-box.ambar .n,.sem-box.ambar .l{color:var(--ambar)}
@@ -3666,6 +3669,26 @@ function ordenesUnificadas(){
               ||String(b.folio).localeCompare(String(a.folio),'es',{numeric:true}));
 }
 function ordenPorFolio(folio){return ordenesUnificadas().find(o=>String(o.folio)===String(folio))}
+function ocsPorCargar(){
+  const m=new Map();
+  DB[ARCH.guias].data.guias.filter(guiaSinOC).forEach(g=>{
+    const f=String(g.oc||g.folio_oc||'');if(!f)return;
+    if(!m.has(f))m.set(f,[]);m.get(f).push('guía '+g.numero);
+  });
+  const reales=new Set(DB[ARCH.oc].data.ordenes.map(o=>String(o.folio)));
+  ((DB[ARCH.psap]&&DB[ARCH.psap].data.registros)||[]).forEach(r=>{
+    const f=String(r.doc_compras||'');if(!f||reales.has(f))return;
+    if(!m.has(f))m.set(f,[]);if(!m.get(f).includes('reporte SAP'))m.get(f).push('reporte SAP');
+  });
+  return [...m].map(([folio,fuentes])=>({folio,fuentes})).sort((a,b)=>a.folio.localeCompare(b.folio,'es',{numeric:true}));
+}
+function indicadorOCPorCargar(){
+  const l=ocsPorCargar();
+  return `<button class="sem-box ind oc-faltan ${l.length?'rojo':''}" onclick="irASubirOC()">
+    <span class="n">${l.length}</span><span class="l">OC por cargar</span>
+    ${l.length?`<span class="oc-faltan-lista">${l.map(x=>`<span class="chip" title="${esc(x.fuentes.join(' · '))}">${esc(x.folio)} · ${esc(x.fuentes.join(' · '))}</span>`).join('')}</span>`:''}
+  </button>`;
+}
 function rOC(){
   // Una sola lista, ordenada por FOLIO (Jefe, 22-07-2026)
   const lista=ordenesUnificadas().filter(o=>!ocFiltro
@@ -3674,6 +3697,7 @@ function rOC(){
     ||(ocFiltro==='vencida'&&!o.baja&&semaforo(o).c==='vencida')
     ||(ocFiltro==='esta semana'&&!o.baja&&ocEstado(o)!=='despachada'&&enSemana(o)));
   return `${dlProd()}
+  ${indicadorOCPorCargar()}
   ${ocLeida?panelOCLeida():formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${listaPend(['ordenes_compra','pendientes_sap'])}
   <div class="filtro"><input placeholder="Filtrar por folio o estado…" value="${esc(ocFiltro)}" oninput="ocFiltro=this.value.toLowerCase();render();this.focus()"></div>
