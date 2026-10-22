@@ -3842,19 +3842,21 @@ function moverGuia(numero){
      'retiro' va antes que 'ruta' en el alfabeto, los retiros quedaban primero sin que nadie
      lo hubiera decidido. El orden se fija con un peso explicito, no con el alfabeto. */
   const pesoTipo=h=>hrTipo(h)==='ruta'?0:1;
-  const abiertas=hojas.filter(h=>(h.estado||'borrador')==='borrador')
+  const entregada=h=>{const gs=DB[ARCH.guias].data.guias.filter(x=>hrClaveGuia(x)===hrClave(h));return gs.length>0&&gs.every(x=>x.conforme)};
+  const abiertas=hojas.filter(h=>(h.estado||'borrador')==='borrador'&&!entregada(h))
     .sort((a,b)=>pesoTipo(a)-pesoTipo(b)||(+b.numero)-(+a.numero));
+  const pre=abiertas.find(h=>hrTipo(h)==='ruta');
 
   box.innerHTML=`<div style="border-top:1.5px dashed var(--line);margin-top:12px;padding-top:12px">
     <b>Mover la guía N°${esc(numero)} a otro documento</b>
     <p class="small muted">Los documentos afectados quedan sin archivo hasta regenerarlos.</p>
     <label>Documento de destino</label>
     <select id="mv-dest-${esc(numero)}" onchange="document.getElementById('mv-nueva-${esc(numero)}').style.display=this.value.startsWith('__nueva__')?'block':'none'">
-      ${abiertas.map(h=>`<option value="${esc(hrClave(h))}">${esc(hrLbl(hrTipo(h)))} N°${esc(String(h.numero))} · ${fFecha(h.fecha_envio||h.fecha)} · ${(h.guias||[]).length} guía(s)</option>`).join('')}
-      <option value="__nueva__:ruta">Nueva Hoja de Ruta…</option>
+      ${abiertas.map(h=>`<option value="${esc(hrClave(h))}"${h===pre?' selected':''}>${esc(hrLbl(hrTipo(h)))} N°${esc(String(h.numero))} · ${fFecha(h.fecha_envio||h.fecha)} · ${(h.guias||[]).length} guía(s)</option>`).join('')}
+      <option value="__nueva__:ruta"${pre?'':' selected'}>Nueva Hoja de Ruta…</option>
       <option value="__nueva__:retiro">Nuevo Resumen de Retiros…</option>
     </select>
-    <div id="mv-nueva-${esc(numero)}" style="display:none">
+    <div id="mv-nueva-${esc(numero)}" style="display:${pre?'none':'block'}">
       <label>Fecha del documento nuevo</label>
       <input type="date" id="mv-fecha-${esc(numero)}" value="${hoyISO()}">
       <p class="small muted">Hoja de Ruta N°${esc(String(DB[ARCH.conf].data.proxima_hoja_ruta||1))} · Resumen de Retiros N°${esc(String(DB[ARCH.conf].data.proximo_resumen_retiro||1))}, según lo que elijas arriba.</p>
