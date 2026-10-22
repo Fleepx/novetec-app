@@ -39,13 +39,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    function regenerable(id) {
+      return id.matches('documentos[|](pendientes|hojas_ruta|resumenes_retiro)[|].*');
+    }
+
     match /documentos/{id} {
-      allow read, create, update, delete: if habilitado();
+      allow read, create, update: if habilitado();
+      allow delete: if admin() || (habilitado() && regenerable(id));
     }
 
     match /documentos_partes/{id} {
-      allow read, create, delete: if habilitado();
+      allow read, create: if habilitado();
       allow update: if false;
+      allow delete: if admin() || (habilitado() && (regenerable(id)
+        || get(/databases/$(base)/documents/documentos/$(resource.data.ruta.replace('/', '|'))).data.ver != resource.data.ver));
     }
 
     match /{col}/{id} {
