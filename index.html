@@ -4524,15 +4524,18 @@ function observacionesPrecio(){
    cotizaciones vigentes, por el mismo motivo que los precios de OC: la oferta que hicimos no
    puede perderse cuando el documento se archiva o se limpia el Panel. */
 function ultimaCotizacion(){
+  const porSap={};
+  DB[ARCH.prod].data.productos.forEach(p=>sapsDe(p).forEach(c=>{porSap[c]=porSap[c]===undefined?p.codigo:null}));
+  const deSap=c=>c?porSap[String(c).trim()]||null:null;
   const obs=[];
   ((DB[ARCH.hprec]&&DB[ARCH.hprec].data.cotizaciones)||[]).forEach(h=>{
     const p=+h.precio||0;if(!p)return;
-    obs.push({cod:h.codigo||codigoDeItem(h.producto,null)||('N:'+normProd(h.producto)),
+    obs.push({cod:h.codigo||codigoDeItem(h.producto,null)||deSap(h.codigo_sap)||('N:'+normProd(h.producto)),
               precio:p,fecha:h.fecha||'',folio:String(h.folio||'')});
   });
   DB[ARCH.cot].data.cotizaciones.forEach(c=>c.items.forEach(i=>{
     const p=+i.precio_unitario||0;if(!p)return;
-    obs.push({cod:codigoDeItem(i.producto,i.codigo)||('N:'+normProd(i.producto)),
+    obs.push({cod:codigoDeItem(i.producto,i.codigo)||deSap(i.codigo_sap)||('N:'+normProd(i.producto)),
               precio:p,fecha:c.fecha||'',folio:String(c.folio||'')});
   }));
   const m={};
