@@ -399,7 +399,7 @@ async function fbAbrir(){
   catch(_){db=fs.getFirestore(app)}
   const ref=(c,id)=>fs.doc(db,c,id);
   const filas=q=>q.docs.map(d=>({id:d.id,data:d.data()}));
-  const desdeSerial=x=>{const [a,b]=String(x).split('.');return new fs.Timestamp(+a,+b)};
+  const desdeSerial=x=>{const [a,b]=String(x||'0.0').split('.');return new fs.Timestamp(+a||0,+b||0)};
   const store={
     sync:null,
     nuevoId:()=>fs.doc(fs.collection(db,FB_HIST)).id,

@@ -102,6 +102,17 @@ const ok = (cond, msg) => { console.log((cond ? '  OK    ' : '  FALLA ') + msg);
   ok(await fb.fbGuardar(store, 'data/archivos.json', ar.data, ar.base, {}) === 2, 'importar un JSON editado fuera de la app reconoce los registros sin id (1 cambio + 1 nuevo)');
 
   console.log('\nSincronización incremental (dos navegadores):');
+  {
+    const viejo = memoria(); for (const f of archivos) await fb.fbGuardar(viejo, 'data/' + f, JSON.parse(JSON.stringify(original['data/' + f])), fb.baseVacia(), {});
+    let n = 0; const cli = { serial: t => typeof t === 'number' ? String(t).padStart(12, '0') : null,
+      async cacheColeccion(c) { return viejo.leerColeccion(c); },
+      async servidorColeccion(c) { const r = await viejo.leerColeccion(c); n += r.length; return r; },
+      async servidorDesde(c, serial) { n++; return (await viejo.leerColeccion(c)).filter(d => typeof d.data._t === 'number' && String(d.data._t).padStart(12, '0') > (serial || '')); },
+      async servidorDoc(c, id) { n++; return viejo.leerDoc(c, id); } };
+    const e1 = await fb.fbSincronizar(cli, null, fb.FB_COLECCIONES); const tras1 = n;
+    await fb.fbSincronizar(cli, e1.estado, fb.FB_COLECCIONES);
+    ok(n - tras1 <= fb.FB_COLECCIONES.length + 1, `datos sin hora anotada (anteriores al cambio): la segunda apertura ya es incremental (${n - tras1} lecturas)`);
+  }
   const servidor = memoria();
   let reloj = 1000;
   const AHORA = { ahora: true };
