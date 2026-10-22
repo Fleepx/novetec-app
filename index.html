@@ -115,7 +115,7 @@ header .conn{font-family:var(--mono);font-size:var(--fs-xs);color:rgba(255,255,2
 .seg button{flex:1;padding:8px 12px;border:none;border-radius:4px;background:none;color:var(--muted);font-family:var(--sans);font-size:var(--fs-sm);font-weight:600;cursor:pointer;transition:background 300ms cubic-bezier(0.32,0.72,0,1),color 300ms cubic-bezier(0.32,0.72,0,1)}
 .seg button:hover{color:var(--texto)}
 .seg button.on{background:var(--btn-bg);color:var(--btn-fg)}
-.pal:focus-visible,.seg button:focus-visible,.hbtn:focus-visible{outline:2px solid var(--marca);outline-offset:2px}
+button:focus-visible,a:focus-visible,summary:focus-visible,[role=button]:focus-visible,td.trunc:focus-visible{outline:2px solid var(--marca);outline-offset:2px}
 #btn-salir{display:none}
 .acc-fila{display:inline-flex;gap:8px;flex-wrap:nowrap;justify-content:flex-end}
 @media(max-width:640px){.hacciones .conn{display:none}#btn-salir{display:flex}
@@ -413,8 +413,8 @@ a{color:var(--texto)}
 </div>
 
 <div id="splash"><img src="logo.webp" alt="Novetec SPA"></div>
-<div id="toast"></div>
-<div id="velo"><span id="velo-msg">Guardando…</span></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="velo" role="alert" aria-busy="true"><span id="velo-msg">Guardando…</span></div>
 
 <script src="lib/fbdatos.js"></script>
 <script>
@@ -1120,7 +1120,7 @@ function formPendiente(tipo,accept){
   const titulo=esOC?'Cargar orden de compra o reporte SAP':`Subir ${TIPO_LBL[tipo].toLowerCase()}`;
   const pista=esOC?'PDF de SAP: se lee al instante · imagen, Excel o escaneo: queda en cola':'PDF, Excel, Word o imagen · varios a la vez';
   return `<details class="form" ${ficha('form:'+tipo)}><summary>${titulo}</summary><div class="inner">
-    <div class="dropzone" style="margin-top:12px" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'${tipo}')" onclick="document.getElementById('pd-file-${tipo}').click()">
+    <div class="dropzone" role="button" tabindex="0" style="margin-top:12px" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'${tipo}')" onclick="document.getElementById('pd-file-${tipo}').click()">
       <input id="pd-file-${tipo}" type="file" accept="${accept}" multiple style="display:none" onchange="dzContar('${tipo}')" onclick="event.stopPropagation()">
       <div class="dz-icono"><i class="ph ph-cloud-arrow-up"></i></div>
       <div><b>Arrastra los archivos aquí</b> o haz clic para elegirlos</div>
@@ -1283,6 +1283,11 @@ if(MQ_OSCURO)MQ_OSCURO.addEventListener('change',()=>{if(AJ.tema==='sistema'){ap
 let tab='panel';
 /* Celdas de una línea: clic para ver el texto completo, otro clic para volver a contraer.
    Se ignora el clic si viene de un botón o enlace dentro de la celda. */
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Enter'&&e.key!==' ')return;
+  const el=e.target;
+  if(el.matches&&el.matches('[role=button]:not(button)')){e.preventDefault();el.click()}
+});
 document.addEventListener('click',e=>{
   const td=e.target.closest('td.trunc');
   if(!td)return;
@@ -1294,6 +1299,7 @@ document.getElementById('tabs').addEventListener('click',e=>{
     document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));render()}
 });
 function render(){
+  document.querySelectorAll('#tabs button').forEach(b=>{if(b.dataset.t===tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
   const m=document.getElementById('vista');
   m.innerHTML={panel:rPanel,cot:rCot,oc:rOC,guias:rGuias,precios:rPrecios,inv:rInv}[tab]();
 }
@@ -4623,7 +4629,7 @@ function rPrecios(){
     <tr><th></th><th>Producto</th><th class="num">Último precio</th><th class="num">Var.</th><th class="num">Anterior</th><th class="num">2 atrás</th><th class="num">3 atrás</th><th class="num">Cotizado</th></tr>
     ${filas.map(f=>{const ps=f.precios;
       return `<tr>
-        <td>${f.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto(${jsq(f.codigo)})"><i class="ph ph-pencil-simple"></i></button>`:''}</td>
+        <td>${f.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" aria-label="Editar el nombre del producto en el maestro" onclick="renombrarProducto(${jsq(f.codigo)})"><i class="ph ph-pencil-simple"></i></button>`:''}</td>
         <td class="trunc" title="${esc(f.nombre)}${f.codigo?' — '+esc(f.codigo):''}">${esc(f.nombre)}${f.codigo?` <span class="muted small mono">${esc(f.codigo)}</span>`:''}</td>
         <td class="num" style="font-weight:700">${ps[0]?celda(ps[0]):'<span class="muted">—</span>'}</td>
         <td class="num small">${variacion(ps)}</td>
@@ -5098,7 +5104,7 @@ async function guardarGuiaLeida(){
 }
 function formLeerGuia(){
   return `<details class="form" ${ficha('form:guia',true)}><summary>Cargar guía de despacho</summary><div class="inner">
-    <div class="dropzone" style="margin-top:12px" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDropGuia(event)" onclick="document.getElementById('guia-pdf').click()">
+    <div class="dropzone" role="button" tabindex="0" style="margin-top:12px" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDropGuia(event)" onclick="document.getElementById('guia-pdf').click()">
       <input id="guia-pdf" type="file" accept=".pdf" style="display:none" onchange="leerGuiaPDF(this)" onclick="event.stopPropagation()">
       <div class="dz-icono"><i class="ph ph-cloud-arrow-up"></i></div>
       <div><b>Arrastra el PDF de Facto aquí</b> o haz clic para elegirlo</div>
@@ -5442,7 +5448,7 @@ function rInv(){
     <p class="small muted"><b>Importante:</b> es una foto completa del stock. La cantidad que escribas reemplaza a la anterior, y una celda de cantidad vacía se toma como cero. Si agregas filas nuevas sin código, esos productos se dan de alta en el maestro.</p>
     <div class="acciones" style="margin-top:12px"><button class="btn sec" onclick="descargarPlantillaInv()"><i class="ph ph-file-arrow-down"></i> Descargar plantilla</button></div>
     <label style="margin-top:16px">Planilla completada</label>
-    <div class="dropzone" onclick="document.getElementById('inv-plantilla').click()">
+    <div class="dropzone" role="button" tabindex="0" onclick="document.getElementById('inv-plantilla').click()">
       <input id="inv-plantilla" type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="dzContarInv()" onclick="event.stopPropagation()">
       <div class="dz-icono"><i class="ph ph-cloud-arrow-up"></i></div>
       <div><b>Haz clic para elegir la planilla</b></div>
@@ -5462,7 +5468,7 @@ function rInv(){
   <h2>Stock actual (${prods.length} productos)</h2>
   <div class="card">${prods.length?`<table class="tprod" style="min-width:500px"><colgroup><col style="width:11ch"><col><col style="width:9ch"><col style="width:136px"></colgroup><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
     ${prods.map(p=>`<tr><td class="mono small">${esc(p.codigo||'—')}</td><td class="trunc" title="${esc(p.nombre)}">${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
-    <td class="num"><div class="acc-fila"><button class="btn mini sec" title="Ajustar: fijar la cantidad exacta" onclick="ajusteInv(${jsq(p.nombre)})"><i class="ph ph-pencil-simple"></i></button><button class="btn mini sec" title="Agregar: sumar unidades al stock" onclick="agregarInv(${jsq(p.nombre)})"><i class="ph ph-plus"></i></button>${p.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" onclick="renombrarProducto(${jsq(p.codigo)})"><i class="ph ph-tag"></i></button>`:''}</div></td></tr>`).join('')}</table>`
+    <td class="num"><div class="acc-fila"><button class="btn mini sec" title="Ajustar: fijar la cantidad exacta" aria-label="Ajustar" onclick="ajusteInv(${jsq(p.nombre)})"><i class="ph ph-pencil-simple"></i></button><button class="btn mini sec" title="Agregar: sumar unidades al stock" aria-label="Agregar" onclick="agregarInv(${jsq(p.nombre)})"><i class="ph ph-plus"></i></button>${p.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" aria-label="Editar el nombre del producto en el maestro" onclick="renombrarProducto(${jsq(p.codigo)})"><i class="ph ph-tag"></i></button>`:''}</div></td></tr>`).join('')}</table>`
     :'<div class="vacio">Bodega sin productos registrados. Usa "Registrar ingreso" para la carga inicial.</div>'}</div>
   <h2>Últimos movimientos</h2>
   <div class="card">${movs.length?`<table class="tprod" style="min-width:720px"><colgroup><col style="width:11ch"><col style="width:11ch"><col style="width:9ch"><col><col style="width:8ch"><col style="width:20ch"></colgroup><tr><th>Fecha</th><th>Código</th><th>Tipo</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
