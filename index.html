@@ -162,6 +162,11 @@ label{display:block;font-size:var(--fs-sm);font-weight:600;color:var(--muted);ma
 .sem-box{border-radius:var(--radius);padding:16px;border:1px solid var(--line);background:var(--card)}
 .sem-box .n{font-family:var(--mono);font-size:30px;font-weight:600;line-height:1}
 .sem-box .l{font-size:var(--fs-sm);font-weight:600;margin-top:8px}
+button.sem-box{display:block;width:100%;text-align:left;font-family:var(--sans);color:var(--texto);cursor:pointer;transition:transform 300ms cubic-bezier(0.32,0.72,0,1),border-color 300ms cubic-bezier(0.32,0.72,0,1)}
+button.sem-box:hover{border-color:var(--muted)}
+button.sem-box:active{transform:scale(0.98)}
+.sem-box .n,.sem-box .l{display:block}
+.sem-box.ind:not(.rojo):not(.ambar):not(.vencida) .l{color:var(--muted)}
 .sem-box.rojo{background:var(--rojo-bg)}.sem-box.rojo .n,.sem-box.rojo .l{color:var(--rojo)}
 .sem-box.ambar{background:var(--ambar-bg)}.sem-box.ambar .n,.sem-box.ambar .l{color:var(--ambar)}
 .sem-box.verde{background:var(--verde-bg)}.sem-box.verde .n,.sem-box.verde .l{color:var(--verde)}
@@ -2337,6 +2342,39 @@ function semStripHTML(){
     <div class="sem-box verde"><div class="n">${g.verde.length}</div><div class="l">Con holgura</div></div>
   </div>`;
 }
+function enSemana(o){const d=dias(o.fecha_entrega);return d!==null&&d>=0&&d<=(7-new Date().getDay())%7}
+function indicadoresPanel(cons){
+  const act=ocsActivas().filter(o=>ocEstado(o)!=='despachada');
+  const venc=act.filter(o=>semaforo(o).c==='vencida').length;
+  const semana=act.filter(enSemana).length;
+  const sinHoja=DB[ARCH.guias].data.guias.filter(g=>!g.hoja_ruta).length;
+  const sinStock=cons.filter(c=>c.pendiente>0&&c.stock<=0).length;
+  const caja=(n,lbl,cls,fn)=>`<button class="sem-box ind ${n?cls:''}" onclick="${fn}"><span class="n">${num(n)}</span><span class="l">${lbl}</span></button>`;
+  return `<div class="sem-strip">
+    ${caja(venc,'OC vencidas','vencida',"irAOC('vencida')")}
+    ${caja(semana,'Por despachar esta semana','ambar',"irAOC('esta semana')")}
+    ${caja(sinHoja,'Guías sin hoja de ruta','ambar','irASinHoja()')}
+    ${caja(sinStock,'Sin stock con pendiente','rojo','irASinStock()')}
+  </div>`;
+}
+function irAOC(f){
+  ocFiltro=f;tab='oc';
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='oc'));
+  render();entrarVista();
+  document.querySelectorAll('#vista details.acc-anio,#vista details.acc-mes').forEach(d=>{d.open=true});
+  const f0=document.querySelector('#vista .filtro');if(f0)f0.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function irASinHoja(){
+  tab='guias';
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='guias'));
+  render();entrarVista();
+  const d=document.querySelector('#vista details[data-k="hoja:__sin__"]');
+  if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'})}
+}
+function irASinStock(){
+  const t=document.querySelector('#vista table.tarjetas');
+  if(t)t.scrollIntoView({behavior:'smooth',block:'start'});
+}
 function rPanel(){
   const lineas=lineasConfirmadas();
   const consTodo=consolidadoConfirmado(lineas);
@@ -2398,6 +2436,7 @@ function rPanel(){
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
     <button class="btn mini sec" onclick="alternarNombres(this)"><i class="ph ph-arrows-out-cardinal"></i> Desplegar nombres</button>
   </div>
+  ${indicadoresPanel(consTodo)}
   ${zonaResumen}
   ${DB[ARCH.pend].data.pendientes.length?`<div class="card" style="border-color:var(--ambar)"><i class="ph ph-file-text"></i> <b>${DB[ARCH.pend].data.pendientes.length}</b> documento(s) en cola esperando ser procesados por el administrador.</div>`:''}
   ${destOrden.length?destOrden.map(dst=>tablaGrupo(dst,grupos[dst])).join(''):`<div class="card">${vacio('seal-check','Nada por despachar')}</div>`}`;
@@ -3771,7 +3810,9 @@ function rOC(){
   // Una sola lista, ordenada por FOLIO (Jefe, 22-07-2026)
   const lista=ordenesUnificadas().filter(o=>!ocFiltro
     ||String(o.folio).toLowerCase().includes(ocFiltro)
-    ||ocEstado(o).includes(ocFiltro));
+    ||ocEstado(o).includes(ocFiltro)
+    ||(ocFiltro==='vencida'&&!o.baja&&semaforo(o).c==='vencida')
+    ||(ocFiltro==='esta semana'&&!o.baja&&ocEstado(o)!=='despachada'&&enSemana(o)));
   return `${dlProd()}
   ${ocLeida?panelOCLeida():formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${listaPend(['ordenes_compra','pendientes_sap'])}
