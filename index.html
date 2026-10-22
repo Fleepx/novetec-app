@@ -2198,18 +2198,18 @@ function semStripHTML(){
   </div>`;
 }
 function enSemana(o){const d=dias(o.fecha_entrega);return d!==null&&d>=0&&d<=(7-new Date().getDay())%7}
-function indicadoresPanel(cons){
+function indicadoresPanel(){
   const act=ocsActivas().filter(o=>ocEstado(o)!=='despachada');
   const venc=act.filter(o=>semaforo(o).c==='vencida').length;
   const semana=act.filter(enSemana).length;
   const sinHoja=DB[ARCH.guias].data.guias.filter(g=>!g.hoja_ruta).length;
-  const sinStock=cons.filter(c=>c.pendiente>0&&c.stock<=0).length;
+  const sinOC=DB[ARCH.guias].data.guias.filter(guiaSinOC).length;
   const caja=(n,lbl,cls,fn)=>`<button class="sem-box ind ${n?cls:''}" onclick="${fn}"><span class="n">${num(n)}</span><span class="l">${lbl}</span></button>`;
   return `<div class="sem-strip">
     ${caja(venc,'OC vencidas','vencida',"irAOC('vencida')")}
     ${caja(semana,'Por despachar esta semana','ambar',"irAOC('esta semana')")}
     ${caja(sinHoja,'Guías sin hoja de ruta','ambar','irASinHoja()')}
-    ${caja(sinStock,'Sin stock con pendiente','rojo','irASinStock()')}
+    ${caja(sinOC,'Guías sin OC','rojo','irAGuiasSinOC()')}
   </div>`;
 }
 function irAOC(f){
@@ -2226,9 +2226,14 @@ function irASinHoja(){
   const d=document.querySelector('#vista details[data-k="hoja:__sin__"]');
   if(d){d.open=true;d.scrollIntoView({behavior:'smooth',block:'start'})}
 }
-function irASinStock(){
-  const t=document.querySelector('#vista table.tarjetas');
-  if(t)t.scrollIntoView({behavior:'smooth',block:'start'});
+function guiaSinOC(g){const f=String(g.oc||g.folio_oc||'');return !DB[ARCH.oc].data.ordenes.some(o=>String(o.folio)===f)}
+function irAGuiasSinOC(){
+  tab='guias';
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==='guias'));
+  render();entrarVista();
+  const gs=[...document.querySelectorAll('#vista .tag[data-sinoc]')];
+  gs.forEach(t=>{let d=t.closest('details');while(d){d.open=true;d=d.parentElement.closest('details')}});
+  if(gs[0])gs[0].scrollIntoView({behavior:'smooth',block:'center'});
 }
 function rPanel(){
   const lineas=lineasConfirmadas();
@@ -2291,7 +2296,7 @@ function rPanel(){
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
     <button class="btn mini sec" onclick="alternarNombres(this)"><i class="ph ph-arrows-out-cardinal"></i> Desplegar nombres</button>
   </div>
-  ${indicadoresPanel(consTodo)}
+  ${indicadoresPanel()}
   ${zonaResumen}
   ${DB[ARCH.pend].data.pendientes.length?`<div class="card" style="border-color:var(--ambar)"><i class="ph ph-file-text"></i> <b>${DB[ARCH.pend].data.pendientes.length}</b> documento(s) en cola esperando ser procesados por el administrador.</div>`:''}
   ${destOrden.length?destOrden.map(dst=>tablaGrupo(dst,grupos[dst])).join(''):`<div class="card">${vacio('seal-check','Nada por despachar')}</div>`}`;
@@ -3943,7 +3948,7 @@ function tarjetaGuia(g){
   };
   const hayFalta=g.items.some(i=>faltaCompra(i)>0);
   const ge=guiaEstado(g);
-  return `<div class="tag"><div class="bar ${GUIA_ESTADO_COLOR[ge]}"></div><div class="body">
+  return `<div class="tag"${oc?'':' data-sinoc'}><div class="bar ${GUIA_ESTADO_COLOR[ge]}"></div><div class="body">
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
       <span class="mono" style="font-weight:700;font-size:var(--fs-lg)">Guía N° ${esc(g.numero)}</span>
       <span class="chip ${GUIA_ESTADO_COLOR[ge]}">${GUIA_ESTADO_LBL[ge]}</span>
