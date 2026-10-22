@@ -3828,7 +3828,7 @@ function tarjetaGuia(g){
            Se baja con el nombre Guia_N.pdf, no con el nombre largo del DTE. */''}
       ${g.archivo?`<button class="btn mini sec" onclick="descargarArchivo('${esc(g.archivo)}','Guia_${esc(g.numero)}.pdf')" title="Descargar el PDF de la guía N°${esc(g.numero)}"><i class="ph ph-download-simple"></i> Descargar guía</button>`:''}
     </div>
-    ${hojaDeGuia(g)?'':`<p class="small muted" style="margin-top:8px">Asígnala a un viaje para confirmarla o rectificarla.</p>`}
+    
     <div id="mv-${esc(g.numero)}"></div>
     <div id="rg-${esc(g.numero)}"></div>
   </div></div>`;
