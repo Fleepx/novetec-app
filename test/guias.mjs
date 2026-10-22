@@ -33,7 +33,7 @@ if (!fs.existsSync(GUIAS)) {
 const archivos = fs.readdirSync(GUIAS).filter(f => f.toLowerCase().endsWith('.pdf')).sort();
 const fallas = [];
 for (const f of archivos) {
-  const doc = await pdfjs.getDocument({data: new Uint8Array(fs.readFileSync(path.join(GUIAS, f)))}).promise;
+  const doc = await pdfjs.getDocument({data: new Uint8Array(fs.readFileSync(path.join(GUIAS, f))), isEvalSupported: false}).promise;
   let lineas = [];
   for (let i = 1; i <= doc.numPages; i++) {
     const c = await (await doc.getPage(i)).getTextContent();

@@ -2827,7 +2827,7 @@ async function leerOCpdf(f){
     const reg=(DB[ARCH.arch]&&DB[ARCH.arch].data.archivos)||[];
     const previo=reg.find(r=>r.hash===h);
     const pdfjs=await cargarPdfJs();
-    const doc=await pdfjs.getDocument({data:new Uint8Array(await f.arrayBuffer())}).promise;
+    const doc=await pdfjs.getDocument({data:new Uint8Array(await f.arrayBuffer()),isEvalSupported:false}).promise;
     const pags=[];
     for(let p=1;p<=doc.numPages;p++){
       const c=await (await doc.getPage(p)).getTextContent();
@@ -4722,7 +4722,7 @@ function hgResolverContraOC(guia,oc){
    reagrupa antes de que ninguna expresión regular los toque. */
 async function lineasDelPDF(file){
   const pdfjs=await cargarPdfJs();
-  const doc=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+  const doc=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false}).promise;
   let out=[];
   for(let i=1;i<=doc.numPages;i++){
     const c=await (await doc.getPage(i)).getTextContent();
