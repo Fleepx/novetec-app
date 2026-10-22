@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="robots" content="noindex, nofollow">
-<script data-redireccion>if(/^(fleepx\.github\.io|novetec\.web\.app|novetec-spa\.web\.app|novetec-spa\.firebaseapp\.com)$/.test(location.hostname))location.replace("https://gestion.novetec.cl/"+location.search+location.hash)</script>
+<script data-redireccion>if(/^(fleepx\.github\.io|novetec\.web\.app|novetec-spa\.web\.app|novetec-spa\.firebaseapp\.com)$/.test(location.hostname)){try{localStorage.removeItem("novetec_cfg")}catch(e){}location.replace("https://gestion.novetec.cl/"+location.search+location.hash)}</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Novetec · Gestión de Despacho</title>
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png?v=2">
@@ -356,9 +356,7 @@ details.form summary::before{content:'+ '}
 details.form[open] summary::before{content:'– '}
 details.form .inner{padding:0 16px 16px}
 .filtro{margin-bottom:12px}
-#setup,#login{max-width:460px;margin:64px auto;padding:0 16px}
-#setup .card{padding:24px}
-#setup h1{font-size:20px;font-weight:700;margin-bottom:8px}
+#login{max-width:460px;margin:64px auto;padding:0 16px}
 #login .card{padding:40px 32px 32px;border-radius:16px;text-align:center}
 .login-logo{display:block;height:192px;max-width:100%;width:auto;margin:0 auto 8px}
 html[data-tema="oscuro"] .login-logo{background:#fff;border-radius:12px;padding:8px 12px;box-sizing:content-box}
@@ -416,19 +414,6 @@ a{color:var(--texto)}
     <button class="btn mini sec" id="l-otra" onclick="usarOtraCuenta()" style="display:none;margin-top:8px">Usar otra cuenta</button>
   </div>
 </div>
-<div id="setup" style="display:none">
-  <div class="card">
-    <h1>Novetec · Gestión</h1>
-        <label>Usuario u organización de GitHub</label>
-    <input id="s-owner" placeholder="ej: novetec-spa">
-    <label>Repositorio de datos</label>
-    <input id="s-repo" placeholder="novetec-datos">
-    <label>Token de acceso (fine-grained)</label>
-    <input id="s-token" type="password" placeholder="github_pat_...">
-    <div class="acciones"><button class="btn" onclick="conectar()">Conectar</button></div>
-    <p id="s-err" class="small" style="color:var(--rojo);margin-top:12px"></p>
-  </div>
-</div>
 
 <div id="app" style="display:none">
 <header>
@@ -459,52 +444,21 @@ a{color:var(--texto)}
 
 <script src="lib/fbdatos.js"></script>
 <script>
-/* ================= Conexión GitHub ================= */
-const LSKEY='novetec_cfg';
-let cfg=null;
+/* ================= Datos ================= */
 let DB={}; // path -> {data, sha}
 const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'data/guias_despacho.json',inv:'data/inventario.json',conf:'data/config.json',pend:'data/pendientes.json',hr:'data/hojas_ruta.json',prod:'data/productos.json',sin:'data/sinonimos.json',psap:'data/pendientes_sap.json',arch:'data/archivos.json',hprec:'data/historial_precios.json',adj:'data/adjudicaciones.json',bod:'data/bodegas.json',cli:'data/clientes.json'};
 
-const b64dec=s=>new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g,'')),c=>c.charCodeAt(0)));
-function b64enc(s){const b=new TextEncoder().encode(s);let r='';for(let i=0;i<b.length;i+=8192)r+=String.fromCharCode(...b.subarray(i,i+8192));return btoa(r)}
-
-async function gh(path,opts={}){
-  const r=await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/${path}`,{
-    ...opts,headers:{'Authorization':'Bearer '+cfg.token,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',...(opts.headers||{})}});
-  if(!r.ok){
-    const e=await r.json().catch(()=>({}));
-    /* GitHub responde en inglés y con su propio vocabulario. Un "422: sha wasn't supplied"
-       no le dice nada a quien está cargando una guía: se traduce a qué pasó y qué hacer. */
-    const t=String(e.message||'');
-    const claro=
-      r.status===401?'El token de GitHub no es válido o expiró. Vuelve a ingresarlo con «cambiar conexión», arriba a la derecha.':
-      r.status===403?(/rate limit/i.test(t)?'GitHub está limitando las peticiones. Espera unos minutos y reintenta.'
-                     :'El token no tiene permisos para esta operación.'):
-      r.status===404?'No encontré ese archivo en el repositorio.':
-      r.status===409?'conflicto':
-      (r.status===422&&/sha/i.test(t))?'Ese documento ya existe en el repositorio y no se pudo reemplazar. Reintenta; si vuelve a fallar, avísame.':
-      r.status===422?('GitHub rechazó la operación: '+t):
-      r.status>=500?'GitHub está con problemas en este momento. Reintenta en unos minutos.':
-      `${r.status}: ${t||'error de GitHub'}`;
-    const err=new Error(claro);
-    err.status=r.status;              // el texto se traduce; el código NO se pierde
-    err.githubMessage=t;
-    throw err;
-  }
-  return r.json();
-}
 const FIREBASE_CONFIG={apiKey:"AIzaSyBenMjF5v47fXm21PRWOsXlQb2oTdGrkxI",authDomain:"novetec-spa.firebaseapp.com",projectId:"novetec-spa",storageBucket:"novetec-spa.firebasestorage.app",messagingSenderId:"735344779779",appId:"1:735344779779:web:eb530f32c9266cdcb12436"};
 const FB_SDK='https://www.gstatic.com/firebasejs/10.14.1/';
 let FBS=null;
-const modoFirebase=()=>!!FIREBASE_CONFIG;
-const esAdmin=()=>!modoFirebase()||(FBS&&FBS.rol==='admin');
+const esAdmin=()=>!!(FBS&&FBS.rol==='admin');
 async function fbAbrir(){
   if(FBS)return FBS;
   const [a,au,fs]=await Promise.all(['firebase-app.js','firebase-auth.js','firebase-firestore.js'].map(f=>import(FB_SDK+f)));
   const app=a.initializeApp(FIREBASE_CONFIG);
   const auth=au.getAuth(app);
   let db;
-  try{db=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager(),cacheSizeBytes:fs.CACHE_SIZE_UNLIMITED})})}
+  try{db=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager(),cacheSizeBytes:100*1024*1024})})}
   catch(_){db=fs.getFirestore(app)}
   const ref=(c,id)=>fs.doc(db,c,id);
   const filas=q=>q.docs.map(d=>({id:d.id,data:d.data()}));
@@ -564,7 +518,6 @@ async function fbSesion(){
 }
 function mostrarLogin(msg,otraCuenta){
   document.getElementById('app').style.display='none';
-  document.getElementById('setup').style.display='none';
   document.getElementById('login').style.display='block';
   document.getElementById('l-err').textContent=msg||'';
   document.getElementById('l-otra').style.display=otraCuenta?'inline-block':'none';
@@ -628,28 +581,14 @@ function normalizarDatos(p,d){
   return d;
 }
 async function cargarArchivo(p){
-  if(modoFirebase()){
-    let r;try{r=await fbCargar(FBS.store,p)}catch(e){throw errorFirebase(e)}
-    DB[p]={data:normalizarDatos(p,r.data||JSON.parse(JSON.stringify(ESTRUCTURAS_BASE[p]||{}))),base:r.base};
-    return;
-  }
-  try{
-    const j=await gh(`contents/${p}?t=${Date.now()}`);
-    DB[p]={data:normalizarDatos(p,JSON.parse(b64dec(j.content))),sha:j.sha};
-  }catch(e){
-    // Auto-recuperación: si el archivo no existe, la app lo crea con estructura vacía
-    if(e.message.startsWith('404')&&ESTRUCTURAS_BASE[p]){
-      DB[p]={data:JSON.parse(JSON.stringify(ESTRUCTURAS_BASE[p])),sha:undefined};
-      try{const j=await gh(`contents/${p}`,{method:'PUT',body:JSON.stringify({message:'Inicialización automática: '+p,content:b64enc(JSON.stringify(DB[p].data,null,2))})});DB[p].sha=j.content.sha}catch(_){/* seguir en memoria */}
-    } else throw e;
-  }
+  let r;try{r=await fbCargar(FBS.store,p)}catch(e){throw errorFirebase(e)}
+  DB[p]={data:normalizarDatos(p,r.data||JSON.parse(JSON.stringify(ESTRUCTURAS_BASE[p]||{}))),base:r.base};
 }
 let LOTE=null;
 function abrirLote(){LOTE={t:Date.now(),ps:new Map()}}
 async function cerrarLote(){
   const l=LOTE;LOTE=null;
   if(!l||!l.ps.size)return;
-  if(!modoFirebase()){for(const [p,msgs] of l.ps)await guardarArchivo(p,msgs.join(' · '));return}
   const ps=[...l.ps.keys()];
   try{await fbGuardarVarios(FBS.store,ps.map(p=>({p,data:DB[p].data,base:DB[p].base})),{usuario:FBS.usuario&&FBS.usuario.email,mensaje:[...l.ps.values()].flat().join(' · ')})}
   catch(e){
@@ -660,52 +599,19 @@ async function cerrarLote(){
 async function guardarArchivo(p,msg){
   if(LOTE&&Date.now()-LOTE.t<5000){if(!LOTE.ps.has(p))LOTE.ps.set(p,[]);LOTE.ps.get(p).push(msg);return}
   LOTE=null;
-  if(modoFirebase()){
-    try{await fbGuardar(FBS.store,p,DB[p].data,DB[p].base,{usuario:FBS.usuario&&FBS.usuario.email,mensaje:msg})}
-    catch(e){
-      if(e.status===409){toast('Atención: otro usuario guardó cambios en lo mismo. Recargando datos…');await cargarTodo();render();throw new Error('conflicto')}
-      const err=errorFirebase(e);toast(err.message);throw err;
-    }
-    return;
-  }
-  try{
-    const j=await gh(`contents/${p}`,{method:'PUT',body:JSON.stringify({message:msg,content:b64enc(JSON.stringify(DB[p].data,null,2)),sha:DB[p].sha})});
-    DB[p].sha=j.content.sha;
-  }catch(e){
-    /* Un 409/422 al guardar un JSON significa que el sha quedó viejo: otro guardado se
-       adelantó. Se compara el CÓDIGO, no el texto: traducir los mensajes rompió la
-       comparación anterior, que buscaba que el texto empezara con '409'. */
-    if(e.status===409||e.status===422){
-      toast('Atención: otro usuario guardó cambios. Recargando datos…');await cargarTodo();render();throw new Error('conflicto');
-    }
-    throw e;
+  try{await fbGuardar(FBS.store,p,DB[p].data,DB[p].base,{usuario:FBS.usuario&&FBS.usuario.email,mensaje:msg})}
+  catch(e){
+    if(e.status===409){toast('Atención: otro usuario guardó cambios en lo mismo. Recargando datos…');await cargarTodo();render();throw new Error('conflicto')}
+    const err=errorFirebase(e);toast(err.message);throw err;
   }
 }
-/* GitHub exige el 'sha' de la versión anterior para reemplazar un archivo que ya existe; sin
-   él responde 422 "sha wasn't supplied". Pasaba al reintentar una carga que fallo despues de
-   subir el PDF, o al recargar un documento con nombre fijo (OC_xxx.pdf, GD_xxx.pdf): el
-   archivo ya estaba en el repositorio y el segundo intento moria con un error de GitHub que
-   no dice nada al usuario. Se consulta el sha antes de subir, igual que subirBinario. */
 async function subirDocumento(carpeta,file,nombreFijo){
-  if(modoFirebase()){
-    const ruta=`documentos/${carpeta}/${nombreFijo||(Date.now()+'_'+file.name.replace(/[^\w.\-]/g,'_'))}`;
-    try{return await fbSubirDocumento(FBS.store,ruta,new Uint8Array(await file.arrayBuffer()),{nombre:file.name,tipo:file.type,usuario:FBS.usuario.email})}
-    catch(e){throw errorFirebase(e)}
-  }
-  const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file)});
   const ruta=`documentos/${carpeta}/${nombreFijo||(Date.now()+'_'+file.name.replace(/[^\w.\-]/g,'_'))}`;
-  let sha=null;
-  try{const j=await gh(`contents/${encodeURI(ruta)}?t=${Date.now()}`);sha=j.sha}catch(_){}
-  const cuerpo={message:`Documento: ${file.name}`,content:b64};
-  if(sha)cuerpo.sha=sha;
-  await gh(`contents/${encodeURI(ruta)}`,{method:'PUT',body:JSON.stringify(cuerpo)});
-  return ruta;
+  try{return await fbSubirDocumento(FBS.store,ruta,new Uint8Array(await file.arrayBuffer()),{nombre:file.name,tipo:file.type,usuario:FBS.usuario.email})}
+  catch(e){throw errorFirebase(e)}
 }
-async function borrarArchivoRepo(p,msg){
-  if(modoFirebase()){try{await fbBorrarDocumento(FBS.store,p)}catch(_){}return}
-  try{const j=await gh(`contents/${encodeURI(p)}?t=${Date.now()}`);
-    await gh(`contents/${encodeURI(p)}`,{method:'DELETE',body:JSON.stringify({message:msg,sha:j.sha})});
-  }catch(e){/* si el archivo ya no existe, continuar */}
+async function borrarArchivoRepo(p){
+  try{await fbBorrarDocumento(FBS.store,p)}catch(_){}
 }
 function bajarBlob(b,nombre){
   const u=URL.createObjectURL(b);
@@ -717,36 +623,11 @@ function bajarBlob(b,nombre){
 async function descargarArchivo(p,nombre){
   if(!p||p==='null'||p==='undefined'){toast('Ese documento todavía no tiene archivo generado.');return}
   velo(true,'Descargando…');
-  if(modoFirebase()){
-    try{
-      const u8=await fbLeerDocumento(FBS.store,p);
-      if(!u8)throw new Error('ese documento no está en la base');
-      return bajarBlob(new Blob([u8]),nombre||p.split('/').pop());
-    }catch(e){toast('Error al descargar: '+errorFirebase(e).message);velo(false);return}
-  }
   try{
-    const r=await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(p)}?t=${Date.now()}`,
-      {headers:{'Authorization':'Bearer '+cfg.token,'Accept':'application/vnd.github.raw'}});
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    const b=await r.blob();
-    if(b.type.includes('json')&&!/\.json$/i.test(p)){
-      const t=await b.text();
-      try{const j=JSON.parse(t);
-        if(j.content){ // la API respondió en JSON: rearmamos el binario desde base64
-          const bin=atob(j.content.replace(/\s/g,''));
-          const arr=new Uint8Array(bin.length);
-          for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
-          return bajarBlob(new Blob([arr]),nombre||p.split('/').pop());
-        }
-      }catch(_){}
-      throw new Error('el servidor no devolvió el archivo');
-    }
-    const u=URL.createObjectURL(b);
-    const a=document.createElement('a');a.href=u;a.download=nombre||p.split('/').pop();
-    document.body.appendChild(a);a.click();a.remove();
-    setTimeout(()=>URL.revokeObjectURL(u),5000);
-  }catch(e){toast('Error al descargar: '+e.message)}
-  velo(false);
+    const u8=await fbLeerDocumento(FBS.store,p);
+    if(!u8)throw new Error('ese documento no está en la base');
+    bajarBlob(new Blob([u8]),nombre||p.split('/').pop());
+  }catch(e){toast('Error al descargar: '+errorFirebase(e).message);velo(false)}
 }
 const SYNC_DIAS=7;
 async function fbSincronizarApp(){
@@ -759,45 +640,19 @@ async function fbSincronizarApp(){
   FBS.lecturas=r.lecturas;
 }
 async function cargarTodo(){
-  if(modoFirebase()){try{await fbSincronizarApp()}catch(e){FBS.store.sync=null;throw errorFirebase(e)}}
+  try{await fbSincronizarApp()}catch(e){FBS.store.sync=null;throw errorFirebase(e)}
   await Promise.all(Object.values(ARCH).map(cargarArchivo));
-  if(!modoFirebase()&&DB[ARCH.conf]&&DB[ARCH.conf].data.migrado_firebase){
-    const e=new Error(`Los datos se migraron a Firebase el ${fFecha(DB[ARCH.conf].data.migrado_firebase)}. Este repositorio quedó como respaldo de solo lectura: conéctate con «cambiar conexión» usando Firebase.`);
-    DB={};throw e;
-  }
 }
 
-async function conectar(){
-  const owner=v('s-owner').trim(),repo=v('s-repo').trim(),token=v('s-token').trim();
-  if(!owner||!repo||!token){document.getElementById('s-err').textContent='Completa los tres campos.';return}
-  cfg={owner,repo,token};
-  try{await gh('contents/data');localStorage.setItem(LSKEY,JSON.stringify(cfg));iniciar()}
-  catch(e){document.getElementById('s-err').textContent='No se pudo conectar: '+e.message;cfg=null}
-}
-function pedirTokenNuevo(){
-  const prev=cfg||{};
-  cfg=null;
-  document.getElementById('app').style.display='none';
-  document.getElementById('setup').style.display='block';
-  document.getElementById('s-owner').value=prev.owner||'';
-  document.getElementById('s-repo').value=prev.repo||'';
-  document.getElementById('s-token').value='';
-  document.getElementById('s-err').textContent='El token de GitHub expiró o fue revocado. Genera uno nuevo y pégalo aquí.';
-  document.getElementById('s-token').focus();
-}
 async function cambiarConexion(){
-  if(modoFirebase()){
-    if(await confirmar({titulo:'Cerrar sesión',texto:`Saldrás de la cuenta ${FBS&&FBS.usuario?FBS.usuario.email:''} en este navegador.`,confirmar:'Salir'})){
-      try{await FBS.au.signOut(FBS.auth)}catch(_){}
-      location.reload();
-    }
-    return;
+  if(await confirmar({titulo:'Cerrar sesión',texto:`Saldrás de la cuenta ${FBS&&FBS.usuario?FBS.usuario.email:''} en este navegador.`,confirmar:'Salir'})){
+    try{await FBS.au.signOut(FBS.auth)}catch(_){}
+    location.reload();
   }
-  if(await confirmar({titulo:'Desconectar el navegador',texto:'Se borrará el acceso guardado en este navegador y tendrás que volver a ingresar el token.',confirmar:'Desconectar',peligro:true})){localStorage.removeItem(LSKEY);location.reload()}
 }
 
 async function gestionarAccesos(){
-  if(!modoFirebase()||!esAdmin())return;
+  if(!esAdmin())return;
   const ov=document.createElement('div');ov.className='modal-ov';
   document.body.appendChild(ov);
   const cerrar=()=>ov.remove();
@@ -1272,7 +1127,7 @@ function normAjustes(x){
 let _ajT=null;
 function guardarAjustes(){
   try{localStorage.setItem(AJ_KEY,JSON.stringify(AJ))}catch{}
-  if(!modoFirebase()||!FBS||!FBS.usuario)return;
+  if(!FBS||!FBS.usuario)return;
   clearTimeout(_ajT);
   _ajT=setTimeout(()=>FBS.store.escribir('preferencias',FBS.usuario.uid,{...AJ}).catch(()=>{}),600);
 }
@@ -5242,36 +5097,13 @@ function cargarJSZip(){
 }
 /* Trae un binario del repo de datos tal cual, sin pasar por base64 cuando se puede. */
 async function bajarBinarioRepo(p){
-  if(modoFirebase()){
-    const u8=await fbLeerDocumento(FBS.store,p);
-    if(!u8)throw new Error('No se encontró '+p);
-    return u8.buffer.slice(u8.byteOffset,u8.byteOffset+u8.byteLength);
-  }
-  const r=await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(p)}?t=${Date.now()}`,
-    {headers:{'Authorization':'Bearer '+cfg.token,'Accept':'application/vnd.github.raw'}});
-  if(!r.ok)throw new Error('No se encontró '+p+' (HTTP '+r.status+')');
-  const b=await r.blob();
-  if(b.type.includes('json')){                 // la API respondió metadata: rearmar desde base64
-    const j=JSON.parse(await b.text());
-    if(!j.content)throw new Error('El servidor no devolvió el archivo '+p);
-    const bin=atob(j.content.replace(/\s/g,''));
-    const arr=new Uint8Array(bin.length);
-    for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
-    return arr.buffer;
-  }
-  return await b.arrayBuffer();
+  const u8=await fbLeerDocumento(FBS.store,p);
+  if(!u8)throw new Error('No se encontró '+p);
+  return u8.buffer.slice(u8.byteOffset,u8.byteOffset+u8.byteLength);
 }
-async function subirBinario(ruta,blob,msg){
-  if(modoFirebase()){
-    try{await fbSubirDocumento(FBS.store,ruta,new Uint8Array(await blob.arrayBuffer()),{tipo:blob.type,usuario:FBS.usuario.email});return}
-    catch(e){throw errorFirebase(e)}
-  }
-  const b64=await new Promise((res,rej)=>{const r=new FileReader();
-    r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(blob)});
-  let sha=null;
-  try{const j=await gh(`contents/${encodeURI(ruta)}?t=${Date.now()}`);sha=j.sha}catch(_){}
-  await gh(`contents/${encodeURI(ruta)}`,{method:'PUT',
-    body:JSON.stringify(sha?{message:msg,content:b64,sha}:{message:msg,content:b64})});
+async function subirBinario(ruta,blob){
+  try{await fbSubirDocumento(FBS.store,ruta,new Uint8Array(await blob.arrayBuffer()),{tipo:blob.type,usuario:FBS.usuario.email})}
+  catch(e){throw errorFirebase(e)}
 }
 /* ---- Armado del XML. Espejo exacto de generar_hoja_ruta.py ---- */
 const hrEsc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -5660,7 +5492,7 @@ async function reapOp(fn){
 }
 async function reapGuardar(){
   try{
-    if(modoFirebase()&&!reapUid())return;
+    if(!reapUid())return;
     const archivo=x=>x instanceof Blob?x:null;
     await reapOp(st=>st.put({t:Date.now(),uid:reapUid(),tab,y:scrollY,fichas:[...fichasAbiertas],
       ocFile:ocLeida?archivo(ocLeida.archivo):null,gFile:_gLeida?archivo(_gLeida.file):null},'ultimo'));
@@ -5731,33 +5563,25 @@ async function iniciar(){
   abrirSplash();
   const reap=await reapLeer();let retomar=null;
   if(reap)splashMin=400;
-  document.getElementById('setup').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('hoy-lbl').textContent=new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long'});
   try{
-    if(modoFirebase()){
-      if(!await fbSesion()){mostrarLogin('');await cerrarSplashALogin();return}
-      const c=document.querySelector('.conn');
-      if(c)c.textContent=`${FBS.usuario.nombre} · salir`;
-      const ac=document.getElementById('btn-accesos');if(ac)ac.style.display=esAdmin()?'':'none';
-      cargarAjustesUsuario();
-    }
+    if(!await fbSesion()){mostrarLogin('');await cerrarSplashALogin();return}
+    const c=document.querySelector('.conn');
+    if(c)c.textContent=`${FBS.usuario.nombre} · salir`;
+    const ac=document.getElementById('btn-accesos');if(ac)ac.style.display=esAdmin()?'':'none';
+    cargarAjustesUsuario();
     await cargarTodo();retomar=reapAplicar(reap);render();
   }
   catch(e){
-    if(e.status===401){pedirTokenNuevo();await cerrarSplash();return}
     if(e.sinAcceso){mostrarLogin(e.message,true);await cerrarSplashALogin();return}
     toast('Error al cargar datos: '+(e.code?errorFirebase(e).message:e.message))
   }
   await cerrarSplash();
   if(retomar)reapRetomar(retomar);
 }
-(function(){
-  if(modoFirebase()){iniciar();return}
-  const saved=localStorage.getItem(LSKEY);
-  if(saved){cfg=JSON.parse(saved);iniciar()}
-  else{document.getElementById('setup').style.display='block';cerrarSplash()}
-})();
+try{localStorage.removeItem('novetec_cfg')}catch(_){}
+iniciar();
 </script>
 </body>
 </html>
