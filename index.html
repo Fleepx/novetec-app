@@ -138,7 +138,7 @@ h2 .muted{font-size:var(--fs-sm);font-weight:400}
 .fw-6{font-weight:600}.fw-7{font-weight:700}.fs-xs{font-size:var(--fs-xs)}.fs-sm{font-size:var(--fs-sm)}
 .c-rojo{color:var(--rojo)}.c-verde{color:var(--verde)}.c-ambar{color:var(--ambar)}
 .w-full{width:100%}.scroll-x{overflow-x:auto}
-.sep{border-top:1.5px dashed var(--line);margin-top:12px}
+.sep-top{border-top:1.5px dashed var(--line);margin-top:12px}
 .revision{border:2px solid var(--ambar);border-radius:8px;padding:16px;margin:12px 0}
 .small{font-size:var(--fs-sm)}
 /* Rótulo de bodega dentro de una tarjeta: mismo cuerpo que el resto del texto */
@@ -225,12 +225,19 @@ table.tprod td.trunc{max-width:none}
   table.tarjetas{min-width:0!important;display:block;margin-top:0!important}
   table.tarjetas colgroup,table.tarjetas tr:has(>th){display:none}
   table.tarjetas tbody{display:block}
-  table.tarjetas tr{display:grid;grid-template-columns:repeat(auto-fit,minmax(56px,1fr));gap:8px;padding:12px 0;border-bottom:1px solid var(--line)}
+  table.tarjetas tr{display:grid;grid-template-columns:repeat(auto-fit,minmax(56px,1fr));align-items:start;gap:4px 8px;padding:12px;margin:0 -12px;border-bottom:1px solid var(--line)}
+  table.tarjetas tr>td{background:none!important}
+  table.tarjetas tr:has(>td>button){grid-template-columns:repeat(3,minmax(0,1fr)) 96px}
+  table.tarjetas tr.fila-comprada{background:var(--verde-bg)}
+  table.tarjetas tr.fila-comprada-parcial{background:var(--ambar-bg)}
   table.tarjetas tr:last-child{border-bottom:none}
   table.tarjetas td{border:none;padding:0!important;max-width:none;text-align:left;min-width:0}
   table.tarjetas td.t-full{grid-column:1/-1}
   table.tarjetas td.trunc{font-weight:600}
-  table.tarjetas td[data-l]:not(.trunc):not(.mono)::before{content:attr(data-l);display:block;font-family:var(--sans);font-size:var(--fs-xs);font-weight:600;color:var(--muted);margin-bottom:2px}
+  table.tarjetas td[data-l]:not(.trunc):not(.mono)::before{content:attr(data-l);display:block;font-family:var(--sans);font-size:var(--fs-xs);font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  table.tarjetas td.trunc{margin-bottom:4px}
+  table.tarjetas td.num:has(button){display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+  table.tarjetas td.num:has(button)::before{flex-basis:100%}
   table.tarjetas td .acc-fila{justify-content:flex-start}
 }
 table.tprod td,table.tprod th{padding-left:8px;padding-right:8px}
@@ -1212,7 +1219,7 @@ function etiquetarTarjetas(raiz){
     const ths=[...t.querySelectorAll('tr:first-child>th')];
     t.querySelectorAll('tr').forEach(tr=>[...tr.children].forEach((td,i)=>{
       const th=ths[i];if(!th||td.tagName!=='TD')return;
-      td.dataset.l=th.textContent.trim();
+      td.dataset.l=th.dataset.corto||th.textContent.trim();
       if(!th.classList.contains('num'))td.classList.add('t-full');
     }));
   });
@@ -2241,7 +2248,6 @@ function irAGuiasSinOC(){
 function rPanel(){
   const lineas=lineasConfirmadas();
   const consTodo=consolidadoConfirmado(lineas);
-  const psapMeta=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{};
   // Ocultos del resumen: solo se respetan mientras no haya nada por comprar. Si vuelve a
   // aparecer algo por comprar (una OC nueva), el producto reaparece solo.
   const ocultos=DB[ARCH.conf].data.resumen_ocultos||[];
@@ -2250,10 +2256,10 @@ function rPanel(){
 
   /* ZONA SUPERIOR: resumen consolidado solo de confirmado (OC + Pendientes SAP) */
   const zonaResumen=`
-  <h2>Resumen consolidado <span class="muted">· confirmado: OC + Pendientes SAP${psapMeta.actualizado?` (reporte del ${fFecha(psapMeta.actualizado)})`:''}</span></h2>
+  <h2>Resumen consolidado</h2>
   ${cons.length?`<div class="card scroll-x"><table class="tprod tarjetas" style="min-width:540px">
     <colgroup><col><col style="width:8ch"><col style="width:8ch"><col style="width:7ch"><col style="width:14ch"></colgroup>
-    <tr><th>Producto</th><th class="num">Total a despachar</th><th class="num">Pendiente</th><th class="num">Stock</th><th class="num">Compra</th></tr>
+    <tr><th>Producto</th><th class="num" data-corto="Total">Total a despachar</th><th class="num">Pendiente</th><th class="num">Stock</th><th class="num">Compra</th></tr>
     ${cons.map(c=>`<tr class="${c.porComprar<=0?'fila-comprada':(c.comprada>0?'fila-comprada-parcial':'')}" title="${c.porComprar<=0?'Comprado':(c.comprada>0?`Comprado en parte: ${num(c.comprada)} de ${num(c.cantidad)}`:'Sin comprar')}">
       <td class="trunc" title="${esc(c.producto)} — ${esc([...c.bodegas].join(', '))}">${medidaPendiente(c.codigo)?'<i class="ph ph-ruler aviso-medida" title="El documento no especifica la medida o la talla: confirmar antes de despachar"></i>':''}${esc(c.producto)}<span class="small muted sep">${esc([...c.bodegas].join(' · '))}</span></td>
       <td class="num">${num(c.cantidad)}</td>
@@ -3566,7 +3572,7 @@ function panelRecot(id){
   const cand=C.filter(x=>x.id!==id&&String(x.fecha||'')<=String(c.fecha||'9999')
       &&x.items.some(i=>cods.has(i.codigo)))
     .sort((a,b)=>String(b.fecha).localeCompare(String(a.fecha)));
-  box.innerHTML=`<div class="sep pt-3">
+  box.innerHTML=`<div class="sep-top pt-3">
     <b>Recotización de ${esc(c.folio)}</b>
     <label>Fecha real de emisión</label>
     <input type="date" id="rc-f-${esc(id)}" value="${esc(c.fecha||'')}">
@@ -4047,7 +4053,7 @@ function moverGuia(numero){
     .sort((a,b)=>pesoTipo(a)-pesoTipo(b)||(+b.numero)-(+a.numero));
   const pre=abiertas.find(h=>hrTipo(h)==='ruta');
 
-  box.innerHTML=`<div class="sep pt-3">
+  box.innerHTML=`<div class="sep-top pt-3">
     <b>Mover la guía N°${esc(numero)} a otro documento</b>
     <p class="small muted">Los documentos afectados quedan sin archivo hasta regenerarlos.</p>
     <label>Documento de destino</label>
@@ -4154,7 +4160,7 @@ function rectificarGuia(numero){
   if(!hojaDeGuia(g)){toast(GUIA_SIN_HOJA);return}
   const box=document.getElementById('rg-'+numero);
   if(box.innerHTML){box.innerHTML='';return}
-  box.innerHTML=`<div class="sep pt-3">
+  box.innerHTML=`<div class="sep-top pt-3">
     <b>Rectificar la guía N°${esc(numero)}</b>
     <p class="small muted">Unidades que no se despacharon. Vuelven a quedar pendientes.</p>
     <table class="tprod" style="margin-top:8px;min-width:520px"><colgroup><col><col style="width:9ch"><col style="width:12ch"><col style="width:19ch"></colgroup>
@@ -4354,7 +4360,7 @@ function compraFaltante(numero,btn){
     const falta=Math.max((+i.cantidad_despachada||0)-(+i.cantidad_comprada||0),0);
     return falta>0?{ix:oc.items.indexOf(i),producto:i.producto,falta}:null;
   }).filter(Boolean);
-  box.innerHTML=`<div class="sep pt-2">
+  box.innerHTML=`<div class="sep-top pt-2">
     <p class="small muted">Solo si la compra no se ingresó antes de la guía.</p>
     <div class="grid2">
       <div><label>Proveedor</label><input id="cf-prov-${numero}" placeholder="ej: Ferretería El Volcán"></div>
@@ -4453,7 +4459,7 @@ function editOC(fe){
   const box=document.getElementById('eo-'+fe);
   if(box.innerHTML){box.innerHTML='';return}
   const conMov=o.items.some(i=>(+i.cantidad_despachada||0)>0||(+i.cantidad_comprada||0)>0);
-  box.innerHTML=`<div class="sep pt-2">
+  box.innerHTML=`<div class="sep-top pt-2">
     ${conMov?'<p class="small muted">No se puede bajar de lo despachado ni quitar ítems con movimiento.</p>':''}
     <div class="grid3">
       <div><label>Folio OC</label><input id="eo-folio-${fe}" value="${esc(o.folio)}"></div>
