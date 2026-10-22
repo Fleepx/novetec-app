@@ -292,7 +292,19 @@ td.num,th.num{text-align:right;font-family:var(--mono);letter-spacing:-.01em}
 .vacio{display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;color:var(--muted);padding:40px 16px;font-size:var(--fs-base)}
 .vacio .vacio-ic{width:48px;height:48px;border-radius:9999px;background:var(--gris-bg);color:var(--texto);display:flex;align-items:center;justify-content:center;font-size:24px}
 .vacio b{color:var(--texto);font-weight:600}
-#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--btn-bg);color:var(--btn-fg);font-family:var(--mono);font-size:var(--fs-sm);padding:12px 16px;border-radius:8px;display:none;z-index:99;max-width:90vw}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--btn-bg);color:var(--btn-fg);font-family:var(--mono);font-size:var(--fs-sm);padding:12px 16px;border-radius:8px;display:none;z-index:99;max-width:90vw}
+@media(prefers-reduced-motion:no-preference){
+  :root{interpolate-size:allow-keywords}
+  details::details-content{height:0;overflow:clip;transition:height 300ms cubic-bezier(0.32,0.72,0,1),content-visibility 300ms cubic-bezier(0.32,0.72,0,1) allow-discrete}
+  details[open]::details-content{height:auto;overflow-clip-margin:8px}
+  #toast.entra{animation:toastIn 400ms cubic-bezier(0.32,0.72,0,1)}
+  .modal{animation:modalIn 300ms cubic-bezier(0.32,0.72,0,1)}
+  #vista.entra{animation:vistaIn 300ms cubic-bezier(0.32,0.72,0,1)}
+  button.btn:active,.hbtn:active{transform:scale(0.98)}
+}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,16px)}to{opacity:1;transform:translate(-50%,0)}}
+@keyframes modalIn{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes vistaIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 #velo{position:fixed;inset:0;background:rgba(22,35,46,.35);display:none;align-items:center;justify-content:center;z-index:50}
 #velo-msg{position:relative;overflow:hidden;background:var(--card);color:var(--texto);border-radius:12px;padding:16px 24px;font-size:var(--fs-base);font-weight:600;box-shadow:0 10px 40px rgba(0,0,0,.25)}
 #velo-msg::after{content:'';position:absolute;left:0;width:40%;bottom:0;height:3px;border-radius:9999px;background:var(--marca);animation:veloBarra 1.4s cubic-bezier(0.32,0.72,0,1) infinite}
@@ -842,7 +854,7 @@ function dias(iso){if(!iso)return null;const[a,m,d]=iso.split('-').map(Number);c
 function vacio(icono,texto,accion,fn){
   return `<div class="vacio"><span class="vacio-ic"><i class="ph ph-${icono}"></i></span><b>${texto}</b>${accion?`<button class="btn mini sec" onclick="${fn}">${accion}</button>`:''}</div>`;
 }
-function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';clearTimeout(t._x);t._x=setTimeout(()=>t.style.display='none',4200)}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';t.classList.remove('entra');void t.offsetWidth;t.classList.add('entra');clearTimeout(t._x);t._x=setTimeout(()=>t.style.display='none',4200)}
 function velo(on,msg){document.getElementById('velo').style.display=on?'flex':'none';if(msg)document.getElementById('velo-msg').textContent=msg}
 
 /* Maestro de productos: sin duplicados, codigo propio NOV-#### */
@@ -1311,8 +1323,9 @@ document.addEventListener('click',e=>{
 });
 document.getElementById('tabs').addEventListener('click',e=>{
   if(e.target.dataset.t){tab=e.target.dataset.t;
-    document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));render()}
+    document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));render();entrarVista()}
 });
+function entrarVista(){const v=document.getElementById('vista');v.classList.remove('entra');void v.offsetWidth;v.classList.add('entra')}
 function render(){
   document.querySelectorAll('#tabs button').forEach(b=>{if(b.dataset.t===tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
   const m=document.getElementById('vista');
