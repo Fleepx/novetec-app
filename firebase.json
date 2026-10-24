@@ -9,6 +9,8 @@
       "firebase/**",
       "firebase.json",
       "test/**",
+      "_tmpdata/**",
+      "**/*.log",
       "**/*.md",
       "**/.*",
       "**/node_modules/**"

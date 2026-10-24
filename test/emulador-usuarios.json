@@ -1,0 +1,4 @@
+[
+  {"correo": "admin@prueba.test", "rol": "admin", "nombre": "Prueba admin"},
+  {"correo": "operador@prueba.test", "rol": "operador", "nombre": "Prueba operador"}
+]

@@ -460,16 +460,22 @@ const ARCH={cot:'data/cotizaciones.json',oc:'data/ordenes_compra.json',guias:'da
 
 const FIREBASE_CONFIG={apiKey:"AIzaSyBenMjF5v47fXm21PRWOsXlQb2oTdGrkxI",authDomain:"novetec-spa.firebaseapp.com",projectId:"novetec-spa",storageBucket:"novetec-spa.firebasestorage.app",messagingSenderId:"735344779779",appId:"1:735344779779:web:eb530f32c9266cdcb12436"};
 const FB_SDK='https://www.gstatic.com/firebasejs/10.14.1/';
+const EMULADOR=typeof location!=='undefined'&&['localhost','127.0.0.1'].includes(location.hostname)&&new URLSearchParams(location.search).has('emulador');
 let FBS=null;
 const esAdmin=()=>!!(FBS&&FBS.rol==='admin');
 async function fbAbrir(){
   if(FBS)return FBS;
   const [a,au,fs]=await Promise.all(['firebase-app.js','firebase-auth.js','firebase-firestore.js'].map(f=>import(FB_SDK+f)));
-  const app=a.initializeApp(FIREBASE_CONFIG);
+  const app=a.initializeApp(EMULADOR?{apiKey:'demo-key',authDomain:'demo-novetec.firebaseapp.com',projectId:'demo-novetec'}:FIREBASE_CONFIG);
   const auth=au.getAuth(app);
   let db;
-  try{db=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager(),cacheSizeBytes:100*1024*1024})})}
-  catch(_){db=fs.getFirestore(app)}
+  if(EMULADOR){
+    au.connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true});
+    db=fs.getFirestore(app);fs.connectFirestoreEmulator(db,'127.0.0.1',8080);
+  }else{
+    try{db=fs.initializeFirestore(app,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager(),cacheSizeBytes:100*1024*1024})})}
+    catch(_){db=fs.getFirestore(app)}
+  }
   const ref=(c,id)=>fs.doc(db,c,id);
   const filas=q=>q.docs.map(d=>({id:d.id,data:d.data()}));
   const desdeSerial=x=>{const [a,b]=String(x||'0.0').split('.');return new fs.Timestamp(+a||0,+b||0)};
@@ -538,7 +544,12 @@ async function entrarConGoogle(){
   try{
     const s=await fbAbrir();
     const prov=new s.au.GoogleAuthProvider();prov.setCustomParameters({prompt:'select_account'});
-    try{await s.au.signInWithPopup(s.auth,prov)}
+    if(EMULADOR){
+      const rol=new URLSearchParams(location.search).get('emulador')||'admin';
+      const tok=JSON.stringify({sub:'prueba-'+rol,email:rol+'@prueba.test',email_verified:true});
+      await s.au.signInWithCredential(s.auth,s.au.GoogleAuthProvider.credential(tok));
+    }
+    else try{await s.au.signInWithPopup(s.auth,prov)}
     catch(e){if(String(e&&e.code).includes('popup-blocked')){await s.au.signInWithRedirect(s.auth,prov);return}throw e}
     document.getElementById('login').style.display='none';
     iniciar();
@@ -643,7 +654,7 @@ const SYNC_DIAS=7;
 async function fbSincronizarApp(){
   const k=`novetec_sync:${FIREBASE_CONFIG.projectId}:${FBS.usuario?FBS.usuario.uid:''}`;
   let est=null;try{est=JSON.parse(localStorage.getItem(k)||'null')}catch(_){}
-  if(est&&(!est.completo||Date.now()-est.completo>SYNC_DIAS*864e5))est=null;
+  if(EMULADOR||est&&(!est.completo||Date.now()-est.completo>SYNC_DIAS*864e5))est=null;
   const r=await fbSincronizar(FBS.store,est,FB_COLECCIONES);
   FBS.store.sync=r.mapa;
   try{localStorage.setItem(k,JSON.stringify({...r.estado,completo:est?est.completo:Date.now()}))}catch(_){}
@@ -1027,7 +1038,9 @@ function dzContarInv(){
 function formPendiente(tipo,accept){
   const esOC=tipo==='ordenes_compra';
   const titulo=esOC?'Cargar orden de compra o reporte SAP':`Subir ${TIPO_LBL[tipo].toLowerCase()}`;
-  const pista=esOC?'PDF de SAP: se lee al instante · imagen, Excel o escaneo: queda en cola':'PDF, Excel, Word o imagen · varios a la vez';
+  const esCot=tipo==='cotizaciones';
+  const pista=esOC?'PDF de SAP o reporte Pendientes SAP en Excel: se leen al instante · imagen o escaneo: queda en cola'
+    :esCot?'PDF de Facto o planilla CONSOLIDADO: se leen al instante · lo demás queda en cola':'PDF, Excel, Word o imagen · varios a la vez';
   return `<details class="form" ${ficha('form:'+tipo)}><summary>${titulo}</summary><div class="inner">
     <div class="dropzone mt-3" role="button" tabindex="0" ondragover="dzOver(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'${tipo}')" onclick="document.getElementById('pd-file-${tipo}').click()">
       <input id="pd-file-${tipo}" type="file" accept="${accept}" multiple style="display:none" onchange="dzContar('${tipo}')" onclick="event.stopPropagation()">
@@ -1037,7 +1050,7 @@ function formPendiente(tipo,accept){
       <div id="pd-count-${tipo}" class="mono small mt-2 c-verde"></div>
     </div>
     <label>Nota (opcional)</label><input id="pd-nota-${tipo}" placeholder="ej: corresponden a junio">
-    <div class="acciones"><button class="btn" onclick="${esOC?'cargarOC()':`subirPendiente('${tipo}')`}">${esOC?'Cargar':'Subir'}</button></div>
+    <div class="acciones"><button class="btn" onclick="${esOC?'cargarOC()':esCot?'cargarCotArchivo()':`subirPendiente('${tipo}')`}">${esOC||esCot?'Cargar':'Subir'}</button></div>
   </div></details>`;
 }
 async function cargarOC(){
@@ -1048,6 +1061,7 @@ async function cargarOC(){
     const leido=await leerOCpdf(files[0]);
     if(leido!==false)return;
   }
+  if(files.length===1&&/\.xls[xm]?$/i.test(files[0].name)&&await leerReporteSAP(files[0],null))return;
   await encolar('ordenes_compra',files,nota);
 }
 async function encolarOCLeida(){
@@ -1066,6 +1080,7 @@ function listaPend(tipo){
     <span class="mono">${fFecha(p.subido)}</span>
     <a href="#" onclick="event.preventDefault();descargarArchivo(${jsq(p.archivo)})">${esc(p.nombre)}</a>
     ${p.nota?`<span class="muted">· ${esc(p.nota)}</span>`:''}
+    ${procesable(p)?`<button class="btn mini" onclick="procesarPendiente(${jsq(p.id)})">Procesar</button>`:''}
     <button class="btn mini peligro" onclick="borrarPendiente(${jsq(p.id)})">Quitar</button>
   </div>`).join('')}
   </div></details>`;
@@ -3048,9 +3063,10 @@ async function guardarOCLeida(){
       ...(o.bodega_por_confirmar?{bodega_por_confirmar:true}:{}),
       cliente:'Agricola Super Ltda',items,compras:[],guias:[],archivo:ruta,
       notas:'Leída automáticamente desde el PDF y confirmada en pantalla. Fecha de entrega = carga + 10 días.'});
-    (DB[ARCH.arch].data.archivos).push({hash:o.hash,nombre:o.archivo.name,tipo:'ordenes_compra',
-      ruta,estado:'procesado',fecha:hoyISO(),referencia:'OC '+o.folio});
+    cerrarEnRegistro(o.hash,o.archivo.name,'ordenes_compra',ruta,'OC '+o.folio);
+    const deCola=quitarDeCola(o.pend);
     abrirLote();
+    if(deCola)await guardarArchivo(ARCH.pend,`Procesado de la cola: ${o.archivo.name}`);
     await guardarArchivo(ARCH.prod,`Maestro: productos de la OC ${o.folio}`);
     await guardarArchivo(ARCH.oc,`OC ${o.folio} cargada desde el PDF`);
     await guardarArchivo(ARCH.arch,`Registro de archivos: OC ${o.folio}`);
@@ -3071,6 +3087,7 @@ async function guardarOCLeida(){
     const res=nueva?adjudicarOCAuto(nueva):{auto:0,sug:0,sin:0};
     if(res.auto)await guardarArchivo(ARCH.adj,`OC ${o.folio}: ${res.auto} línea(s) adjudicada(s) automáticamente a cotización`);
     await cerrarLote();
+    if(deCola)await borrarArchivoRepo(o.pend.archivo);
     ocLeida=null;
     toast(`Orden de compra ${o.folio} cargada`+(recon?` · ${recon} guía(s) ya cargada(s) reconciliada(s)`:'')+(res.auto?` · ${res.auto} línea(s) adjudicada(s) a cotización`:'')+(res.sug?` · ${res.sug} por confirmar`:''));
     render();
@@ -3090,10 +3107,13 @@ async function adjuntarDocOC(){
     if(reg){reg.estado='procesado';reg.ruta=ruta;reg.referencia='OC '+o.folio}
     else A.push({hash:o.hash,nombre:o.archivo.name,tipo:'ordenes_compra',ruta,estado:'procesado',
       fecha:hoyISO(),referencia:'OC '+o.folio});
+    const deCola=quitarDeCola(o.pend);
     abrirLote();
     await guardarArchivo(ARCH.oc,`OC ${o.folio}: documento adjuntado`);
     await guardarArchivo(ARCH.arch,`Registro de archivos: OC ${o.folio}`);
+    if(deCola)await guardarArchivo(ARCH.pend,`Procesado de la cola: ${o.archivo.name}`);
     await cerrarLote();
+    if(deCola)await borrarArchivoRepo(o.pend.archivo);
     ocLeida=null;
     toast(`Documento adjuntado a la OC ${o.folio}`);
     render();
@@ -3186,6 +3206,402 @@ function panelOCLeida(){
       <button class="btn sec" onclick="descartarOCLeida()">Descartar</button>
     </div>
   </div>`;
+}
+
+let cotLeida=null,psapLeido=null;
+function extDe(n){return (String(n||'').match(/\.([a-z0-9]+)$/i)||[,''])[1].toLowerCase()}
+function irATab(t){
+  tab=t;
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+}
+async function libroExcel(file){
+  const X=await cargarXLSX();
+  return xlHojas(X.read(new Uint8Array(await file.arrayBuffer()),{type:'array'}),X);
+}
+function registroArchivo(h){return ((DB[ARCH.arch]&&DB[ARCH.arch].data.archivos)||[]).find(r=>r.hash===h)||null}
+function cerrarEnRegistro(h,nombre,tipo,ruta,referencia){
+  const A=DB[ARCH.arch].data.archivos,reg=A.find(a=>a.hash===h);
+  if(reg)Object.assign(reg,{estado:'procesado',ruta,referencia});
+  else A.push({hash:h,nombre,tipo,ruta,estado:'procesado',fecha:hoyISO(),referencia});
+}
+function quitarDeCola(pend){
+  if(!pend)return false;
+  const arr=DB[ARCH.pend].data.pendientes,i=arr.findIndex(p=>p.id===pend.id);
+  if(i<0)return false;
+  arr.splice(i,1);
+  return true;
+}
+function rutaLibre(ruta){
+  const usadas=new Set(((DB[ARCH.arch]&&DB[ARCH.arch].data.archivos)||[]).map(a=>a.ruta));
+  if(!usadas.has(ruta))return ruta;
+  const m=/^(.*?)(\.[^.]+)$/.exec(ruta);let n=2;
+  while(usadas.has(`${m[1]}_${n}${m[2]}`))n++;
+  return `${m[1]}_${n}${m[2]}`;
+}
+function yaProcesado(h,pend){
+  const r=registroArchivo(h);
+  return r&&r.estado==='procesado'&&!(pend&&pend.hash===h)?r:null;
+}
+function procesable(p){
+  const e=extDe(p.nombre);
+  return ['pdf','xlsx','xlsm','xls'].includes(e);
+}
+async function procesarPendiente(id){
+  const p=DB[ARCH.pend].data.pendientes.find(x=>x.id===id);if(!p)return;
+  velo(true,'Bajando el archivo…');
+  let f;
+  try{
+    const u8=await fbLeerDocumento(FBS.store,p.archivo);
+    if(!u8)throw new Error('el archivo no está en la base');
+    f=new File([u8],p.nombre);
+  }catch(e){velo(false);toast('No se pudo bajar: '+errorFirebase(e).message);return}
+  velo(false);
+  let ok=false;
+  if(p.tipo==='cotizaciones')ok=await leerCotArchivo(f,p);
+  else if(extDe(p.nombre)==='pdf'){
+    irATab('oc');ocLeida=null;await leerOCpdf(f);
+    ok=!!ocLeida;if(ok){ocLeida.pend=p;render()}
+  }else ok=await leerReporteSAP(f,p);
+  if(!ok)toast('La app no pudo leer este archivo: sigue en la cola.');
+}
+
+function bodegasEnTexto(t){
+  const x=sinTilde(t);if(!x)return [];
+  return bodegas().filter(b=>b.claves.some(k=>k&&x.includes(k))).map(b=>b.nombre);
+}
+async function cargarCotArchivo(){
+  const files=[...document.getElementById('pd-file-cotizaciones').files];
+  if(!files.length){toast('Selecciona al menos un archivo.');return}
+  const nota=document.getElementById('pd-nota-cotizaciones').value.trim();
+  if(files.length===1&&await leerCotArchivo(files[0],null))return;
+  await encolar('cotizaciones',files,nota);
+}
+async function leerCotArchivo(f,pend){
+  const ext=extDe(f.name);
+  if(!['pdf','xlsx','xlsm','xls'].includes(ext))return false;
+  velo(true,'Leyendo la cotización…');
+  try{
+    const h=await huella(f);
+    let c;
+    if(ext==='pdf'){
+      const pags=await paginasDelPDF(f);
+      c=fcParsearCotizacion(pags);
+      if(!c.folio&&!c.items.length){velo(false);return false}
+      c.tipo='pdf';
+      c.items=c.items.map(i=>{const b=bodegasEnTexto(i.descripcion);
+        return {producto:i.nombre,codigo:null,descripcion:i.descripcion,cantidad:i.cantidad,unidad:i.unidad,
+          precio_unitario:i.precio_unitario,bodega:b.length===1?b[0]:(c.destino||null)}});
+    }else{
+      c=cxParsearConsolidado(await libroExcel(f));
+      if(!c.items.length&&!c.fuera.length){velo(false);return false}
+      c.tipo='xlsx';c.fecha=fechaDeNombre(f.name,hoyISO());c.cliente=DB[ARCH.conf].data.cliente_principal||null;
+    }
+    cotLeida={...c,archivo:f,hash:h,previo:yaProcesado(h,pend),pend};
+    irATab('cot');render();
+  }catch(e){velo(false);toast('No se pudo leer: '+e.message);return !!pend}
+  velo(false);
+  return true;
+}
+function cotLeidaId(c){return c.tipo==='pdf'?'COT-PDF-'+c.folio:'COT-XLSX-'+String(c.fecha||'').split('-').reverse().join('')}
+function erroresCotLeida(c){
+  const e=[...c.errores];
+  if(c.previo)e.unshift(`Este archivo ya se procesó (${c.previo.referencia||c.previo.nombre}).`);
+  if(c.tipo==='pdf'&&c.folio&&DB[ARCH.cot].data.cotizaciones.some(x=>String(x.folio)===String(c.folio)))
+    e.unshift(`La cotización ${c.folio} ya está cargada.`);
+  if(c.tipo==='xlsx'){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(c.fecha||''))e.push('Falta la fecha.');
+    else if(DB[ARCH.cot].data.cotizaciones.some(x=>x.id===cotLeidaId(c)))e.push(`Ya hay una planilla CONSOLIDADO del ${fFecha(c.fecha)}.`);
+  }
+  return e;
+}
+function cotLeidaFecha(v){if(cotLeida){cotLeida.fecha=v;render()}}
+function descartarCotLeida(){cotLeida=null;render();toast('Lectura descartada')}
+async function encolarCotLeida(){if(cotLeida&&!cotLeida.pend){const f=cotLeida.archivo;cotLeida=null;await encolar('cotizaciones',[f],'')}}
+function panelCotLeida(){
+  const c=cotLeida;if(!c)return '';
+  const err=erroresCotLeida(c);
+  const ord=bodegasOrden(),po=b=>{const i=ord.indexOf(b);return i<0?99:i};
+  const grupos=[...new Set(c.items.map(i=>i.bodega||''))].sort((a,b)=>po(a)-po(b));
+  const neto=c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0);
+  const fila=i=>`<tr><td class="trunc" title="${esc(i.producto)}${i.descripcion?' — '+esc(i.descripcion):''}">${esc(i.producto)}${i.descripcion?`<span class="small muted sep">${esc(i.descripcion)}</span>`:''}${i.marca?`<span class="small muted sep">${esc(i.marca)}</span>`:''}</td>
+    <td class="mono small">${esc(i.codigo_sap||'—')}</td><td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}</td>
+    <td class="num">${clp(i.precio_unitario)}</td><td class="num">${clp(i.cantidad*i.precio_unitario)}</td></tr>`;
+  const tabla=its=>`<table class="tprod" style="min-width:620px"><colgroup><col><col style="width:12ch"><col style="width:10ch"><col style="width:11ch"><col style="width:12ch"></colgroup>
+    <tr><th>Producto</th><th>Cód. SAP</th><th class="num">Cant.</th><th class="num">Precio</th><th class="num">Total</th></tr>${its.map(fila).join('')}</table>`;
+  return `<div class="card" style="border-color:${err.length?'var(--rojo)':'var(--verde)'};border-width:2px">
+    <div class="top" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <span class="folio mono">${c.tipo==='pdf'?'COT '+esc(c.folio||'sin folio'):'CONSOLIDADO'}</span>
+      <span class="chip ${err.length?'rojo':'verde'}">${err.length?'con observaciones':'todo cuadra'}</span>
+      ${c.pend?'<span class="chip">de la cola</span>':''}
+    </div>
+    <div class="grid3">
+      <div><label>Fecha</label>${c.tipo==='xlsx'?`<input type="date" value="${esc(c.fecha||'')}" onchange="cotLeidaFecha(this.value)">`:`<div class="mono">${fFecha(c.fecha)}</div>`}</div>
+      <div><label>Cliente</label><div class="small">${esc(c.cliente||'—')}</div></div>
+      <div><label>Neto</label><div class="mono">${clp(neto)}</div></div>
+    </div>
+    ${grupos.map(b=>`${grupos.length>1||b?`<div class="bodega-lbl"><i class="ph ph-map-pin fs-xs muted"></i> ${esc(b||'Sin bodega')}</div>`:''}${tabla(c.items.filter(i=>(i.bodega||'')===b))}`).join('')}
+    ${c.fuera&&c.fuera.length?`<p class="small muted mt-2">Sin precio, no se cargan: ${esc(c.fuera.join(', '))}</p>`:''}
+    ${c.alternativas&&c.alternativas.length?`<p class="small mt-2">El cliente eligió otra alternativa en: ${c.alternativas.map(a=>`<b>${esc(a.producto)}</b> (${esc(a.detalle||a.proveedor)}, ${clp(a.precio)})`).join(' · ')}</p>`:''}
+    ${(c.avisos||[]).length?`<ul class="small muted mt-2" style="margin-left:16px">${c.avisos.map(a=>`<li>${esc(a)}</li>`).join('')}</ul>`:''}
+    ${err.length?`<div class="card" style="border-color:var(--rojo);margin-top:12px">
+      <b class="c-rojo">No se puede guardar hasta resolver esto:</b>
+      <ul style="margin:8px 0 0 16px">${err.map(e=>`<li class="small">${esc(e)}</li>`).join('')}</ul>
+      ${c.pend?'':'<div class="acciones mt-2"><button class="btn mini sec" onclick="encolarCotLeida()">Dejar en cola</button></div>'}
+    </div>`:''}
+    <div class="acciones">
+      <button class="btn" onclick="guardarCotLeida()" ${err.length?'disabled style="opacity:.45;cursor:not-allowed"':''}>Guardar esta cotización</button>
+      <button class="btn sec" onclick="descartarCotLeida()">Descartar</button>
+    </div>
+  </div>`;
+}
+async function guardarCotLeida(){
+  const c=cotLeida;if(!c)return;
+  if(erroresCotLeida(c).length){toast('Hay observaciones sin resolver: no se puede guardar.');return}
+  velo(true,'Guardando la cotización…');
+  try{
+    const id=cotLeidaId(c);
+    const folio=c.tipo==='pdf'?String(c.folio):'CONSOLIDADO-'+fFecha(c.fecha);
+    const nombre=c.tipo==='pdf'?`COT_${c.folio}.pdf`:`COT_CONSOLIDADO_${fFecha(c.fecha)}.${extDe(c.archivo.name)}`;
+    const ruta=await subirDocumento('cotizaciones',c.archivo,nombre);
+    const notas=c.tipo==='pdf'?(c.observaciones.length?c.observaciones.join(' · '):null)
+      :[c.fuera.length?`Quedaron fuera por no tener precio: ${c.fuera.join(', ')}.`:'',
+        c.alternativas.length?`El cliente eligió otra alternativa en: ${c.alternativas.map(a=>`${a.producto} (${a.detalle||a.proveedor}, ${clp(a.precio)})`).join('; ')}.`:''].filter(Boolean).join(' ')||null;
+    const items=c.items.map(i=>{const o={producto:String(i.producto||''),codigo:null};
+      ['codigo_sap','nombre_cliente','descripcion','marca','bodega','centro'].forEach(k=>{if(i[k])o[k]=String(i[k])});
+      Object.assign(o,{cantidad:+i.cantidad||0,unidad:String(i.unidad||'UN'),precio_unitario:+i.precio_unitario||0});
+      if(i.solped)o.solped=String(i.solped);
+      return o});
+    const neto=items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0);
+    DB[ARCH.cot].data.cotizaciones.push({id,folio,fecha:c.fecha,cliente:c.cliente||'',estado:'abierta',neto,archivo:ruta,notas,items});
+    const H=DB[ARCH.hprec].data;H.cotizaciones=H.cotizaciones||[];H.actualizado=hoyISO();
+    items.forEach(i=>H.cotizaciones.push({codigo:null,codigo_sap:i.codigo_sap||null,producto:i.producto,fecha:c.fecha,folio,precio:i.precio_unitario,origen:'cotizacion',folio_oc:folio}));
+    cerrarEnRegistro(c.hash,c.archivo.name,'cotizaciones',ruta,c.tipo==='pdf'?'COT '+folio:folio);
+    const deCola=quitarDeCola(c.pend);
+    abrirLote();
+    await guardarArchivo(ARCH.cot,`Cotización ${folio} leída del archivo`);
+    await guardarArchivo(ARCH.hprec,`Precios cotizados: ${folio}`);
+    await guardarArchivo(ARCH.arch,`Registro de archivos: ${folio}`);
+    if(deCola)await guardarArchivo(ARCH.pend,`Procesado de la cola: ${c.archivo.name}`);
+    if(c.tipo==='pdf')await sincronizarFolioCot(c.folio,'cotización de Facto');
+    await cerrarLote();
+    if(deCola)await borrarArchivoRepo(c.pend.archivo);
+    cotLeida=null;
+    toast(`Cotización ${folio} cargada · ${items.length} línea(s)`);
+    render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
+}
+
+async function leerReporteSAP(f,pend){
+  velo(true,'Leyendo el reporte…');
+  try{
+    const r=psParsearReporte(await libroExcel(f));
+    if(!r.lineas.length&&!pend){velo(false);return false}
+    const h=await huella(f);
+    psapLeido={...r,archivo:f,hash:h,previo:yaProcesado(h,pend),pend,fecha:(pend&&pend.subido)||hoyISO(),bodegaDe:{},grupos:[]};
+    psAnalizar();
+    irATab('oc');render();
+  }catch(e){velo(false);toast('No se pudo leer el reporte: '+e.message);return !!pend}
+  velo(false);
+  return true;
+}
+function psDiferencias(o,ls){
+  const d=[];
+  ls.forEach(l=>{
+    const its=o.items.filter(i=>(l.codigo_sap&&String(i.codigo_sap)===String(l.codigo_sap))||normProd(i.producto)===normProd(l.producto));
+    if(!its.length){d.push(`${l.producto}: el cliente muestra ${num(l.por_entregar)} por entregar y la OC no tiene esa línea. No se agrega.`);return}
+    const nuestro=its.reduce((s,i)=>s+(+i.cantidad||0)-(+i.cantidad_despachada||0),0);
+    if(nuestro!==l.por_entregar)d.push(`${l.producto}: el cliente dice ${num(l.por_entregar)} por entregar y nosotros ${num(nuestro)}${(o.guias||[]).length?` (guías ${o.guias.join(', ')})`:''}.`);
+  });
+  o.items.forEach(i=>{
+    const pend=(+i.cantidad||0)-(+i.cantidad_despachada||0);
+    if(pend>0&&!ls.some(l=>(l.codigo_sap&&String(i.codigo_sap)===String(l.codigo_sap))||normProd(i.producto)===normProd(l.producto)))
+      d.push(`${i.producto}: nosotros tenemos ${num(pend)} por despachar y el cliente ya no lo muestra pendiente.`);
+  });
+  return d;
+}
+function psAnalizar(){
+  const p=psapLeido;if(!p)return;
+  const ocs=DB[ARCH.oc].data.ordenes;
+  p.lineas.forEach(l=>{
+    const o=ocs.find(x=>String(x.folio)===l.doc_compras&&x.destino&&!x.bodega_por_confirmar);
+    l.bod=l.bodega||p.bodegaDe[l.texto]||(o?o.destino:null);
+  });
+  p.sinBodega=[...new Set(p.lineas.filter(l=>!l.bod).map(l=>l.texto||'(vacío)'))];
+  const antes=Object.fromEntries((p.grupos||[]).map(g=>[g.folio,g]));
+  const porFolio=new Map();
+  p.lineas.forEach(l=>{if(!porFolio.has(l.doc_compras))porFolio.set(l.doc_compras,[]);porFolio.get(l.doc_compras).push(l)});
+  p.grupos=[...porFolio].map(([folio,ls])=>{
+    const o=ocs.find(x=>String(x.folio)===folio);
+    if(o&&o.baja)return {folio,tipo:'baja',lineas:ls,oc:o};
+    if(o)return {folio,tipo:'existente',lineas:ls,oc:o,difs:psDiferencias(o,ls)};
+    const m=new Map();
+    ls.forEach(l=>{const k=(l.codigo_sap||l.producto)+'|'+l.precio_neto+'|'+(l.bod||'');
+      if(m.has(k)){const x=m.get(k);x.cantidad+=l.cantidad;x.total+=l.cantidad*l.precio_neto}
+      else m.set(k,{producto:l.producto,codigo_sap:l.codigo_sap,cantidad:l.cantidad,precio:l.precio_neto,
+        total:l.cantidad*l.precio_neto,unidad:l.unidad||null,centro:l.centro||l.texto||null,bodega:l.bod})});
+    const items=[...m.values()].map((x,i)=>({...x,pos:i+1}));
+    const resueltos=resolverItems(items);
+    const guiasPrevias=emparejarGuiasPrevias(folio,resueltos);
+    const ant=antes[folio];
+    if(ant&&ant.resueltos)resueltos.forEach(r=>{const a=ant.resueltos.find(x=>x.pos===r.pos);if(a&&r.estado==='ambiguo'&&a.codigo)r.codigo=a.codigo});
+    if(ant&&ant.guiasPrevias)guiasPrevias.forEach(g=>{const a=ant.guiasPrevias.find(x=>x.codigoGuia===g.codigoGuia);if(a&&'fusionar' in a)g.fusionar=a.fusionar});
+    const prods=DB[ARCH.prod].data.productos;
+    resueltos.forEach(r=>{if(!r.unidad){const pr=prods.find(x=>x.codigo===r.codigo);r.unidad=pr&&pr.unidad||'UN'}});
+    const bods=[...new Set(items.map(i=>i.bodega).filter(Boolean))];
+    return {folio,tipo:'nueva',lineas:ls,resueltos,guiasPrevias,destino:bods[0]||null};
+  });
+}
+function psBodega(texto,v){if(!psapLeido)return;if(v)psapLeido.bodegaDe[texto]=v;else delete psapLeido.bodegaDe[texto];psAnalizar();render()}
+function psFijarCodigo(folio,pos,val){const g=psapLeido&&psapLeido.grupos.find(x=>x.folio===folio);const r=g&&g.resueltos.find(x=>x.pos===pos);if(r)r.codigo=val}
+function psFijarFusion(folio,cod,val){const g=psapLeido&&psapLeido.grupos.find(x=>x.folio===folio);const p=g&&g.guiasPrevias.find(x=>x.codigoGuia===cod);if(p)p.fusionar=val}
+function descartarPSAP(){psapLeido=null;render();toast('Lectura descartada')}
+async function encolarPSAP(){if(psapLeido&&!psapLeido.pend){const f=psapLeido.archivo;psapLeido=null;await encolar('ordenes_compra',[f],'')}}
+function erroresPSAP(p){
+  const e=[...p.errores];
+  if(p.previo)e.unshift(`Este archivo ya se procesó (${p.previo.referencia||p.previo.nombre}).`);
+  if(p.sinBodega.length)e.push(`Falta elegir la bodega de: ${p.sinBodega.join(', ')}.`);
+  const amb=p.grupos.filter(g=>g.tipo==='nueva').reduce((s,g)=>s+g.resueltos.filter(r=>r.estado==='ambiguo'&&!r.codigo).length,0);
+  if(amb)e.push(`Falta decidir el producto de ${amb} línea(s).`);
+  return e;
+}
+function panelPSAP(){
+  const p=psapLeido;if(!p)return '';
+  const err=erroresPSAP(p);
+  const nuevas=p.grupos.filter(g=>g.tipo==='nueva'),exist=p.grupos.filter(g=>g.tipo==='existente'),bajas=p.grupos.filter(g=>g.tipo==='baja');
+  const difs=exist.filter(g=>g.difs.length);
+  const celdaCod=(g,r)=>r.estado==='existente'?`<span class="chip verde">${esc(r.codigo)}</span>`
+    :r.estado==='guia'?`<span class="chip verde">${esc(r.codigo)}</span> <span class="small muted">de la guía</span>`
+    :r.estado==='nuevo'?'<span class="chip ambar">producto nuevo</span>'
+    :`<select class="w-full" onchange="psFijarCodigo(${jsq(g.folio)},${r.pos},this.value)">
+        <option value="">Elige el producto…</option>
+        ${r.opciones.map(op=>`<option value="${esc(op.codigo)}"${r.codigo===op.codigo?' selected':''}>${esc(op.codigo)} · ${esc(op.nombre)}</option>`).join('')}
+        <option value="__nuevo__"${r.codigo==='__nuevo__'?' selected':''}>Crear un producto nuevo</option></select>`;
+  const guias=g=>g.guiasPrevias.length?`<ul class="small" style="margin:8px 0 0 16px">${g.guiasPrevias.map(x=>{
+      const r=g.resueltos.find(y=>y.pos===x.pos);
+      const dato=`<b>${esc(x.nombreGuia)}</b> · ${num(x.cantidad)} en la guía ${esc(x.guias.join(', '))}`;
+      if(x.accion==='usar')return `<li>${dato}: usa el código de la guía.</li>`;
+      if(x.accion==='fusionar')return `<li><label style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox"${x.fusionar?' checked':''}${esAdmin()?'':' disabled'} onchange="psFijarFusion(${jsq(g.folio)},${jsq(x.codigoGuia)},this.checked)"><span>${dato}: fusionar ${esc(x.codigoGuia)} en "${esc(r?r.producto:'')}".</span></label></li>`;
+      return `<li class="c-rojo">${dato}: no calza con una sola línea por precio. Revísalo a mano.</li>`}).join('')}</ul>`:'';
+  return `<div class="card" style="border-color:${err.length?'var(--rojo)':'var(--verde)'};border-width:2px">
+    <div class="top" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+      <span class="folio mono">Pendientes SAP</span>
+      <span class="chip ${err.length?'rojo':'verde'}">${err.length?'con observaciones':'todo cuadra'}</span>
+      ${p.pend?'<span class="chip">de la cola</span>':''}
+      <span class="muted small">${p.lineas.length} línea(s) · ${nuevas.length} OC nueva(s) · ${exist.length} ya cargada(s)</span>
+    </div>
+    ${p.sinBodega.map(t=>`<div class="grid3" style="margin-bottom:8px"><div><label>Centro "${esc(t)}"</label>
+      <select onchange="psBodega(${jsq(t)},this.value)"><option value="">Elige la bodega…</option>${bodegasOrden().map(b=>`<option${p.bodegaDe[t]===b?' selected':''}>${esc(b)}</option>`).join('')}</select></div></div>`).join('')}
+    ${nuevas.map(g=>`<div class="bodega-lbl">OC ${esc(g.folio)} <span class="muted">· ${esc(g.destino||'sin bodega')} · nueva</span></div>
+      <table class="tprod" style="min-width:640px"><colgroup><col><col style="width:12ch"><col style="width:7ch"><col style="width:10ch"><col style="width:20ch"></colgroup>
+      <tr><th>Producto</th><th>Cód. SAP</th><th class="num">Cant.</th><th class="num">Precio</th><th>En el maestro</th></tr>
+      ${g.resueltos.map(r=>`<tr><td class="trunc" title="${esc(r.producto)}">${esc(r.producto)}</td><td class="mono small">${esc(r.codigo_sap||'—')}</td><td class="num">${num(r.cantidad)}</td><td class="num">${clp(r.precio)}</td><td>${celdaCod(g,r)}</td></tr>`).join('')}
+      </table>${guias(g)}`).join('')}
+    ${difs.length?`<div class="card" style="border-color:var(--ambar);margin-top:12px"><b>Diferencias con nuestras OC</b>
+      <ul style="margin:8px 0 0 16px">${difs.map(g=>g.difs.map(d=>`<li class="small">OC ${esc(g.folio)} · ${esc(d)}</li>`).join('')).join('')}</ul></div>`:''}
+    ${bajas.length?`<p class="small muted mt-2">Dadas de baja, no se tocan: ${bajas.map(g=>esc(g.folio)).join(', ')}</p>`:''}
+    ${err.length?`<div class="card" style="border-color:var(--rojo);margin-top:12px">
+      <b class="c-rojo">No se puede guardar hasta resolver esto:</b>
+      <ul style="margin:8px 0 0 16px">${err.map(e=>`<li class="small">${esc(e)}</li>`).join('')}</ul>
+      ${p.pend?'':'<div class="acciones mt-2"><button class="btn mini sec" onclick="encolarPSAP()">Dejar en cola</button></div>'}
+    </div>`:''}
+    <div class="acciones">
+      <button class="btn" onclick="guardarPSAP()" ${err.length?'disabled style="opacity:.45;cursor:not-allowed"':''}>Guardar el reporte${nuevas.length?` y crear ${nuevas.length} OC`:''}</button>
+      <button class="btn sec" onclick="descartarPSAP()">Descartar</button>
+    </div>
+  </div>`;
+}
+async function guardarPSAP(){
+  const p=psapLeido;if(!p)return;
+  if(erroresPSAP(p).length){toast('Hay observaciones sin resolver: no se puede guardar.');return}
+  velo(true,'Guardando el reporte…');
+  try{
+    const ruta=await subirDocumento('pendientes_sap',p.archivo,
+      rutaLibre(`documentos/pendientes_sap/PSAP_${p.fecha}.${extDe(p.archivo.name)||'xlsx'}`).split('/').pop());
+    const d=DB[ARCH.prod].data,hoy=hoyISO();
+    const nuevo=r=>{d.correlativo++;const cod='NOV-'+String(d.correlativo).padStart(4,'0');
+      d.productos.push({codigo:cod,nombre:r.producto,unidad:r.unidad||'UN',codigos_cliente:r.codigo_sap?{agrosuper:r.codigo_sap}:{},alias:[]});return cod};
+    const creadas=[],fusiones=[];let recon=0,adj=0;
+    for(const g of p.grupos.filter(x=>x.tipo==='nueva')){
+      const items=g.resueltos.map(r=>{
+        let cod=r.codigo;
+        if(r.estado==='nuevo'||cod==='__nuevo__')cod=nuevo(r);
+        else if(r.codigo_sap){
+          const pr=d.productos.find(x=>x.codigo===cod);
+          if(pr&&!sapsDe(pr).includes(String(r.codigo_sap))){pr.codigos_cliente=pr.codigos_cliente||{};
+            const v=pr.codigos_cliente.agrosuper;pr.codigos_cliente.agrosuper=!v?String(r.codigo_sap):[...(Array.isArray(v)?v:[v]),String(r.codigo_sap)]}
+          if(pr&&r.estado==='guia'&&normProd(pr.nombre)!==normProd(r.producto)&&!pr.alias.some(a=>normProd(a)===normProd(r.producto)))pr.alias.push(String(r.producto));
+        }
+        return {codigo:cod,centro:r.centro||null,bodega:r.bodega||g.destino,producto:String(r.producto),cantidad_comprada:0,
+          cantidad:+r.cantidad||0,cantidad_despachada:0,codigo_sap:r.codigo_sap?String(r.codigo_sap):null,
+          precio_unitario:+r.precio||0,unidad:String(r.unidad||'UN')};
+      });
+      g.guiasPrevias.filter(x=>x.accion==='fusionar'&&x.fusionar).forEach(x=>{
+        const keep=items[g.resueltos.findIndex(r=>r.pos===x.pos)]?.codigo;
+        if(keep&&fusionarCodigoDeGuia(x.codigoGuia,keep,g.folio))fusiones.push(x.codigoGuia+' → '+keep)});
+      const fe=g.lineas.map(l=>l.fecha_doc).filter(Boolean).sort()[0]||null;
+      const oc={folio:g.folio,cotizacion_sap:null,fecha_emision:fe,archivo:null,
+        notas:`Creada desde el reporte Pendientes SAP del ${fFecha(p.fecha)}.`,fuente:'reporte_sap',fecha_carga:hoy,
+        cliente:'Agricola Super Ltda',emisor:null,destino:g.destino,compras:[],items,fecha_entrega:fechaCompromiso(),
+        guias:[],cotizacion_id:null,neto:items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0)};
+      DB[ARCH.oc].data.ordenes.push(oc);
+      recon+=reconciliarGuiasPrevias(oc);
+      DB[ARCH.hprec].data.observaciones.push(...items.map(i=>({codigo:i.codigo,codigo_sap:i.codigo_sap,producto:i.producto,
+        fecha:fe,folio_oc:g.folio,precio:i.precio_unitario,origen:'reporte_sap'})));
+      adj+=adjudicarOCAuto(oc).auto;
+      creadas.push(g.folio);
+    }
+    const ordenes=DB[ARCH.oc].data.ordenes;
+    const codigoDe=l=>{
+      const o=ordenes.find(x=>String(x.folio)===l.doc_compras);
+      const it=o&&(o.items.find(i=>l.codigo_sap&&String(i.codigo_sap)===String(l.codigo_sap)&&+i.precio_unitario===+l.precio_neto)
+        ||o.items.find(i=>l.codigo_sap&&String(i.codigo_sap)===String(l.codigo_sap)));
+      if(it)return it.codigo;
+      const r=resolverItems([{producto:l.producto,codigo_sap:l.codigo_sap}])[0];
+      return r.estado==='existente'?r.codigo:null;
+    };
+    const prev=new Map(((DB[ARCH.psap].data.registros)||[]).map(r=>[r.doc_compras+'|'+r.codigo,+r.cantidad_comprada||0]));
+    const ids=new Set();
+    const regs=p.lineas.filter(l=>l.por_entregar>0).map(l=>{
+      const codigo=codigoDe(l);
+      let id=`PSAP-${l.doc_compras}-${l.codigo_sap||codigo||l.fila}`;
+      for(let n=2;ids.has(id);n++)id=`PSAP-${l.doc_compras}-${l.codigo_sap||codigo||l.fila}-${n}`;
+      ids.add(id);
+      return {id,fecha_doc:l.fecha_doc,codigo_sap:l.codigo_sap,producto:l.producto,codigo,doc_compras:l.doc_compras,
+        cantidad:l.cantidad,centro:l.centro||l.texto||null,bodega:l.bod||null,por_entregar:l.por_entregar,
+        precio_neto:l.precio_neto,cantidad_comprada:prev.get(l.doc_compras+'|'+codigo)||0};
+    });
+    if(creadas.length)DB[ARCH.hprec].data.actualizado=hoy;
+    Object.assign(DB[ARCH.psap].data,{registros:regs,actualizado:hoy,archivo_origen:ruta,
+      folios_reporte:[...new Set(p.lineas.map(l=>l.doc_compras))].sort()});
+    const bd=DB[ARCH.bod].data,aliasNuevos=[];
+    Object.entries(p.bodegaDe).forEach(([t,b])=>{
+      const x=[...(bd.bodegas||[]),...(bd.excepcionales||[])].find(y=>y.nombre===b);
+      if(x&&!(x.alias||[]).some(a=>sinTilde(a)===sinTilde(t))){(x.alias=x.alias||[]).push(t);aliasNuevos.push(`${t} → ${b}`)}
+    });
+    const ref=`Reporte Pendientes SAP ${fFecha(p.fecha)} — ${regs.length} líneas con saldo${creadas.length?'; OC creadas '+creadas.join(', '):''}`;
+    cerrarEnRegistro(p.hash,p.archivo.name,'pendientes_sap',ruta,ref);
+    const deCola=quitarDeCola(p.pend);
+    abrirLote();
+    if(creadas.length){
+      await guardarArchivo(ARCH.prod,`Maestro: productos del reporte Pendientes SAP`);
+      await guardarArchivo(ARCH.oc,`OC creadas desde el reporte Pendientes SAP: ${creadas.join(', ')}`);
+      await guardarArchivo(ARCH.hprec,`Precios del reporte Pendientes SAP`);
+    }
+    if(recon)await guardarArchivo(ARCH.guias,`Guías de las OC ${creadas.join(', ')}: OC registrada`);
+    if(fusiones.length)await guardarArchivo(ARCH.inv,`Reporte SAP: ${fusiones.join(', ')} fusionados en el inventario`);
+    if(adj)await guardarArchivo(ARCH.adj,`Reporte SAP: ${adj} línea(s) adjudicada(s) a cotización`);
+    if(aliasNuevos.length)await guardarArchivo(ARCH.bod,`Bodegas: centro ${aliasNuevos.join(', ')}`);
+    await guardarArchivo(ARCH.psap,`Reporte Pendientes SAP del ${fFecha(p.fecha)} cargado`);
+    await guardarArchivo(ARCH.arch,`Registro de archivos: reporte Pendientes SAP`);
+    if(deCola)await guardarArchivo(ARCH.pend,`Procesado de la cola: ${p.archivo.name}`);
+    await cerrarLote();
+    if(deCola)await borrarArchivoRepo(p.pend.archivo);
+    psapLeido=null;
+    toast(`Reporte cargado · ${regs.length} línea(s)`+(creadas.length?` · ${creadas.length} OC nueva(s)`:'')+(recon?` · ${recon} guía(s) reconciliada(s)`:'')+(adj?` · ${adj} línea(s) adjudicada(s)`:''));
+    render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
 }
 
 /* ================= Cotizaciones ================= */
@@ -3407,7 +3823,7 @@ function rCot(){
     .map(x=>x[0]);
   return `${dlProd()}
   ${formCotizacion()}
-  ${formPendiente('cotizaciones','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
+  ${cotLeida?panelCotLeida():formPendiente('cotizaciones','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${listaPend('cotizaciones')}
   ${cs.length?barraFichas():''}
   ${cs.length?renderMeses('cot',agruparPorMes(cs,c=>c.fecha),([k,items])=>accMes('cot:'+k,mesLbl(k),
@@ -3704,7 +4120,7 @@ function rOC(){
     ||(ocFiltro==='esta semana'&&!o.baja&&ocEstado(o)!=='despachada'&&enSemana(o)));
   return `${dlProd()}
   ${indicadorOCPorCargar()}
-  ${ocLeida?panelOCLeida():formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
+  ${ocLeida?panelOCLeida():psapLeido?panelPSAP():formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${listaPend(['ordenes_compra','pendientes_sap'])}
   <div class="filtro"><input placeholder="Filtrar por folio o estado…" value="${esc(ocFiltro)}" oninput="ocFiltro=this.value.toLowerCase();render();this.focus()"></div>
   ${lista.length?barraFichas():''}
@@ -4914,6 +5330,207 @@ async function lineasDelPDF(file){
   }
   return out;
 }
+async function paginasDelPDF(file){
+  const pdfjs=await cargarPdfJs();
+  const doc=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false}).promise;
+  const out=[];
+  for(let i=1;i<=doc.numPages;i++)out.push((await (await doc.getPage(i)).getTextContent()).items);
+  return out;
+}
+
+
+function fcItemsDePagina(items,prev){
+  const F=items.filter(i=>String(i.str||'').trim())
+    .map(i=>({t:String(i.str).trim(),x:i.transform[4],y:i.transform[5],w:+i.width||0}));
+  const h=re=>F.find(f=>re.test(f.t));
+  const hNom=h(/^Servicio\/Producto$/i),hDesc=h(/^Descripci/i),hCant=h(/^Cant\.?$/i),
+        hVal=h(/^Valor$/i),hTot=h(/^Total$/i);
+  const hay=hNom&&hDesc&&hCant&&hVal&&hTot;
+  if(!hay&&!prev)return {items:[],geo:null};
+  const izq=Math.min(hay?hNom.x:Infinity,...F.filter(f=>hay&&f.y<hNom.y-3).map(f=>f.x));
+  const geo=hay?{desc:Math.min(2*(hNom.x+hNom.w/2)-izq+2,hDesc.x),cant:hCant.x,val:hVal.x,tot:hTot.x}:prev;
+  const yTop=hay?hNom.y:Infinity;
+  const pie=F.filter(f=>f.y<yTop&&/^Observaciones/i.test(f.t)).sort((a,b)=>b.y-a.y)[0];
+  const yFin=pie?pie.y:-Infinity;
+  const cDesc=geo.desc,cCant=geo.cant-8,cVal=geo.val-10,cFinVal=geo.val+60,cTot=geo.tot-30;
+  const col=f=>f.x<cDesc?'nom':f.x<cCant?'desc':f.x<cVal?'cant':f.x<cFinVal?'val':f.x>=cTot?'tot':'otro';
+  const zona=F.filter(f=>f.y<yTop-3&&f.y>yFin+3);
+  const anclas=zona.filter(f=>col(f)==='tot'&&/^\$\s?[\d.]+$/.test(f.t)).sort((a,b)=>b.y-a.y);
+  const filas=anclas.map(a=>({a,fs:[]}));
+  zona.forEach(f=>{
+    if(anclas.includes(f))return;
+    let fi=-1;
+    filas.forEach((r,i)=>{if(r.a.y>=f.y-3)fi=i});
+    (filas[fi<0?0:fi]||{fs:[]}).fs.push(f);
+  });
+  const une=(fs,c)=>fs.filter(f=>col(f)===c).sort((a,b)=>b.y-a.y||a.x-b.x)
+    .reduce((s,f,i,arr)=>s+(i&&Math.abs(arr[i-1].y-f.y)>2?' ':i?' ':'')+f.t,'').replace(/\s+/g,' ').trim();
+  return {geo,items:filas.map(r=>{
+    const cant=une(r.fs,'cant'),val=une(r.fs,'val');
+    const mc=/^([\d.,]+)\s*([A-ZÑ][A-ZÑ0-9]{0,3})?/i.exec(cant)||[];
+    const mv=/\$\s?([\d.]+)/.exec(val);
+    return {nombre:une(r.fs,'nom'),descripcion:une(r.fs,'desc')||null,
+      cantidad:hgCantidad(mc[1]),unidad:(mc[2]||'UN').toUpperCase(),
+      precio_unitario:mv?hgNum(mv[1]):0,total:hgNum(r.a.t)};
+  })};
+}
+function fcParsearCotizacion(paginas){
+  const lineas=paginas.flatMap(p=>hgLineasDePagina(p));
+  const txt=lineas.map(l=>l.texto),todo=txt.join('\n');
+  const c={folio:null,fecha:null,cliente:null,rut_cliente:null,observaciones:[],destino:null,
+           items:[],neto:0,iva:0,total:0,errores:[],avisos:[]};
+  const mN=/N\s*[ºo°]\s*(\d{3,})/i.exec(todo);           if(mN)c.folio=mN[1];
+  const mF=/Fecha:\s*(\d{2}-\d{2}-\d{4})/i.exec(todo);   if(mF)c.fecha=hgFechaISO(mF[1]);
+  c.cliente=hgCampo(lineas,'Señor\\(es\\)');
+  const mR=/RUT\s{2,}([\d.]+-[\dkK])/.exec(todo);        if(mR)c.rut_cliente=mR[1];
+  const mNeto=/Monto Neto:?\s+\$\s?([\d.]+)/i.exec(todo); if(mNeto)c.neto=hgNum(mNeto[1]);
+  const mIva=/IVA\s*19%:?\s+\$\s?([\d.]+)/i.exec(todo);   if(mIva)c.iva=hgNum(mIva[1]);
+  const mTot=/^\s*Total:?\s+\$\s?([\d.]+)/im.exec(todo);  if(mTot)c.total=hgNum(mTot[1]);
+  const iObs=txt.findIndex(t=>/^\s*Observaciones/i.test(t));
+  if(iObs>=0)c.observaciones=txt.slice(iObs+1).map(hgPrimeraCol)
+    .filter(t=>t&&!/^(Monto|IVA|Imp\.|Total|Moneda|\$)/i.test(t));
+  const iDest=c.observaciones.findIndex(t=>/BODEGA|DESP/i.test(t));
+  const dest=iDest<0?'':c.observaciones.slice(iDest,iDest+2).join(' ');
+  const bods=bodegasEnTexto(dest);
+  c.destino_texto=dest||null;
+  c.destino=bods.length===1?bods[0]:null;
+  if(bods.length>1)c.avisos.push(`Las observaciones nombran ${bods.length} bodegas (${bods.join(', ')}): la cotización queda sin bodega por línea.`);
+  let geo=null;
+  c.items=paginas.flatMap(p=>{const r=fcItemsDePagina(p,geo);geo=r.geo||geo;return r.items});
+  if(!c.folio)c.errores.push('No se encontró el número de la cotización.');
+  if(!c.fecha)c.errores.push('No se encontró la fecha.');
+  if(!c.items.length)c.errores.push('No se encontró ninguna línea de producto.');
+  c.items.forEach(i=>{
+    if(!i.precio_unitario)c.errores.push(`${i.nombre}: no tiene precio.`);
+    else if(Math.abs(i.cantidad*i.precio_unitario-i.total)>1)
+      c.errores.push(`${i.nombre}: ${num(i.cantidad)} × ${clp(i.precio_unitario)} no da ${clp(i.total)}.`);
+  });
+  const suma=c.items.reduce((s,i)=>s+i.total,0);
+  if(c.neto&&Math.abs(suma-c.neto)>1)c.errores.push(`Las líneas suman ${clp(suma)} y el neto del documento es ${clp(c.neto)}.`);
+  if(c.neto&&c.iva&&Math.abs(Math.round(c.neto*0.19)-c.iva)>Math.max(2,c.items.length))c.errores.push('El IVA no es el 19% del neto.');
+  return c;
+}
+
+const CP1252={'€':0x80,'‚':0x82,'ƒ':0x83,'„':0x84,'…':0x85,'†':0x86,'‡':0x87,'ˆ':0x88,'‰':0x89,'Š':0x8a,'‹':0x8b,'Œ':0x8c,'Ž':0x8e,
+  '‘':0x91,'’':0x92,'“':0x93,'”':0x94,'•':0x95,'–':0x96,'—':0x97,'˜':0x98,'™':0x99,'š':0x9a,'›':0x9b,'œ':0x9c,'ž':0x9e,'Ÿ':0x9f};
+function sinMojibake(s){
+  if(!/[ÃÂ]/.test(s))return s;
+  const b=[...s].map(c=>CP1252[c]??c.charCodeAt(0));
+  if(b.some(x=>x>255))return s;
+  try{return new TextDecoder('utf-8',{fatal:true}).decode(new Uint8Array(b))}catch(_){return s}
+}
+const xlTexto=v=>sinMojibake(String(v??'')).replace(/ /g,' ').replace(/�/g,' ').replace(/\s+/g,' ').trim();
+const xlNum=v=>typeof v==='number'?v:(xlTexto(v)?nSap(xlTexto(v)):0)||0;
+function xlFecha(v){
+  if(typeof v==='number'&&v>20000)return new Date(Date.UTC(1899,11,30)+Math.round(v)*864e5).toISOString().slice(0,10);
+  const m=/(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})/.exec(xlTexto(v));
+  return m?`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`:null;
+}
+const xlEnc=v=>sinTilde(xlTexto(v)).replace(/\s+/g,' ');
+function xlHojas(wb,X){
+  const o={};
+  wb.SheetNames.forEach(n=>{o[n]=X.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''})});
+  return o;
+}
+function xlBuscarEncabezado(filas,exige){
+  for(let r=0;r<Math.min(filas.length,40);r++){
+    const enc=(filas[r]||[]).map(xlEnc);
+    if(exige.every(re=>enc.some(e=>re.test(e))))return {fila:r,enc};
+  }
+  return null;
+}
+function centroDeTexto(t){
+  const s=xlTexto(t).toUpperCase();if(!s)return {centro:null,bodega:null,texto:''};
+  const cods=bodegas().flatMap(b=>b.centros.map(c=>({c,b:b.nombre}))).filter(x=>!/^PEND-/.test(x.c));
+  const hit=cods.find(x=>s===x.c||new RegExp('(^|[^A-Z0-9])'+x.c+'([^A-Z0-9]|$)').test(s));
+  if(hit)return {centro:hit.c,bodega:hit.b,texto:s};
+  const bd=(DB[ARCH.bod]&&DB[ARCH.bod].data)||{};
+  const porAlias=[...(bd.bodegas||[]),...(bd.excepcionales||[])].find(x=>(x.alias||[]).some(a=>sinTilde(a).trim()===sinTilde(s)));
+  if(porAlias){const bo=bodegas().find(x=>x.nombre===porAlias.nombre);return {centro:bo&&bo.centros.find(c=>!/^PEND-/.test(c))||null,bodega:porAlias.nombre,texto:s}}
+  const b=bodegaDeTexto(s);
+  if(b){const bo=bodegas().find(x=>x.nombre===b);return {centro:(bo.centros.find(c=>!/^PEND-/.test(c))||null),bodega:b,texto:s}}
+  return {centro:null,bodega:null,texto:s};
+}
+
+function cxParsearConsolidado(hojas){
+  const nombres=Object.keys(hojas);
+  const orden=[...nombres.filter(n=>/consolidado/i.test(n)),...nombres.filter(n=>!/consolidado/i.test(n))];
+  let filas=null,enc=null;
+  for(const n of orden){const e=xlBuscarEncabezado(hojas[n],[/^centro$/,/^material$/,/^texto breve$/]);if(e){filas=hojas[n];enc=e;break}}
+  const r={items:[],fuera:[],alternativas:[],errores:[],avisos:[]};
+  if(!enc){r.errores.push('No es una planilla CONSOLIDADO: no tiene las columnas Centro, Material y Texto breve.');return r}
+  const ix=re=>enc.enc.findIndex(e=>re.test(e));
+  const C={centro:ix(/^centro$/),solped:ix(/^solped$/),mat:ix(/^material$/),txt:ix(/^texto breve$/),
+    cant:ix(/^cantidad$/),uni:ix(/^unidad$/),adjVal:ix(/^valor adjudica/),tot:ix(/^valor total/),
+    adj:ix(/^proveedor adjudica/),marca:ix(/^marca$/)};
+  let pcol=ix(/^novetec$/);
+  if(pcol<0)pcol=ix(/^prov4$/);
+  if(pcol<0||C.cant<0){r.errores.push('No se encontró la columna de nuestro precio (NOVETEC o PROV4).');return r}
+  const nosotros=enc.enc[pcol].toUpperCase();
+  for(let i=enc.fila+1;i<filas.length;i++){
+    const f=filas[i]||[];
+    const nombre=xlTexto(f[C.txt]),sap=xlTexto(f[C.mat]);
+    if(!nombre&&!sap)continue;
+    const precio=xlNum(f[pcol]),cant=xlNum(f[C.cant]);
+    if(!(precio>0)||!(cant>0)){r.fuera.push(nombre||sap);continue}
+    const cen=centroDeTexto(f[C.centro]);
+    if(!cen.bodega)r.avisos.push(`${nombre}: el centro "${cen.texto}" no está en bodegas: queda sin bodega.`);
+    const adj=C.adj>=0?xlTexto(f[C.adj]).toUpperCase():'';
+    if(adj&&adj!==nosotros&&adj!=='NO COTIZA'){
+      r.alternativas.push({producto:nombre,precio:xlNum(f[pcol+1]),detalle:xlTexto(f[pcol+2])||null,proveedor:adj});
+    }else if(C.tot>=0&&xlNum(f[C.tot])&&Math.abs(cant*precio-xlNum(f[C.tot]))>1){
+      r.errores.push(`${nombre}: ${num(cant)} × ${clp(precio)} no da ${clp(xlNum(f[C.tot]))}.`);
+    }
+    const mm=/\bMARCA\s+([A-Z0-9][\w\-]*)/i.exec(nombre);
+    const marca=(C.marca>=0&&xlTexto(f[C.marca]))||(mm?mm[1]:null);
+    r.items.push({producto:nombre,codigo:null,codigo_sap:sap||null,nombre_cliente:nombre,
+      marca:marca?String(marca).toUpperCase():null,bodega:cen.bodega,centro:cen.centro||cen.texto||null,
+      cantidad:cant,unidad:xlTexto(f[C.uni])||'UN',precio_unitario:precio,
+      ...(C.solped>=0&&xlTexto(f[C.solped])?{solped:xlTexto(f[C.solped])}:{})});
+  }
+  const ord=bodegasOrden();
+  r.items=r.items.map((it,k)=>[it,k]).sort((a,b)=>{const oa=ord.indexOf(a[0].bodega),ob=ord.indexOf(b[0].bodega);
+    return (oa<0?99:oa)-(ob<0?99:ob)||a[1]-b[1]}).map(x=>x[0]);
+  if(!r.items.length)r.errores.push('La planilla no trae ninguna línea con precio: es la solicitud del cliente antes de cotizar y no se carga.');
+  return r;
+}
+function fechaDeNombre(nombre,hoy){
+  const M={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,set:9,oct:10,nov:11,dic:12};
+  const m=/\b(ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic)[a-z]*[\s._-]*(\d{1,2})\b/i.exec(String(nombre||''));
+  if(!m)return hoy;
+  const a=+String(hoy).slice(0,4),mes=M[m[1].toLowerCase()];
+  const f=`${a}-${String(mes).padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  return f>hoy?`${a-1}${f.slice(4)}`:f;
+}
+
+function psParsearReporte(hojas){
+  const r={lineas:[],errores:[],avisos:[]};
+  let filas=null,enc=null;
+  for(const n of Object.keys(hojas)){
+    const e=xlBuscarEncabezado(hojas[n],[/^material$/,/^texto breve$/,/^(documento compras|doc\.? ?compras)$/,/^por ent/]);
+    if(e){filas=hojas[n];enc=e;break}
+  }
+  if(!enc){r.errores.push('No es un reporte de Pendientes SAP: faltan las columnas Material, Texto breve, Documento compras o Por entregar.');return r}
+  const ix=re=>enc.enc.findIndex(e=>re.test(e));
+  const C={fecha:ix(/^fecha doc/),mat:ix(/^material$/),txt:ix(/^texto breve$/),doc:ix(/^(documento compras|doc\.? ?compras)$/),
+    cant:ix(/^cantidad/),centro:ix(/^(centro|ce\.?)$/),pe:ix(/^por ent/),precio:ix(/^(precio neto|prc\.? ?neto)/),
+    valor:ix(/^valor neto/),uni:ix(/^unidad/)};
+  for(let i=enc.fila+1;i<filas.length;i++){
+    const f=filas[i]||[];
+    const doc=xlTexto(f[C.doc]).replace(/\D/g,'');
+    if(!doc)continue;
+    const l={fila:i+1,fecha_doc:xlFecha(f[C.fecha]),codigo_sap:xlTexto(f[C.mat])||null,producto:xlTexto(f[C.txt]),
+      doc_compras:doc,cantidad:xlNum(f[C.cant]),por_entregar:xlNum(f[C.pe]),precio_neto:xlNum(f[C.precio]),
+      valor:C.valor>=0?xlNum(f[C.valor]):null,unidad:C.uni>=0?(xlTexto(f[C.uni])||null):null,
+      ...centroDeTexto(f[C.centro])};
+    if(!/^45\d{8}$/.test(doc))r.errores.push(`Fila ${l.fila}: "${doc}" no parece un folio de OC (45XXXXXXXX).`);
+    if(l.valor!=null&&Math.abs(l.cantidad*l.precio_neto-l.valor)>1)
+      r.errores.push(`Fila ${l.fila} (${l.producto}): ${num(l.cantidad)} × ${clp(l.precio_neto)} no da ${clp(l.valor)}.`);
+    r.lineas.push(l);
+  }
+  if(!r.lineas.length)r.errores.push('El reporte no trae ninguna línea.');
+  return r;
+}
 let _gLeida=null;
 async function leerGuiaPDF(inp){
   const file=inp.files&&inp.files[0]; if(!file)return;
@@ -5606,7 +6223,7 @@ async function iniciar(){
   try{
     if(!await fbSesion()){mostrarLogin('');await cerrarSplashALogin();return}
     const c=document.querySelector('.conn');
-    if(c)c.textContent=`${FBS.usuario.nombre} · salir`;
+    if(c)c.textContent=`${EMULADOR?'EMULADOR · ':''}${FBS.usuario.nombre} · salir`;
     const ac=document.getElementById('btn-accesos');if(ac)ac.style.display=esAdmin()?'':'none';
     cargarAjustesUsuario();
     await cargarTodo();retomar=reapAplicar(reap);render();
