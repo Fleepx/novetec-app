@@ -199,6 +199,9 @@ details.doc[open] .resumen{display:none}
 .chip{display:inline-block;font-family:var(--mono);font-size:var(--fs-xs);font-weight:600;padding:4px 12px;border-radius:16px;background:var(--gris-bg);color:var(--muted);white-space:nowrap}
 .chip.rojo{background:var(--rojo-bg);color:var(--rojo)}
 .chip.ambar{background:var(--ambar-bg);color:var(--ambar)}
+button.chip-accion{border:0;cursor:pointer;transition:filter 300ms cubic-bezier(0.32,0.72,0,1),transform 300ms cubic-bezier(0.32,0.72,0,1)}
+button.chip-accion:hover{filter:brightness(.94)}
+button.chip-accion:active{transform:scale(.98)}
 .chip.verde{background:var(--verde-bg);color:var(--verde)}
 .chip.vencida{background:var(--vencida);color:#fff}
 .chip.ink{background:var(--btn-bg);color:var(--btn-fg)}
@@ -2095,6 +2098,121 @@ function selectorBodega(actual,porConfirmar,fn){
     <option value="__otra__"${porConfirmar?' selected':''}>Otra (escribir)…</option></select>
     ${porConfirmar?`<input class="mt-2" value="${esc(actual||'')}" placeholder="Nombre de la bodega" onchange="${fn}Manual(this.value)">
     <div class="small" style="color:var(--ambar);margin-top:4px">Queda como bodega por confirmar</div>`:''}`;
+}
+function chipBodegaPorConfirmar(tipo,id){
+  if(!esAdmin())return '<span class="chip ambar">bodega por confirmar</span>';
+  return `<button type="button" class="chip ambar chip-accion" onclick="event.preventDefault();event.stopPropagation();confirmarBodega('${tipo}',${jsq(id)})"><i class="ph ph-check-circle fs-xs"></i> bodega por confirmar</button>`;
+}
+function docsBodegaPorConfirmar(texto){
+  const k=sinTilde(String(texto||'').trim());
+  const ocs=DB[ARCH.oc].data.ordenes.filter(o=>o.bodega_por_confirmar&&sinTilde(String(o.destino||'').trim())===k);
+  const guias=DB[ARCH.guias].data.guias.filter(g=>g.bodega_por_confirmar&&sinTilde(String(g.destino||'').trim())===k);
+  return {ocs,guias};
+}
+function modalBodega(texto,cuantos){
+  const bods=bodegasOrden();
+  const clientes=[...new Set(bodegas().map(b=>{const x=[...(DB[ARCH.bod].data.bodegas||[]),...(DB[ARCH.bod].data.excepcionales||[])].find(y=>y.nombre===b.nombre);return x&&x.cliente}).filter(Boolean))];
+  return new Promise(res=>{
+    const ov=document.createElement('div');ov.className='modal-ov';
+    ov.innerHTML=`<div class="modal">
+      <b>Confirmar bodega</b>
+      <div class="monto-ctx"><div><div class="et">Escrito en el documento</div><div class="va">${esc(texto||'—')}</div></div>${cuantos>1?`<div><div class="et">Documentos</div><div class="va">${cuantos}</div></div>`:''}</div>
+      <label class="mt-3">Bodega</label>
+      <select id="bd-sel"><option value="">— elegir —</option>${bods.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('')}<option value="__nueva__">Bodega nueva…</option></select>
+      <div id="bd-nueva" style="display:none">
+        <label class="mt-3">Nombre</label>
+        <input id="bd-nombre" type="text" autocomplete="off" value="${esc(texto||'')}">
+        <label class="mt-3">Cliente</label>
+        <select id="bd-cliente"><option value="">Sin definir</option>${clientes.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select>
+        <label class="mt-3">Encabezado en la hoja de ruta</label>
+        <input id="bd-titulo" type="text" autocomplete="off">
+      </div>
+      <div class="monto-aviso bien" id="bd-aviso"></div>
+      <div class="acciones">
+        <button class="btn mini" id="bd-ok">Confirmar</button>
+        <button class="btn mini sec" id="bd-cancel">Cancelar</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    const $=s=>ov.querySelector(s), sel=$('#bd-sel'), nom=$('#bd-nombre'), tit=$('#bd-titulo'), aviso=$('#bd-aviso'), ok=$('#bd-ok');
+    let titEditado=false;
+    tit.addEventListener('input',()=>{titEditado=true});
+    const revisar=()=>{
+      const nueva=sel.value==='__nueva__';
+      $('#bd-nueva').style.display=nueva?'':'none';
+      if(nueva&&!titEditado)tit.value=nom.value.trim().toUpperCase();
+      let mal='',bien='';
+      if(!sel.value)mal='Elige una bodega.';
+      else if(nueva){
+        const n=nom.value.trim();
+        if(!n)mal='Escribe el nombre.';
+        else if(bodegas().some(b=>sinTilde(b.nombre)===sinTilde(n)))mal='Esa bodega ya existe: elígela en la lista.';
+        else if(!tit.value.trim())mal='Escribe el encabezado.';
+        else bien='Se agrega al catálogo de bodegas.';
+      }else if(texto&&sinTilde(texto)!==sinTilde(sel.value))bien=`«${texto}» queda como otro nombre de ${sel.value}.`;
+      aviso.className='monto-aviso '+(mal?'mal':'bien');aviso.textContent=mal||bien;
+      ok.disabled=!!mal;ok.style.opacity=mal?.45:1;ok.style.cursor=mal?'not-allowed':'pointer';
+      return !mal;
+    };
+    sel.addEventListener('change',revisar);nom.addEventListener('input',revisar);tit.addEventListener('input',revisar);
+    const cerrar=r=>{document.removeEventListener('keydown',tecla);ov.remove();res(r)};
+    const aceptar=()=>{if(!revisar())return;
+      cerrar(sel.value==='__nueva__'?{nueva:true,nombre:nom.value.trim(),cliente:$('#bd-cliente').value||null,titulo:tit.value.trim().toUpperCase()}:{nueva:false,nombre:sel.value})};
+    const tecla=e=>{if(e.key==='Escape')cerrar(null);else if(e.key==='Enter'&&document.activeElement.tagName==='INPUT')aceptar()};
+    document.addEventListener('keydown',tecla);
+    ok.onclick=aceptar;
+    $('#bd-cancel').onclick=()=>cerrar(null);
+    ov.onclick=e=>{if(e.target===ov)cerrar(null)};
+    revisar();
+    setTimeout(()=>sel.focus(),30);
+  });
+}
+async function confirmarBodega(tipo,id){
+  if(!esAdmin()){toast('Solo el administrador puede hacer esto.');return}
+  const doc=tipo==='oc'?DB[ARCH.oc].data.ordenes.find(o=>String(o.folio)===String(id))
+                       :DB[ARCH.guias].data.guias.find(g=>String(g.numero)===String(id));
+  if(!doc||!doc.bodega_por_confirmar)return;
+  const texto=String(doc.destino||'').trim();
+  const {ocs,guias}=texto?docsBodegaPorConfirmar(texto):{ocs:tipo==='oc'?[doc]:[],guias:tipo==='oc'?[]:[doc]};
+  const r=await modalBodega(texto,ocs.length+guias.length);
+  if(!r)return;
+  velo(true,'Confirmando bodega…');
+  try{
+    const cat=DB[ARCH.bod].data;cat.bodegas=cat.bodegas||[];cat.excepcionales=cat.excepcionales||[];
+    if(r.nueva){
+      const orden=cat.bodegas.reduce((m,b)=>Math.max(m,+b.orden||0),0)+1;
+      cat.excepcionales.forEach(b=>{if((+b.orden||0)>=orden)b.orden=(+b.orden||0)+1});
+      const alias=[...new Set([r.nombre,texto].filter(Boolean))];
+      cat.bodegas.push({nombre:r.nombre,orden,centros:['PEND-'+sinTilde(r.nombre).toUpperCase().replace(/[^A-Z0-9]+/g,'-').replace(/^-|-$/g,'')],
+        alias,titulo_documento:r.titulo,claves:[sinTilde(r.nombre)],excepcional:false,cliente:r.cliente,nombre_despacho:r.titulo,
+        nota:`Alta desde la app el ${fFecha(hoyISO())}, al confirmar ${tipo==='oc'?'la OC':'la guía N°'} ${id}. Centro SAP provisorio.`});
+    }else if(texto){
+      const b=[...cat.bodegas,...cat.excepcionales].find(x=>x.nombre===r.nombre);
+      b.alias=b.alias||[];b.claves=b.claves||[];
+      if(!b.alias.some(a=>sinTilde(a)===sinTilde(texto)))b.alias.push(texto);
+      const k=sinTilde(texto);
+      const yaCalza=[...b.claves,b.nombre].some(c=>c&&k.includes(sinTilde(c)));
+      const pisaOtra=[...cat.bodegas,...cat.excepcionales].some(x=>x!==b&&[x.nombre,...(x.alias||[])].some(a=>sinTilde(a).includes(k)));
+      if(!yaCalza&&!pisaOtra&&k.length>=4)b.claves.push(k);
+    }
+    [...ocs,...guias].forEach(d=>{d.destino=r.nombre;delete d.bodega_por_confirmar});
+    const gs=DB[ARCH.guias].data.guias, hojas=[];
+    guias.forEach(g=>{const h=hojaDeGuia(g);if(h&&!hojas.includes(h))hojas.push(h)});
+    hojas.forEach(h=>{
+      const dest=[...new Set((h.guias||[]).map(n=>{const x=gs.find(y=>String(y.numero)===String(n));return x?normBodega(x.destino||''):null}).filter(Boolean))]
+        .sort((a,b)=>bodegasOrden().indexOf(a)-bodegasOrden().indexOf(b));
+      if(JSON.stringify(dest)!==JSON.stringify(h.destinos||[])){h.destinos=dest;if(h.archivo)h.archivo=null}
+    });
+    const lbl=r.nueva?`Bodega nueva ${r.nombre}`:`Bodega ${r.nombre}${texto&&sinTilde(texto)!==sinTilde(r.nombre)?` (alias «${texto}»)`:''}`;
+    abrirLote();
+    await guardarArchivo(ARCH.bod,lbl);
+    if(ocs.length)await guardarArchivo(ARCH.oc,`${lbl}: confirmada en OC ${ocs.map(o=>o.folio).join(', ')}`);
+    if(guias.length)await guardarArchivo(ARCH.guias,`${lbl}: confirmada en guía N°${guias.map(g=>g.numero).join(', ')}`);
+    if(hojas.length)await guardarArchivo(ARCH.hr,`${lbl}: destinos de ${hojas.map(h=>`${hrLbl(hrTipo(h))} N°${h.numero}`).join(', ')}`);
+    await cerrarLote();
+    toast(`${r.nombre} confirmada en ${ocs.length+guias.length} documento(s)`);render();
+  }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
+  velo(false);
 }
 function medidaPendiente(codigo){
   if(!codigo)return false;
@@ -4137,7 +4255,7 @@ function rOC(){
         <span class="chip ${ESTADO_COLOR[e]}">${ESTADO_LBL[e]}</span>
         ${e!=='despachada'&&s.c!=='gris'?`<span class="chip ${s.c}" title="Plazo de entrega">${s.txt}</span>`:''}
         ${o.baja?'':chipCompra(o)}
-        ${o.bodega_por_confirmar?'<span class="chip ambar">bodega por confirmar</span>':''}
+        ${o.bodega_por_confirmar?chipBodegaPorConfirmar('oc',o.folio):''}
         ${!o.baja&&(o.sin_documento||!o.archivo)?'<span class="chip ambar" title="Todavía no tiene su documento. Si llega, se adjunta a esta misma OC, sin crear otra.">sin documento</span>':''}
         <span class="muted small">Emisión ${fFecha(o.fecha_emision)}${o.fecha_carga&&o.fecha_carga!==o.fecha_emision?` · <span title="Día en que se cargó al sistema">cargada ${fFecha(o.fecha_carga)}</span>`:''}${o.fecha_entrega?` · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b>`:''} · ${esc(o.destino||'—')}</span>
         <span class="resumen">${o.baja?`${o.items.length} ítem(s) · dada de baja`:`${o.items.length} ítem(s) · ${num(pendD)} por despachar`}</span>
@@ -4398,7 +4516,7 @@ function tarjetaGuia(g){
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
       <span class="mono" style="font-weight:700;font-size:var(--fs-lg)">Guía N° ${esc(g.numero)}</span>
       <span class="chip ${GUIA_ESTADO_COLOR[ge]}">${GUIA_ESTADO_LBL[ge]}</span>
-      <span class="chip"><i class="ph ph-warehouse fs-xs"></i> ${esc(normBodega(g.destino||'Sin destino'))}</span>${g.bodega_por_confirmar?'<span class="chip ambar">bodega por confirmar</span>':''}
+      <span class="chip"><i class="ph ph-warehouse fs-xs"></i> ${esc(normBodega(g.destino||'Sin destino'))}</span>${g.bodega_por_confirmar?chipBodegaPorConfirmar('guia',g.numero):''}
       <span class="chip" title="Fecha de la guía">${fFecha(g.fecha)}</span>
       <span class="chip ink">OC ${esc(g.oc||g.folio_oc)}</span>
       ${(()=>{ /* Guía sin OC cargada: el reporte del cliente basta como respaldo (Jefe, 20-08-2026).
