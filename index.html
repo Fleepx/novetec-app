@@ -2352,7 +2352,7 @@ function indicadoresPanel(){
   const venc=act.filter(o=>semaforo(o).c==='vencida').length;
   const semana=act.filter(enSemana).length;
   const sinHoja=DB[ARCH.guias].data.guias.filter(g=>!g.hoja_ruta&&!g.historica).length;
-  const sinOC=DB[ARCH.guias].data.guias.filter(guiaSinOC).length;
+  const sinOC=DB[ARCH.guias].data.guias.filter(g=>!g.historica&&guiaSinOC(g)).length;
   const caja=(n,lbl,cls,fn)=>`<button class="sem-box ind ${n?cls:''}" onclick="${fn}"><span class="n">${num(n)}</span><span class="l">${lbl}</span></button>`;
   return `<div class="sem-strip">
     ${caja(venc,'OC vencidas','vencida',"irAOC('vencida')")}
