@@ -1701,14 +1701,16 @@ const bodegasDe=cl=>((cl&&cl.bodegas&&cl.bodegas.length)?cl.bodegas:bodegasOrden
 const clientePorNombre=n=>clientes().find(c=>c.nombre===n||c.corto===n)||null;
 const contactoPrincipal=(lista)=>{const l=lista||[];return (l.find(x=>x.principal)||l[0]||{}).valor||''};
 
-/* Últimos precios del historial. Se muestran los DOS: lo que ofertamos y lo que el cliente
+/* Últimos precios, los mismos de la Lista de precios. Se muestran los DOS: lo que ofertamos y lo que el cliente
    efectivamente compró. La app NO propone un precio sola — cotizar es decisión comercial. */
 function ultimoPrecio(codigo,fuente){
-  const H=DB[ARCH.hprec].data;
-  const arr=fuente==='oc'?(H.observaciones||[]):(H.cotizaciones||[]);
-  const c=arr.filter(x=>x.codigo===codigo&&+x.precio>0)
-    .sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
-  return c.length?{precio:+c[0].precio,fecha:c[0].fecha,ref:c[0].folio_oc||c[0].folio||''}:null;
+  if(!codigo)return null;
+  if(fuente==='oc'){
+    const o=(observacionesPrecio()[codigo]||[])[0];
+    return o?{precio:o.precio,fecha:o.fecha,ref:o.oc}:null;
+  }
+  const c=ultimaCotizacion()[codigo];
+  return c?{precio:c.precio,fecha:c.fecha,ref:c.folio}:null;
 }
 
 /* El texto de despacho se arma solo con los datos ya elegidos. En las 58 cotizaciones del
@@ -2345,7 +2347,7 @@ function indicadoresPanel(){
   const act=ocsActivas().filter(o=>ocEstado(o)!=='despachada');
   const venc=act.filter(o=>semaforo(o).c==='vencida').length;
   const semana=act.filter(enSemana).length;
-  const sinHoja=DB[ARCH.guias].data.guias.filter(g=>!g.hoja_ruta).length;
+  const sinHoja=DB[ARCH.guias].data.guias.filter(g=>!g.hoja_ruta&&!g.historica).length;
   const sinOC=DB[ARCH.guias].data.guias.filter(guiaSinOC).length;
   const caja=(n,lbl,cls,fn)=>`<button class="sem-box ind ${n?cls:''}" onclick="${fn}"><span class="n">${num(n)}</span><span class="l">${lbl}</span></button>`;
   return `<div class="sem-strip">
@@ -4459,8 +4461,10 @@ function rGuias(){
        El resto se aglomera por MES según la fecha de envío del viaje, con la Hoja de Ruta
        anidada adentro tal como ya funcionaba. */
     const hojas=DB[ARCH.hr].data.hojas;
-    const porHoja={};
-    gs.forEach(g=>{const k=hrClaveGuia(g);
+    const porHoja={},historicas={};
+    gs.forEach(g=>{
+      if(g.historica&&!g.hoja_ruta){const m=String(g.fecha||'').slice(0,7);(historicas[m]=historicas[m]||[]).push(g);return}
+      const k=hrClaveGuia(g);
       (porHoja[k]=porHoja[k]||[]).push(g)});
     const numReal=k=>+String(k).split(':')[1]||0;
     const numsReales=Object.keys(porHoja).filter(k=>k!=='__sin__').sort((a,b)=>numReal(b)-numReal(a));
@@ -4491,6 +4495,15 @@ function rGuias(){
     };
     let out=porHoja.__sin__?bloqueHoja('__sin__',true).html:'';
     const bloques=numsReales.map(k=>bloqueHoja(k,false));
+    Object.entries(historicas).forEach(([m,ls])=>{
+      const lista=[...ls].sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||''))
+        ||String(b.numero).localeCompare(String(a.numero),'es',{numeric:true}));
+      const key='hist:'+m;
+      bloques.push({lista,fecha:lista[0].fecha,
+        html:`<details class="acc-fecha" ${ficha(key,false)}><summary><b>Carga histórica</b><span class="chip" title="Entregadas y liquidadas antes del sistema">sin hoja de ruta</span><span class="cnt">${lista.length} guía(s)</span></summary><div class="cuerpo">
+        ${lista.map(tarjetaGuia).join('')}
+      </div></details>`});
+    });
     out+=renderMeses('guias',agruparPorMes(bloques,b=>b.fecha),([mk,items])=>{
       const todasGuias=items.flatMap(b=>b.lista);
       const c=contarEstados(todasGuias,guiaEstado,{ok:'conforme',pend:'pendiente',parcial:'parcial'});
@@ -4534,7 +4547,7 @@ function tarjetaGuia(g){
         return hay?`<span class="chip verde" title="El folio viene en el reporte de Pendientes SAP${meta.actualizado?` del ${fFecha(meta.actualizado)}`:''}: la OC existe, solo falta que el cliente la envíe"><i class="ph ph-seal-check fs-xs"></i> Respaldada por reporte SAP</span>`
                   :`<span class="chip rojo" title="Ni la OC ni el reporte del cliente respaldan esta guía">Sin OC ni respaldo</span>`;
       })()}
-      ${g.hoja_ruta?'':'<span class="chip ambar">Sin documento asignado</span>'}
+      ${g.hoja_ruta||g.historica?'':'<span class="chip ambar">Sin documento asignado</span>'}
       ${esAdmin()?`<button class="btn mini peligro" style="margin-left:auto" onclick="borrarGuia(${jsq(g.numero)})">Eliminar</button>`:''}
     </div>
     <table class="tprod" style="margin-top:12px;min-width:380px"><colgroup><col><col style="width:11ch"></colgroup>
