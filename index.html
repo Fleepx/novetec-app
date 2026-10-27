@@ -4508,6 +4508,7 @@ function rGuias(){
         ${lista.map(tarjetaGuia).join('')}
       </div></details>`});
     });
+    bloques.sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
     out+=renderMeses('guias',agruparPorMes(bloques,b=>b.fecha),([mk,items])=>{
       const todasGuias=items.flatMap(b=>b.lista);
       const c=contarEstados(todasGuias,guiaEstado,{ok:'conforme',pend:'pendiente',parcial:'parcial'});
