@@ -1257,7 +1257,9 @@ const HR_TIPOS={
   ruta  :{lbl:'Hoja de Ruta',       titulo:'GUÍA DE RUTA N°',    archivo:'Guia_de_Ruta',
           carpeta:'hojas_ruta',     conf:'proxima_hoja_ruta'},
   retiro:{lbl:'Resumen de Retiros', titulo:'RESUMEN DE RETIROS N°', archivo:'Resumen_de_Retiros',
-          carpeta:'resumenes_retiro', conf:'proximo_resumen_retiro'}};
+          carpeta:'resumenes_retiro', conf:'proximo_resumen_retiro'},
+  historica:{lbl:'Ruta histórica', titulo:'RUTA HISTÓRICA N°', archivo:'Ruta_Historica',
+          carpeta:'hojas_ruta', conf:'proxima_ruta_historica'}};
 const hrTipo=o=>(o&&HR_TIPOS[o.tipo]?o.tipo:'ruta');
 const hrTipoGuia=g=>(g&&HR_TIPOS[g.hoja_tipo]?g.hoja_tipo:'ruta');
 const hrClave=h=>hrTipo(h)+':'+h.numero;
@@ -4480,7 +4482,7 @@ function rGuias(){
       const btnGen=sin?'':`<button class="btn mini sec" title="${hoja&&hoja.archivo?'Rehacer el documento con las guías que tiene hoy':'Crear el documento Word'}" onclick="event.preventDefault();event.stopPropagation();generarDocumento(${jsq(tp)},${jsq(num)})"><i class="ph ph-file-doc"></i> ${hoja&&hoja.archivo?'Regenerar':'Generar'}</button>`;
       const desc=(hoja&&hoja.archivo
         ?`<button class="btn mini" title="Descargar ${esc(hrLbl(tp))} N°${esc(num)}" onclick="event.preventDefault();event.stopPropagation();descargarArchivo(${jsq(hoja.archivo)},${jsq(`${HR_TIPOS[tp].archivo}_N${num}_${fFecha(hoja.fecha_envio||hoja.fecha)}.docx`)})"><i class="ph ph-download-simple"></i> ${esc(hrLbl(tp))}</button>`
-        :(sin?'':'<span class="chip ambar" title="El documento aún no se ha generado">sin archivo</span>'))+btnGen;
+        :(sin||(hoja&&hoja.estado==='cerrada')?'':'<span class="chip ambar" title="El documento aún no se ha generado">sin archivo</span>'))+btnGen;
       const he=hojaEstado(lista);
       const nConf=lista.filter(g=>g.conforme).length;
       const chipEstado=sin?'':`<span class="chip ${ESTADO_COLOR[he]}" title="${he==='parcial'?`${nConf} de ${lista.length} guías confirmadas`:(he==='despachada'?'Todas las guías confirmadas':'Ninguna guía confirmada todavía')}">${HOJA_LBL[he]}</span>`;
