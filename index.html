@@ -862,7 +862,7 @@ function hojaEstado(guias){
 const GUIA_ESTADO_LBL={pendiente:'Por despachar',parcial:'Parcial',conforme:'Conforme'};
 const GUIA_ESTADO_COLOR={pendiente:'gris',parcial:'ambar',conforme:'verde'};
 const esTipoRetiro=t=>t==='retiro'||t==='retiro_historico';
-const guiaEsRetiro=g=>g.hoja_ruta?esTipoRetiro(g.hoja_tipo):!!g.retiro;
+const guiaEsRetiro=g=>g.hoja_ruta?esTipoRetiro(g.hoja_tipo):(!!g.retiro||g.hoja_tipo==='retiro');
 const lblEstadoGuia=(g,ge)=>ge==='pendiente'&&guiaEsRetiro(g)?'Por retirar':GUIA_ESTADO_LBL[ge];
 const lblEstadoHoja=(tp,he)=>he==='pendiente'&&esTipoRetiro(tp)?'Por retirar':HOJA_LBL[he];
 function guiaEstado(g){
@@ -4607,9 +4607,12 @@ function moverGuia(numero){
      lo hubiera decidido. El orden se fija con un peso explicito, no con el alfabeto. */
   const pesoTipo=h=>hrTipo(h)==='ruta'?0:1;
   const entregada=h=>{const gs=DB[ARCH.guias].data.guias.filter(x=>hrClaveGuia(x)===hrClave(h));return gs.length>0&&gs.every(x=>x.conforme)};
-  const abiertas=hojas.filter(h=>(h.estado||'borrador')==='borrador'&&!entregada(h))
+  const retiro=guiaEsRetiro(g), mesGuia=String(g.fecha||'').slice(0,7);
+  const delMes=h=>retiro&&hrTipo(h)==='retiro'&&String(h.fecha_envio||h.fecha||'').slice(0,7)===mesGuia;
+  const abiertas=hojas.filter(h=>(h.estado||'borrador')==='borrador'&&(!entregada(h)||delMes(h)))
     .sort((a,b)=>pesoTipo(a)-pesoTipo(b)||(+b.numero)-(+a.numero));
-  const pre=abiertas.find(h=>hrTipo(h)==='ruta');
+  const pre=retiro?abiertas.find(delMes):abiertas.find(h=>hrTipo(h)==='ruta');
+  const nueva=retiro?'retiro':'ruta';
 
   box.innerHTML=`<div class="sep-top pt-3">
     <b>Mover la guía N°${esc(numero)} a otro documento</b>
@@ -4617,12 +4620,12 @@ function moverGuia(numero){
     <label>Documento de destino</label>
     <select id="mv-dest-${esc(numero)}" onchange="document.getElementById('mv-nueva-${esc(numero)}').style.display=this.value.startsWith('__nueva__')?'block':'none'">
       ${abiertas.map(h=>`<option value="${esc(hrClave(h))}"${h===pre?' selected':''}>${esc(hrLbl(hrTipo(h)))} N°${esc(String(h.numero))} · ${fFecha(h.fecha_envio||h.fecha)} · ${(h.guias||[]).length} guía(s)</option>`).join('')}
-      <option value="__nueva__:ruta"${pre?'':' selected'}>Nueva Hoja de Ruta…</option>
-      <option value="__nueva__:retiro">Nuevo Resumen de Retiros…</option>
+      <option value="__nueva__:ruta"${!pre&&nueva==='ruta'?' selected':''}>Nueva Hoja de Ruta…</option>
+      <option value="__nueva__:retiro"${!pre&&nueva==='retiro'?' selected':''}>Nuevo Resumen de Retiros…</option>
     </select>
     <div id="mv-nueva-${esc(numero)}" style="display:${pre?'none':'block'}">
       <label>Fecha del documento nuevo</label>
-      <input type="date" id="mv-fecha-${esc(numero)}" value="${hoyISO()}">
+      <input type="date" id="mv-fecha-${esc(numero)}" value="${retiro&&g.fecha?g.fecha:hoyISO()}">
       <p class="small muted">Hoja de Ruta N°${esc(String(DB[ARCH.conf].data.proxima_hoja_ruta||1))} · Resumen de Retiros N°${esc(String(DB[ARCH.conf].data.proximo_resumen_retiro||1))}, según lo que elijas arriba.</p>
     </div>
     <div class="acciones"><button class="btn mini" onclick="guardarMoverGuia(${jsq(numero)})">Mover</button><button class="btn mini sec" onclick="moverGuia(${jsq(numero)})">Cancelar</button></div>
@@ -5694,6 +5697,10 @@ async function leerGuiaPDF(inp){
     hgResolverContraOC(g,resp.doc);
     if(resp.origen==='sap')g.resuelta_con='sap';
     g.destino=normBodega(g.destino_texto||'');
+    const mObs=/OBSERVACIONES\s+(.+?)\s*(?:Timbre|Resoluci|$)/i.exec(hgPlano(lineas));
+    if(!g.observaciones&&mObs)g.observaciones=mObs[1].replace(/\b(?:Total|IVA\s*\d+%|Monto\s+(?:Neto|Exento))\s*\$?[\d.]*/gi,' ').replace(/\s+/g,' ').trim()||null;
+    if(/RETIR/i.test(g.observaciones||''))g.es_retiro=true;
+    else if(/\bDESP/i.test(g.observaciones||''))g.es_retiro=false;
     if(g.es_retiro===true)g.avisos.push('El documento dice que la retira el cliente: asígnala a un Resumen de Retiros');
     if(!bodegasOrden().includes(g.destino)){g.avisos.push(`Destino no reconocido: "${g.destino_texto||''}"`);g.destino=''}
     if(!oc)g.avisos.push(resp.origen==='sap'
@@ -5824,6 +5831,7 @@ async function guardarGuiaLeida(){
       /* Se deja preseleccionado el tipo, pero SIN asignar documento: el número y la fecha
          los define Jefe al agrupar el viaje. */
       hoja_tipo:g.es_retiro===true?'retiro':(g.es_retiro===false?'ruta':null),
+      ...(g.es_retiro===true?{retiro:true}:{}),observaciones:g.observaciones||null,
       archivo:ruta,conforme:false,discrepancias:[],
       notas:oc?null:((()=>{const M=(DB[ARCH.psap]&&DB[ARCH.psap].data)||{},f=String(g.oc||'');
         return ((M.folios_reporte||[]).includes(f)||(M.registros||[]).some(r=>String(r.doc_compras||'')===f))
