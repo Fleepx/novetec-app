@@ -313,7 +313,8 @@ tr.fila-comprada-parcial>td{background:var(--ambar-bg)}
 .acc-anio>summary .cnt{margin-left:auto;font-family:var(--mono);font-size:var(--fs-sm);color:var(--muted);font-weight:500}
 .acc-anio .cuerpo{padding:12px 2px 2px}
 .acc-mes>summary::before,.acc-anio>summary::before{order:-2}
-.acc-mes.pend>summary::after,.acc-anio.pend>summary::after{content:"";order:-1;flex:none;width:8px;height:8px;border-radius:9999px;background:var(--ambar)}
+.acc-mes>summary .cnt,.acc-anio>summary .cnt{order:2}
+.acc-mes.pend>summary::after,.acc-anio.pend>summary::after{content:"";order:1;flex:none;width:8px;height:8px;border-radius:9999px;background:var(--ambar)}
 td.trunc:hover{background:var(--hover)}
 td.trunc.abierto{white-space:normal;overflow:visible;text-overflow:clip;background:var(--hover)}
 td.num,th.num{text-align:right;font-family:var(--mono);letter-spacing:-.01em}
