@@ -312,6 +312,8 @@ tr.fila-comprada-parcial>td{background:var(--ambar-bg)}
 .acc-anio[open]>summary::before{transform:rotate(90deg)}
 .acc-anio>summary .cnt{margin-left:auto;font-family:var(--mono);font-size:var(--fs-sm);color:var(--muted);font-weight:500}
 .acc-anio .cuerpo{padding:12px 2px 2px}
+.acc-mes>summary::before,.acc-anio>summary::before{order:-2}
+.acc-mes.pend>summary::after,.acc-anio.pend>summary::after{content:"";order:-1;flex:none;width:8px;height:8px;border-radius:9999px;background:var(--ambar)}
 td.trunc:hover{background:var(--hover)}
 td.trunc.abierto{white-space:normal;overflow:visible;text-overflow:clip;background:var(--hover)}
 td.num,th.num{text-align:right;font-family:var(--mono);letter-spacing:-.01em}
@@ -901,8 +903,8 @@ function contarEstados(items,estadoFn,mapa){
 function cntEstados({ok,pend,parcial}){
   return `<span class="c-verde">${ok}</span> - <span class="muted">${pend}</span> - <span class="c-ambar">${parcial}</span>`;
 }
-function accMes(k,titulo,cnt,cuerpo){
-  return `<details class="acc-mes" data-k="mes:${esc(k)}"${fichaAbierta('mes:'+k)?' open':''} ontoggle="recordarFicha(this)">
+function accMes(k,titulo,cnt,cuerpo,pend){
+  return `<details class="acc-mes${pend?' pend':''}" data-k="mes:${esc(k)}"${fichaAbierta('mes:'+k)?' open':''} ontoggle="recordarFicha(this)">
     <summary><b>${titulo}</b><span class="cnt">${cnt}</span></summary>
     <div class="cuerpo">${cuerpo}</div>
   </details>`;
@@ -922,9 +924,10 @@ function renderMeses(prefijo,grupos,renderMes){
     const sub=porAnio[a];
     const total=sub.reduce((s,g)=>s+g[1].length,0);
     const key='anio:'+prefijo+':'+a;
-    return `<details class="acc-anio" data-k="${esc(key)}"${fichaAbierta(key)?' open':''} ontoggle="recordarFicha(this)">
+    const meses=sub.map(renderMes).join('');
+    return `<details class="acc-anio${meses.includes('class="acc-mes pend"')?' pend':''}" data-k="${esc(key)}"${fichaAbierta(key)?' open':''} ontoggle="recordarFicha(this)">
       <summary><b>${a==='__sin__'?'Sin fecha':a}</b><span class="cnt">${total} documento${total===1?'':'s'}</span></summary>
-      <div class="cuerpo">${sub.map(renderMes).join('')}</div>
+      <div class="cuerpo">${meses}</div>
     </details>`;
   }).join('');
 }
@@ -4517,7 +4520,7 @@ function rGuias(){
       const todasGuias=items.flatMap(b=>b.lista);
       const c=contarEstados(todasGuias,guiaEstado,{ok:'conforme',pend:'pendiente',parcial:'parcial'});
       return accMes('guias:'+mk,mesLbl(mk),`${todasGuias.length} documento${todasGuias.length===1?'':'s'} (${cntEstados(c)})`,
-        items.map(b=>b.html).join(''));
+        items.map(b=>b.html).join(''),c.pend>0);
     });
     return out;
   })()}`;
