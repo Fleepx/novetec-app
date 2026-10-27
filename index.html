@@ -2931,8 +2931,10 @@ function parseOC(lineas){
     if(m)items.push({pos:+m[1],cantidad:nSap(m[2]),unidad:m[3],codigo_sap:m[4]||null,
                      producto:m[5].trim(),precio:nSap(m[6]),total:nSap(m[7])});
   });
-  const mman=txt.match(/(?:ENTREGAR EN|DESPACHAR A)\s+([A-ZÁÉÍÓÚÑ ]{4,})/);
-  const crudo=(mman?mman[1]:g(/Lugar de Entrega\s*:\s*(.+?)(?:Direcci|$)/m))||'';
+  const mman=txt.match(/(?:ENTREGAR? EN|DESPACHAR A)\s+([A-ZÁÉÍÓÚÑ ]{4,})/);
+  const lugares=[...txt.matchAll(/Lugar de Entrega[ \t]*:[ \t]*(.*)/g)]
+    .map(m=>m[1].replace(/Direcci.*$/,'').trim()).filter(Boolean);
+  const crudo=(mman?mman[1]:lugares.find(bodegaDeTexto)||lugares[0])||'';
   const bod=bodegaDeTexto(crudo);
   const mt=txt.match(/TOTAL SIN IVA\s*:?\s*([\d.,]+)/);
   return {folio:g(/N[ºo°]\s*:\s*(45009\d{5})/),fecha_emision:fe?`${fe[3]}-${fe[2]}-${fe[1]}`:null,
