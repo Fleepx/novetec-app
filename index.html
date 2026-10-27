@@ -1259,7 +1259,9 @@ const HR_TIPOS={
   retiro:{lbl:'Resumen de Retiros', titulo:'RESUMEN DE RETIROS N°', archivo:'Resumen_de_Retiros',
           carpeta:'resumenes_retiro', conf:'proximo_resumen_retiro'},
   historica:{lbl:'Hoja de Ruta A.R.', titulo:'GUÍA DE RUTA A.R. N°', archivo:'Guia_de_Ruta_AR',
-          carpeta:'hojas_ruta', conf:'proxima_ruta_historica'}};
+          carpeta:'hojas_ruta', conf:'proxima_ruta_historica'},
+  retiro_historico:{lbl:'Resumen de Retiros A.R.', titulo:'RESUMEN DE RETIROS A.R. N°', archivo:'Resumen_de_Retiros_AR',
+          carpeta:'resumenes_retiro', conf:'proximo_retiro_historico'}};
 const hrTipo=o=>(o&&HR_TIPOS[o.tipo]?o.tipo:'ruta');
 const hrTipoGuia=g=>(g&&HR_TIPOS[g.hoja_tipo]?g.hoja_tipo:'ruta');
 const hrClave=h=>hrTipo(h)+':'+h.numero;
