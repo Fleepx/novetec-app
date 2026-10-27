@@ -4603,7 +4603,7 @@ function moverGuia(numero){
      lo hubiera decidido. El orden se fija con un peso explicito, no con el alfabeto. */
   const pesoTipo=h=>hrTipo(h)==='ruta'?0:1;
   const entregada=h=>{const gs=DB[ARCH.guias].data.guias.filter(x=>hrClaveGuia(x)===hrClave(h));return gs.length>0&&gs.every(x=>x.conforme)};
-  const abiertas=hojas.filter(h=>(h.estado||'borrador')==='borrador'&&!entregada(h))
+  const abiertas=hojas.filter(h=>(h.estado||'borrador')==='borrador'&&(g.conforme||!entregada(h)))
     .sort((a,b)=>pesoTipo(a)-pesoTipo(b)||(+b.numero)-(+a.numero));
   const pre=abiertas.find(h=>hrTipo(h)==='ruta');
 
