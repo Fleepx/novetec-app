@@ -861,6 +861,10 @@ function hojaEstado(guias){
    parcial = ámbar (se rectificó: algo no se pudo despachar). */
 const GUIA_ESTADO_LBL={pendiente:'Por despachar',parcial:'Parcial',conforme:'Conforme'};
 const GUIA_ESTADO_COLOR={pendiente:'gris',parcial:'ambar',conforme:'verde'};
+const esTipoRetiro=t=>t==='retiro'||t==='retiro_historico';
+const guiaEsRetiro=g=>g.hoja_ruta?esTipoRetiro(g.hoja_tipo):!!g.retiro;
+const lblEstadoGuia=(g,ge)=>ge==='pendiente'&&guiaEsRetiro(g)?'Por retirar':GUIA_ESTADO_LBL[ge];
+const lblEstadoHoja=(tp,he)=>he==='pendiente'&&esTipoRetiro(tp)?'Por retirar':HOJA_LBL[he];
 function guiaEstado(g){
   if(!g.conforme)return 'pendiente';
   return (g.rectificaciones||[]).length?'parcial':'conforme';
@@ -4487,7 +4491,7 @@ function rGuias(){
         :(sin||(hoja&&hoja.estado==='cerrada')?'':'<span class="chip ambar" title="El documento aún no se ha generado">sin archivo</span>'))+btnGen;
       const he=hojaEstado(lista);
       const nConf=lista.filter(g=>g.conforme).length;
-      const chipEstado=sin?'':`<span class="chip ${ESTADO_COLOR[he]}" title="${he==='parcial'?`${nConf} de ${lista.length} guías confirmadas`:(he==='despachada'?'Todas las guías confirmadas':'Ninguna guía confirmada todavía')}">${HOJA_LBL[he]}</span>`;
+      const chipEstado=sin?'':`<span class="chip ${ESTADO_COLOR[he]}" title="${he==='parcial'?`${nConf} de ${lista.length} guías confirmadas`:(he==='despachada'?'Todas las guías confirmadas':'Ninguna guía confirmada todavía')}">${lblEstadoHoja(tp,he)}</span>`;
       const titulo=sin
         ?'<span class="chip ambar">Sin documento asignado</span>'
         :`<b>${esc(hrLbl(tp))} N°${esc(num)}</b>${tp==='retiro'?'<span class="chip" title="La mercadería la retira el cliente">retiro</span>':''}${chipEstado}${hoja?` <span class="chip">Envío ${fFecha(hoja.fecha_envio||hoja.fecha)}</span>`:''}`;
@@ -4535,7 +4539,7 @@ function tarjetaGuia(g){
   return `<div class="tag"${oc?'':' data-sinoc'}><div class="bar ${GUIA_ESTADO_COLOR[ge]}"></div><div class="body">
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
       <span class="mono" style="font-weight:700;font-size:var(--fs-lg)">Guía N° ${esc(g.numero)}</span>
-      <span class="chip ${GUIA_ESTADO_COLOR[ge]}">${GUIA_ESTADO_LBL[ge]}</span>
+      <span class="chip ${GUIA_ESTADO_COLOR[ge]}">${lblEstadoGuia(g,ge)}</span>
       <span class="chip"><i class="ph ph-warehouse fs-xs"></i> ${esc(normBodega(g.destino||'Sin destino'))}</span>${g.bodega_por_confirmar?chipBodegaPorConfirmar('guia',g.numero):''}
       <span class="chip" title="Fecha de la guía">${fFecha(g.fecha)}</span>
       <span class="chip ink">OC ${esc(g.oc||g.folio_oc)}</span>
