@@ -242,7 +242,14 @@ table.tprod td.trunc{max-width:none}
   table.tarjetas td.num:has(button){display:flex;flex-wrap:wrap;gap:4px;align-items:center}
   table.tarjetas td.num:has(button)::before{flex-basis:100%}
   table.tarjetas td .acc-fila{justify-content:flex-start}
+  table.compacta tr:not(.abierta){grid-template-columns:minmax(0,1fr) 7ch;align-items:center;gap:12px;padding:10px 12px;cursor:pointer}
+  table.compacta tr:not(.abierta)>td:not(.nombre):not(.cant-corta){display:none}
+  table.compacta tr:not(.abierta)>td.nombre{grid-column:auto;margin:0}
+  table.compacta tr:not(.abierta)>td.cant-corta{display:block;text-align:right;font-weight:600}
+  table.compacta tr.abierta{cursor:pointer;background:var(--hover)}
+  table.compacta tr.abierta>td.nombre{white-space:normal;overflow:visible;text-overflow:clip}
 }
+td.cant-corta{display:none}
 table.tprod td,table.tprod th{padding-left:8px;padding-right:8px}
 table.tprod td:first-child,table.tprod th:first-child{padding-left:2px}
 table.tprod td:last-child,table.tprod th:last-child{padding-right:2px}
@@ -1224,6 +1231,9 @@ document.addEventListener('keydown',e=>{
   if(el.matches&&el.matches('[role=button]:not(button)')){e.preventDefault();el.click()}
 });
 document.addEventListener('click',e=>{
+  const fila=e.target.closest('table.compacta tr');
+  if(fila&&matchMedia('(max-width:640px)').matches&&!e.target.closest('button,a,input,select')){
+    fila.classList.toggle('abierta');return}
   const td=e.target.closest('td.trunc');
   if(!td)return;
   if(e.target.closest('button,a,input,select'))return;
@@ -2434,16 +2444,17 @@ function rPanel(){
   const th=(lbl,campo,cls='')=>`<th class="${cls}" style="cursor:pointer;user-select:none" onclick="sortPanel('${campo}')">${lbl}${panelSort.campo===campo?(panelSort.dir>0?' <i class="ph ph-sort-ascending fs-xs"></i>':' <i class="ph ph-sort-descending fs-xs"></i>'):''}</th>`;
   const tablaGrupo=(dest,fs)=>`
     <h2><i class="ph ph-warehouse fs-sm muted"></i> ${esc(dest)} <span class="muted">· ${fs.length} ítem(s) pendiente(s)</span></h2>
-    <div class="card scroll-x"><table class="tprod tarjetas" style="min-width:600px">
+    <div class="card scroll-x"><table class="tprod tarjetas compacta" style="min-width:600px">
       <colgroup><col style="width:12.5ch"><col><col style="width:7ch"><col style="width:8ch"><col style="width:7ch"><col style="width:9ch"></colgroup>
       <tr>${th('OC','oc')}${th('Producto','producto')}${th('Total','cantidad','num')}${th('Pendiente','pendiente','num')}${th('Stock','stock','num')}${th('Precio','precio','num')}</tr>
       ${fs.map(f=>`<tr>
         <td class="mono trunc" title="${esc(f.oc)}${f.origen==='sap'?' (Pendientes SAP)':''}">${esc(f.oc)||'—'}${f.origen==='sap'?' <span class="chip">SAP</span>':''}</td>
-        <td class="trunc" title="${esc(f.producto)}">${medidaPendiente(f.codigo)?'<i class="ph ph-ruler aviso-medida" title="El documento no especifica la medida o la talla: confirmar antes de despachar"></i>':''}${esc(f.producto)}</td>
+        <td class="trunc nombre" title="${esc(f.producto)}">${medidaPendiente(f.codigo)?'<i class="ph ph-ruler aviso-medida" title="El documento no especifica la medida o la talla: confirmar antes de despachar"></i>':''}${esc(f.producto)}</td>
         <td class="num">${num(f.cantidad)}</td>
         <td class="num fw-6">${num(f.pendiente)}</td>
         <td class="num" style="${f.stock<f.pendiente?'color:var(--rojo);font-weight:600':''}">${num(f.stock)}</td>
         <td class="num">${clp(f.precio)}</td>
+        <td class="num cant-corta">${num(f.pendiente)}</td>
       </tr>`).join('')}
     </table></div>`;
   const destOrden=bodegasOrden().filter(b=>grupos[b])
