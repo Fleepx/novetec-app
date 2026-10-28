@@ -4588,7 +4588,7 @@ function tarjetaGuia(g){
     ${hayFalta?`<div class="mt-3"><button class="btn mini" style="background:none;border:1.5px solid var(--rojo);color:var(--rojo)" onclick="compraFaltante(${jsq(g.numero)},this)"><i class="ph ph-shopping-cart-simple"></i> Ingresar compra faltante</button>
       <div id="cf-${esc(g.numero)}"></div></div>`:''}
     ${(g.rectificaciones||[]).length?`<div class="small" style="margin-top:12px;border:1px solid var(--ambar);border-radius:8px;padding:8px 12px">
-      ${g.rectificaciones.map((r,ri)=>`<div><b>Rectificada ${fFecha(r.fecha)}</b> — ${r.items.map(x=>`${esc(x.producto)} <span class="mono">−${num(x.cantidad)}</span> (${x.motivo==='merma'?'perdido o roto':'quedó en bodega'})`).join(' · ')}${r.nota?` · ${esc(r.nota)}`:''}
+      ${g.rectificaciones.map((r,ri)=>`<div><b>Rectificada ${fFecha(r.fecha)}</b> — ${r.items.map(x=>`${esc(x.producto)} <span class="mono">−${num(x.cantidad)}</span> (${x.motivo==='merma'?'perdido o roto':x.motivo==='faltante'?'faltante del proveedor':'quedó en bodega'})`).join(' · ')}${r.nota?` · ${esc(r.nota)}`:''}
         <button class="btn mini sec" style="margin-left:8px" onclick="anularRectificacion(${jsq(g.numero)},${ri})" title="Deshacer esta rectificación y dejar la guía como estaba"><i class="ph ph-arrow-counter-clockwise"></i> Anular</button></div>`).join('')}
     </div>`:''}
     <div class="acciones mt-3">
@@ -4730,6 +4730,7 @@ async function conformarGuia(numero){
   catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
 }
+const SIN_STOCK={merma:'Merma: producto perdido o roto',faltante:'Faltante: el proveedor entregó menos de lo comprado'};
 function rectificarGuia(numero){
   const g=DB[ARCH.guias].data.guias.find(x=>String(x.numero)===String(numero));
   if(!g)return;
@@ -4748,6 +4749,7 @@ function rectificarGuia(numero){
         <td><select data-motivo="${ix}">
           <option value="bodega">Quedó en bodega</option>
           <option value="merma">Se perdió o se rompió</option>
+          <option value="faltante">Producto faltante</option>
         </select></td>
       </tr>`).join('')}
     </table>
@@ -4786,8 +4788,8 @@ async function guardarRectificacion(numero){
               ||o.items.find(x=>String(x.producto).trim().toUpperCase()===String(it.producto).trim().toUpperCase());
         if(oi){
           oi.cantidad_despachada=Math.max(0,(+oi.cantidad_despachada||0)-f.cant);
-          // Si se perdió o rompió, además hay que volver a comprarla
-          if(f.motivo==='merma')oi.cantidad_comprada=Math.max(0,(+oi.cantidad_comprada||0)-f.cant);
+          // Si se perdió, se rompió o el proveedor no la entregó, además hay que volver a comprarla
+          if(SIN_STOCK[f.motivo])oi.cantidad_comprada=Math.max(0,(+oi.cantidad_comprada||0)-f.cant);
         }
       }
       // 3. Inventario: el despacho no ocurrió para esas unidades → vuelven…
@@ -4801,11 +4803,11 @@ async function guardarRectificacion(numero){
       p.cantidad+=f.cant;
       inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:f.cant,
         referencia:`Rectificación guía N°${numero}: no despachado`});
-      // …y si se perdieron o rompieron, salen como merma (neto: el stock no vuelve)
-      if(f.motivo==='merma'){
+      // …y si se perdieron, rompieron o nunca llegaron del proveedor, vuelven a salir (neto: el stock no vuelve)
+      if(SIN_STOCK[f.motivo]){
         p.cantidad=Math.max(0,p.cantidad-f.cant);
         inv.movimientos.push({fecha,tipo:'salida',codigo:p.codigo,producto:p.nombre,cantidad:f.cant,
-          referencia:`Merma: producto perdido o roto (guía N°${numero})`});
+          referencia:`${SIN_STOCK[f.motivo]} (guía N°${numero})`});
       }
       // `item_ref` e `ix` se guardan para poder ANULAR la rectificación después: si la línea
       // queda en cero sale de la guía, y sin esta copia no habría cómo reconstruirla con su
@@ -4824,8 +4826,8 @@ async function guardarRectificacion(numero){
     if(o)await guardarArchivo(ARCH.oc,`OC ${folio}: rectificación de la guía N°${numero}`);
     await guardarArchivo(ARCH.inv,`Inventario: rectificación de la guía N°${numero}`);
     await cerrarLote();
-    const merma=detalle.filter(d=>d.motivo==='merma').reduce((s,d)=>s+d.cantidad,0);
-    toast(`Guía N°${numero} rectificada`+(merma>0?` · ${num(merma)} como merma, vuelven a estar por comprar`:''));
+    const porComprar=detalle.filter(d=>SIN_STOCK[d.motivo]).reduce((s,d)=>s+d.cantidad,0);
+    toast(`Guía N°${numero} rectificada`+(porComprar>0?` · ${num(porComprar)} vuelven a estar por comprar`:''));
     render();
   }catch(e){if(e.message!=='conflicto')toast('Error: '+e.message)}
   velo(false);
@@ -4849,11 +4851,11 @@ async function anularRectificacion(numero,idx){
   if(!g||!(g.rectificaciones||[])[idx])return;
   const r=g.rectificaciones[idx];
   const det=(r.items||[]).map(x=>`${x.producto} +${num(x.cantidad)}`).join(' · ');
-  const merma=(r.items||[]).filter(x=>x.motivo==='merma').reduce((s,x)=>s+(+x.cantidad||0),0);
+  const merma=(r.items||[]).filter(x=>SIN_STOCK[x.motivo]).reduce((s,x)=>s+(+x.cantidad||0),0);
   const ok=await confirmar({titulo:`Anular la rectificación del ${fFecha(r.fecha)}`,
     texto:`La guía N°${numero} vuelve a quedar como estaba antes de rectificarla: ${det}.\n`+
       `La OC ${g.oc||g.folio_oc||'(sin OC)'} las contará otra vez como despachadas`+
-      (merma>0?`, y las ${num(merma)} unidades dadas por perdidas dejan de estar por comprar.`:'.')+
+      (merma>0?`, y las ${num(merma)} unidades perdidas o faltantes dejan de estar por comprar.`:'.')+
       `\nEl movimiento de bodega no se borra: se registra su inverso.`,
     confirmar:'Anular rectificación',peligro:true});
   if(!ok)return;
@@ -4887,7 +4889,7 @@ async function anularRectificacion(numero,idx){
               ||o.items.find(i=>String(i.producto).trim().toUpperCase()===String(x.producto).trim().toUpperCase());
         if(oi){
           oi.cantidad_despachada=(+oi.cantidad_despachada||0)+cant;
-          if(x.motivo==='merma')oi.cantidad_comprada=(+oi.cantidad_comprada||0)+cant;
+          if(SIN_STOCK[x.motivo])oi.cantidad_comprada=(+oi.cantidad_comprada||0)+cant;
         }
       }
       // 3. Inventario: se compensa con el movimiento inverso, sin tocar el original
@@ -4900,10 +4902,10 @@ async function anularRectificacion(numero,idx){
       p.cantidad-=cant;
       inv.movimientos.push({fecha,tipo:'salida',codigo:p.codigo,producto:p.nombre,cantidad:cant,
         referencia:`Anulación de la rectificación de la guía N°${numero}`});
-      if(x.motivo==='merma'){
+      if(SIN_STOCK[x.motivo]){
         p.cantidad+=cant;
         inv.movimientos.push({fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,cantidad:cant,
-          referencia:`Anulación de la merma de la guía N°${numero}`});
+          referencia:`Anulación de la ${x.motivo==='faltante'?'falta':'merma'} de la guía N°${numero}`});
       }
     }
     // 4. Fuera el registro y vuelve la conformidad que había antes
@@ -5817,13 +5819,12 @@ async function guardarGuiaLeida(){
       const p=invProdDe(nom,it.unidad);
       /* COMPRA IMPLÍCITA AL DESPACHAR (Jefe, 24-07-2026; reafirmado 20-08-2026).
          Si algo sale por guía es porque se compró: sin esto el inventario acumulaba salidas
-         sin su ingreso y el stock caía a negativo. Se ingresa solo lo que falte para cubrir
-         la salida — una compra ya registrada antes no se vuelve a ingresar. La guía sin OC en
+         sin su ingreso y el stock caía a negativo. Se ingresa solo lo que el stock de bodega
+         no cubra — una compra ya registrada antes no se vuelve a ingresar. La guía sin OC en
          el sistema también ingresa: la mercadería existió igual. Cuando la OC se cargue
          después, se imputa la compra sin volver a tocar bodega. */
       const oi=oc?oc.items.find(x=>x.codigo===cod):null;
-      const compSinUsar=oi?Math.max((+oi.cantidad_comprada||0)-(+oi.cantidad_despachada||0),0):0;
-      const falta=Math.max(it.cantidad-compSinUsar,0);
+      const falta=Math.max(it.cantidad-Math.max(+p.cantidad||0,0),0);
       if(falta>0){
         p.cantidad=(+p.cantidad||0)+falta;
         inv.movimientos.push({fecha:g.fecha,tipo:'ingreso',codigo:p.codigo,producto:p.nombre,
