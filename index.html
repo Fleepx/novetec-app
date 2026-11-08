@@ -242,14 +242,20 @@ table.tprod td.trunc{max-width:none}
   table.tarjetas td.num:has(button){display:flex;flex-wrap:wrap;gap:4px;align-items:center}
   table.tarjetas td.num:has(button)::before{flex-basis:100%}
   table.tarjetas td .acc-fila{justify-content:flex-start}
-  table.compacta tr:not(.abierta){grid-template-columns:minmax(0,1fr) 7ch;align-items:center;gap:12px;padding:10px 12px;cursor:pointer}
+  table.tarjetas tr.fila-adj{background:var(--verde-bg)}
+  table.tarjetas tr.fila-adj-parcial,table.tarjetas tr.fila-pend{background:var(--ambar-bg)}
+  table.compacta tr:not(.abierta){grid-template-columns:minmax(0,1fr) minmax(7ch,max-content);align-items:center;gap:12px;padding:10px 12px;cursor:pointer}
   table.compacta tr:not(.abierta)>td:not(.nombre):not(.cant-corta){display:none}
   table.compacta tr:not(.abierta)>td.nombre{grid-column:auto;margin:0}
   table.compacta tr:not(.abierta)>td.cant-corta{display:block;text-align:right;font-weight:600}
   table.compacta tr.abierta{cursor:pointer;background:var(--hover)}
   table.compacta tr.abierta>td.nombre{white-space:normal;overflow:visible;text-overflow:clip}
+  table.compacta tr.abierta>td.cant-corta{display:none}
+  .solo-escritorio{display:none!important}
+  .scroll-x:has(>table.tarjetas){overflow-x:visible}
 }
-td.cant-corta{display:none}
+td.cant-corta{display:none;white-space:nowrap}
+@media(min-width:641px){.solo-movil{display:none!important}}
 table.tprod td,table.tprod th{padding-left:8px;padding-right:8px}
 table.tprod td:first-child,table.tprod th:first-child{padding-left:2px}
 table.tprod td:last-child,table.tprod th:last-child{padding-right:2px}
@@ -2471,9 +2477,12 @@ function rPanel(){
 /* Fichas plegables de documento: se recuerda cuáles quedaron abiertas para que un render
    (tras guardar una compra, editar, etc.) no las vuelva a cerrar todas. */
 const fichasAbiertas=new Map();
-function fichaAbierta(k,porDefecto){return fichasAbiertas.has(k)?fichasAbiertas.get(k):!!porDefecto}
+function fichaAbierta(k,porDefecto){
+  if(filtroActivo()&&/^(mes|anio|hoja|hist):/.test(k))return true;
+  return fichasAbiertas.has(k)?fichasAbiertas.get(k):!!porDefecto}
 function recordarFicha(el){
   const k=el.dataset.k;if(!k)return;
+  if(filtroActivo()&&/^(mes|anio|hoja|hist):/.test(k))return;
   fichasAbiertas.set(k,el.open);
 }
 const ficha=(k,porDefecto)=>`data-k="${esc(k)}"${fichaAbierta(k,porDefecto)?' open':''} ontoggle="recordarFicha(this)"`;
@@ -2484,6 +2493,49 @@ function alternarFichas(btn){
   ds.forEach(d=>{d.open=abrir;recordarFicha(d)});
   btn.innerHTML=abrir?'<i class="ph ph-caret-up"></i> Contraer todas'
                      :'<i class="ph ph-caret-down"></i> Desplegar todas';
+}
+let cotFiltro='',guiaFiltro='';
+const FILTROS={oc:v=>{ocFiltro=v},cot:v=>{cotFiltro=v},guias:v=>{guiaFiltro=v},precios:v=>{preFiltro=v}};
+function filtroActivo(){return !!String({oc:ocFiltro,cot:cotFiltro,guias:guiaFiltro}[tab]||'').trim()}
+function coincideFiltro(q,partes){
+  const t=sinTilde([partes].flat(Infinity).filter(x=>x!=null&&x!=='').join(' '));
+  return sinTilde(q).split(/\s+/).filter(Boolean).every(p=>t.includes(p));
+}
+function campoFiltro(clave,valor,placeholder){
+  return `<div class="filtro"><input type="search" data-filtro="${clave}" placeholder="${esc(placeholder)}" value="${esc(valor)}" oninput="aplicarFiltro('${clave}',this.value)"></div>`;
+}
+function aplicarFiltro(clave,valor){
+  FILTROS[clave](valor);render();
+  const i=document.querySelector(`#vista [data-filtro="${clave}"]`);
+  if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}
+}
+function sinResultados(clave){
+  return `<div class="card">${vacio('funnel','Sin resultados','Limpiar búsqueda',`aplicarFiltro('${clave}','')`)}</div>`;
+}
+const bodegaTxt=b=>b?[b,normBodega(b)]:'';
+const guiasDeFolio=f=>DB[ARCH.guias].data.guias.filter(g=>String(g.oc||g.folio_oc)===String(f));
+function textoOC(o){
+  const e=ocEstado(o),s=o.baja?null:semaforo(o);
+  return ['oc',o.folio,e,ESTADO_LBL[e],s&&s.c==='vencida'?'vencida':'',s&&s.txt,
+    !o.baja&&e!=='despachada'&&enSemana(o)?'esta semana':'',
+    bodegaTxt(o.destino),o.centro,o.guias||[],
+    guiasDeFolio(o.folio).map(g=>['guia',g.numero,bodegaTxt(g.destino)]),
+    !o.baja&&(o.sin_documento||!o.archivo)?'sin documento':'',
+    fFecha(o.fecha_emision),o.items.map(i=>i.producto)];
+}
+function textoCot(c){
+  const ocs=[...new Set(adjRegistros().filter(r=>r.cot===c.id).map(r=>String(r.oc)))];
+  const adj=cotAdjudicacion(c);
+  return ['cot',c.folio,c.estado,c.cliente,fFecha(c.fecha),
+    adj.adj===adj.total&&adj.total?'adjudicada':adj.adj||adj.parc?'adjudicada parcial':'sin adjudicar',
+    c.items.map(i=>[bodegaTxt(i.bodega),i.producto]),
+    ocs.map(f=>['oc',f,guiasDeFolio(f).map(g=>['guia',g.numero,bodegaTxt(g.destino)])])];
+}
+function textoGuia(g){
+  const ge=guiaEstado(g);
+  return ['guia',g.numero,'oc',g.oc||g.folio_oc,bodegaTxt(g.destino),ge,GUIA_ESTADO_LBL[ge],lblEstadoGuia(g,ge),
+    guiaEsRetiro(g)?'retiro':'',g.hoja_ruta?[hrLbl(hrTipoGuia(g)),g.hoja_ruta]:(g.historica?'historica':'sin hoja'),
+    guiaSinOC(g)?'sin oc':'',fFecha(g.fecha),g.items.map(i=>[i.producto,i.nombre_guia])];
 }
 function barraFichas(){
   return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
@@ -3962,14 +4014,18 @@ function celdaAdjOC(o,li,oi){
 }
 function rCot(){
   // Más reciente primero (Jefe, 24-07-2026): por fecha desc; a igual fecha, se respeta el orden de carga.
-  const cs=[...DB[ARCH.cot].data.cotizaciones]
+  let cs=[...DB[ARCH.cot].data.cotizaciones]
     .map((c,i)=>[c,i])
     .sort((a,b)=>String(b[0].fecha||'').localeCompare(String(a[0].fecha||''))||b[1]-a[1])
     .map(x=>x[0]);
+  const hay=cs.length;
+  if(cotFiltro.trim())cs=cs.filter(c=>coincideFiltro(cotFiltro,textoCot(c)));
   return `${dlProd()}
   ${formCotizacion()}
   ${cotLeida?panelCotLeida():formPendiente('cotizaciones','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${listaPend('cotizaciones')}
+  ${hay?campoFiltro('cot',cotFiltro,'COT, OC, guía, bodega, estado…'):''}
+  ${hay&&!cs.length?sinResultados('cot'):''}
   ${cs.length?barraFichas():''}
   ${cs.length?renderMeses('cot',agruparPorMes(cs,c=>c.fecha),([k,items])=>accMes('cot:'+k,mesLbl(k),
       `${items.length} documento${items.length===1?'':'s'}`,
@@ -3998,18 +4054,19 @@ function rCot(){
           const s=saldoLinea(c,ix),t=+i.cantidad||0;
           const cls=t>0&&s<=0?' class="fila-adj"':t>0&&s<t?' class="fila-adj-parcial"':'';
           const ocs=[...new Set(consumosDeLinea(c.id,ix).map(r=>r.oc))];
-          return `<tr${cls}><td class="trunc" title="${esc(i.producto)}${i.marca?' — '+esc(i.marca):''}">${esc(i.producto)}${i.marca?`<span class="small muted sep">${esc(i.marca)}</span>`:''}${ocs.length?` <span class="chip verde" title="Adjudicada en OC${s>0?' (parcial: saldo '+num(s)+')':''}">${ocs.map(f=>'OC '+esc(f)).join(' · ')}</span>`:''}</td><td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num">${clp(i.cantidad*i.precio_unitario)}</td></tr>`}).join('');
+          return `<tr${cls}><td class="trunc nombre" title="${esc(i.producto)}${i.marca?' — '+esc(i.marca):''}">${esc(i.producto)}${i.marca?`<span class="small muted sep">${esc(i.marca)}</span>`:''}${ocs.length?` <span class="chip verde" title="Adjudicada en OC${s>0?' (parcial: saldo '+num(s)+')':''}">${ocs.map(f=>'OC '+esc(f)).join(' · ')}</span>`:''}</td><td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num">${clp(i.cantidad*i.precio_unitario)}</td><td class="num cant-corta">${num(i.cantidad)} ${esc(i.unidad||'')}</td></tr>`}).join('');
         let html='';
         if(conBodega){
           const orden=['Rancagua','San Francisco de Mostazal','El Peumo','Longovilo'];
           const grupos=orden.filter(b=>bodegas.includes(b)).concat(bodegas.filter(b=>!orden.includes(b)));
           html=grupos.map(b=>{const its=idx.filter(([i])=>i.bodega===b);
             return `<div class="bodega-lbl"><i class="ph ph-map-pin fs-xs muted"></i> ${esc(b)} <span class="muted">· ${its.length} ítem(s)</span></div>
-            <table class="tprod" style="min-width:460px"><colgroup><col><col style="width:9ch"><col style="width:11ch"><col style="width:12ch"></colgroup><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(its)}</table>`;}).join('');
+            <div class="scroll-x"><table class="tprod tarjetas compacta" style="min-width:460px"><colgroup><col><col style="width:9ch"><col style="width:11ch"><col style="width:12ch"></colgroup><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(its)}</table></div>`;}).join('');
         } else {
-          html=`<table class="tprod" style="margin-top:12px;min-width:460px"><colgroup><col><col style="width:9ch"><col style="width:11ch"><col style="width:12ch"></colgroup><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(idx)}
-            <tr><td colspan="3" style="border:none"></td><td class="num fw-7">${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</td></tr></table>`;
+          html=`<div class="scroll-x"><table class="tprod tarjetas compacta" style="margin-top:12px;min-width:460px"><colgroup><col><col style="width:9ch"><col style="width:11ch"><col style="width:12ch"></colgroup><tr><th>Producto</th><th class="num">Cant.</th><th class="num">P. unit.</th><th class="num">Total</th></tr>${tablaItems(idx)}
+            <tr class="solo-escritorio"><td colspan="3" style="border:none"></td><td class="num fw-7">${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</td></tr></table></div>`;
         }
+        if(!conBodega)html+=`<div class="small solo-movil" style="text-align:right;font-weight:700;margin-top:12px;padding-top:8px;border-top:1px solid var(--line)">Neto: ${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</div>`;
         if(conBodega)html+=`<div class="small" style="text-align:right;font-weight:700;margin-top:12px;padding-top:8px;border-top:1px solid var(--line)">Neto: ${clp(c.items.reduce((s,i)=>s+i.cantidad*i.precio_unitario,0))}</div>`;
         return html;
       })()}
@@ -4035,7 +4092,7 @@ function rCot(){
       </details>
     </div>`}).join('')
     ))
-    :`<div class="card">${vacio('file-plus','Aún no hay cotizaciones','Nueva cotización','nuevaCotizacion()')}</div>`}`;
+    :hay?'':`<div class="card">${vacio('file-plus','Aún no hay cotizaciones','Nueva cotización','nuevaCotizacion()')}</div>`}`;
 }
 async function borrarCot(id){
   if(!esAdmin()){toast('Solo el administrador puede hacer esto.');return}
@@ -4258,16 +4315,13 @@ function indicadorOCPorCargar(){
 }
 function rOC(){
   // Una sola lista, ordenada por FOLIO (Jefe, 22-07-2026)
-  const lista=ordenesUnificadas().filter(o=>!ocFiltro
-    ||String(o.folio).toLowerCase().includes(ocFiltro)
-    ||ocEstado(o).includes(ocFiltro)
-    ||(ocFiltro==='vencida'&&!o.baja&&semaforo(o).c==='vencida')
-    ||(ocFiltro==='esta semana'&&!o.baja&&ocEstado(o)!=='despachada'&&enSemana(o)));
+  const todas=ordenesUnificadas();
+  const lista=ocFiltro.trim()?todas.filter(o=>coincideFiltro(ocFiltro,textoOC(o))):todas;
   return `${dlProd()}
   ${indicadorOCPorCargar()}
   ${ocLeida?panelOCLeida():psapLeido?panelPSAP():formPendiente('ordenes_compra','.pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg,.png')}
   ${listaPend(['ordenes_compra','pendientes_sap'])}
-  <div class="filtro"><input placeholder="Filtrar por folio o estado…" value="${esc(ocFiltro)}" oninput="ocFiltro=this.value.toLowerCase();render();this.focus()"></div>
+  ${todas.length?campoFiltro('oc',ocFiltro,'OC, guía, bodega, estado…'):''}
   ${lista.length?barraFichas():''}
   ${lista.length?renderMeses('oc',agruparPorMes(lista,o=>o.fecha_carga||o.fecha_emision),([k,items])=>{
     const c=contarEstados(items,ocEstado,{ok:'despachada',pend:'pendiente',parcial:'parcial'});
@@ -4280,18 +4334,25 @@ function rOC(){
       <summary class="top">
         <span class="folio">OC ${esc(o.folio)}</span>
         <span class="chip ${ESTADO_COLOR[e]}">${ESTADO_LBL[e]}</span>
-        ${e!=='despachada'&&s.c!=='gris'?`<span class="chip ${s.c}" title="Plazo de entrega">${s.txt}</span>`:''}
-        ${o.baja?'':chipCompra(o)}
+        ${e!=='despachada'&&s.c!=='gris'?`<span class="chip ${s.c} solo-escritorio" title="Plazo de entrega">${s.txt}</span>`:''}
+        ${o.baja?'':`<span class="solo-escritorio">${chipCompra(o)}</span>`}
+        <span class="chip solo-movil"><i class="ph ph-warehouse fs-xs"></i> ${esc(o.destino?normBodega(o.destino):'Sin bodega')}</span>
         ${o.bodega_por_confirmar?chipBodegaPorConfirmar('oc',o.folio):''}
         ${!o.baja&&(o.sin_documento||!o.archivo)?'<span class="chip ambar" title="Todavía no tiene su documento. Si llega, se adjunta a esta misma OC, sin crear otra.">sin documento</span>':''}
-        <span class="muted small">Emisión ${fFecha(o.fecha_emision)}${o.fecha_carga&&o.fecha_carga!==o.fecha_emision?` · <span title="Día en que se cargó al sistema">cargada ${fFecha(o.fecha_carga)}</span>`:''}${o.fecha_entrega?` · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b>`:''} · ${esc(o.destino||'—')}</span>
+        ${!o.baja&&!(o.sin_documento||!o.archivo)?'<span class="chip verde solo-movil">con documento</span>':''}
+        <span class="muted small solo-escritorio">Emisión ${fFecha(o.fecha_emision)}${o.fecha_carga&&o.fecha_carga!==o.fecha_emision?` · <span title="Día en que se cargó al sistema">cargada ${fFecha(o.fecha_carga)}</span>`:''}${o.fecha_entrega?` · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b>`:''} · ${esc(o.destino||'—')}</span>
         <span class="resumen">${o.baja?`${o.items.length} ítem(s) · dada de baja`:`${o.items.length} ítem(s) · ${num(pendD)} por despachar`}</span>
       </summary>
+      <div class="solo-movil" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px">
+        ${e!=='despachada'&&s.c!=='gris'?`<span class="chip ${s.c}">${s.txt}</span>`:''}
+        ${o.baja?'':chipCompra(o)}
+        <span class="muted small">Emisión ${fFecha(o.fecha_emision)}${o.fecha_entrega?` · Entrega <b class="mono">${fFecha(o.fecha_entrega)}</b>`:''}</span>
+      </div>
       ${o.baja?`<div class="chip rojo" style="display:block;white-space:normal;margin-top:12px;padding:12px">Dada de baja el ${fFecha(o.baja.fecha)}. Motivo: ${esc(o.baja.motivo||'no registrado')}</div>`:''}
-      <table class="tprod tarjetas" style="margin-top:12px;min-width:940px"><colgroup><col style="width:12em"><col style="width:8ch"><col style="width:10ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">P. unit.</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th><th>Guía de despacho</th></tr>
+      <table class="tprod tarjetas compacta" style="margin-top:12px;min-width:940px"><colgroup><col style="width:12em"><col style="width:8ch"><col style="width:10ch"><col style="width:9ch"><col style="width:10ch"><col style="width:9ch"><col style="width:16ch"></colgroup><tr><th>Producto</th><th class="num">Pedido</th><th class="num">P. unit.</th><th class="num">Comprado</th><th class="num">Despachado</th><th class="num">Pend. desp.</th><th>Guía de despacho</th></tr>
       ${o.items.map((i,ix)=>{const comp=+i.cantidad_comprada||0;
         const pend=(+i.cantidad||0)-(+i.cantidad_despachada||0);
-        return `<tr${pend>0&&!o.baja?' class="fila-pend"':''}><td class="trunc" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num" style="${comp<i.cantidad&&!o.baja?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num fw-6">${num(pend)}</td><td>${celdaGuiasOC(o,i)}</td></tr>`}).join('')}</table>
+        return `<tr${pend>0&&!o.baja?' class="fila-pend"':''}><td class="trunc nombre" title="${esc(i.producto)}">${esc(i.producto)}</td><td class="num">${num(i.cantidad)}</td><td class="num">${clp(i.precio_unitario)}</td><td class="num" style="${comp<i.cantidad&&!o.baja?'color:var(--rojo);font-weight:600':''}">${num(comp)}</td><td class="num">${num(i.cantidad_despachada||0)}</td><td class="num fw-6">${num(pend)}</td><td>${celdaGuiasOC(o,i)}</td><td class="num cant-corta">${num(i.cantidad)}</td></tr>`}).join('')}</table>
       ${o.compras?.length?`<p class="small muted mt-2">Compras: ${o.compras.map(c=>`<span class="mono">${fFecha(c.fecha)}</span> ${esc(c.proveedor||'s/proveedor')} (${c.items.map(i=>`${esc(i.producto)} ×${num(i.cantidad)}`).join(', ')})`).join(' · ')}</p>`:''}
       ${o.guias?.length?`<p class="small muted mt-2">Guías: <span class="mono">${o.guias.map(esc).join(', ')}</span></p>`:''}
       ${o.archivo?`<p class="small"><a href="#" onclick="event.preventDefault();descargarArchivo(${jsq(o.archivo)})">Descargar documento</a></p>`:''}
@@ -4309,7 +4370,7 @@ function rOC(){
     </div></div>`}).join('')
     );
   })
-  :`<div class="card">${vacio('file-plus','No hay órdenes de compra','Cargar orden de compra','irASubirOC()')}</div>`}`;
+  :todas.length?sinResultados('oc'):`<div class="card">${vacio('file-plus','No hay órdenes de compra','Cargar orden de compra','irASubirOC()')}</div>`}`;
 }
 async function borrarOC(fe){
   if(!esAdmin()){toast('Solo el administrador puede hacer esto.');return}
@@ -4472,10 +4533,12 @@ function rGuias(){
      return huerfanas.length?`<div class="card" style="border-color:var(--ambar)"><i class="ph ph-warning c-ambar"></i> ${huerfanas.map(h=>`Hoja de Ruta N°${esc(String(h.numero))} (envío ${fFecha(h.fecha_envio||h.fecha)}) quedó sin guías.`).join(' ')} Reingresa una guía con esa fecha de envío para reincorporarla.</div>`:'';
    })()}
   <h2>Guías registradas</h2>
-  ${DB[ARCH.guias].data.guias.length?barraFichas():''}
+  ${DB[ARCH.guias].data.guias.length?campoFiltro('guias',guiaFiltro,'Guía, OC, bodega, estado…')+barraFichas():''}
   ${(()=>{
-    const gs=DB[ARCH.guias].data.guias;
-    if(!gs.length)return `<div class="card">${vacio('file-plus','Aún no hay guías',"Cargar guía","document.getElementById('guia-pdf').click()")}</div>`;
+    const todas=DB[ARCH.guias].data.guias;
+    if(!todas.length)return `<div class="card">${vacio('file-plus','Aún no hay guías',"Cargar guía","document.getElementById('guia-pdf').click()")}</div>`;
+    const gs=guiaFiltro.trim()?todas.filter(g=>coincideFiltro(guiaFiltro,textoGuia(g))):todas;
+    if(!gs.length)return sinResultados('guias');
     /* Agrupadas por HOJA DE RUTA (Jefe, 24-07-2026): una hoja = un viaje, y ese es el orden
        en que se recorre el despacho. Dentro de cada hoja, si el viaje tuvo varios destinos,
        las guías se ordenan por bodega en el orden fijo de recorrido. Las guías que aún no
@@ -4574,7 +4637,7 @@ function tarjetaGuia(g){
       ${g.hoja_ruta||g.historica?'':'<span class="chip ambar">Sin documento asignado</span>'}
       ${esAdmin()?`<button class="btn mini peligro" style="margin-left:auto" onclick="borrarGuia(${jsq(g.numero)})">Eliminar</button>`:''}
     </div>
-    <table class="tprod" style="margin-top:12px;min-width:380px"><colgroup><col><col style="width:11ch"></colgroup>
+    <div class="scroll-x"><table class="tprod tarjetas compacta" style="margin-top:12px;min-width:380px"><colgroup><col><col style="width:11ch"></colgroup>
       <tr><th>Producto</th><th class="num">Cantidad</th></tr>
     ${g.items.map(i=>{const no=nomOC(i.codigo);
       // El nombre que manda es el de la OC. Si la guía usó otro, se anota al costado; si es el
@@ -4583,8 +4646,9 @@ function tarjetaGuia(g){
       const dif=no&&String(otro).trim().toUpperCase()!==no.trim().toUpperCase();
       const falta=faltaCompra(i);
       return `<tr>
-        <td class="trunc" title="${esc(no||i.producto)}${dif?' — en la guía: '+esc(otro):''}">${esc(no||i.producto)}${dif?`<span class="small muted sep" title="Nombre con que salió en la guía">${esc(otro)}</span>`:''}</td>
-        <td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}${falta>0?` <i class="ph ph-warning-circle alerta-cifra" title="Se despacharon ${num(i.cantidad)} pero faltan ${num(falta)} por registrar como comprados. Ingresa la compra para cuadrar el inventario."></i>`:''}</td></tr>`}).join('')}</table>
+        <td class="trunc nombre" title="${esc(no||i.producto)}${dif?' — en la guía: '+esc(otro):''}">${esc(no||i.producto)}${dif?`<span class="small muted sep" title="Nombre con que salió en la guía">${esc(otro)}</span>`:''}</td>
+        <td class="num">${num(i.cantidad)} ${esc(i.unidad||'')}${falta>0?` <i class="ph ph-warning-circle alerta-cifra" title="Se despacharon ${num(i.cantidad)} pero faltan ${num(falta)} por registrar como comprados. Ingresa la compra para cuadrar el inventario."></i>`:''}</td>
+        <td class="num cant-corta">${num(i.cantidad)} ${esc(i.unidad||'')}${falta>0?' <i class="ph ph-warning-circle alerta-cifra"></i>':''}</td></tr>`}).join('')}</table></div>
     ${hayFalta?`<div class="mt-3"><button class="btn mini" style="background:none;border:1.5px solid var(--rojo);color:var(--rojo)" onclick="compraFaltante(${jsq(g.numero)},this)"><i class="ph ph-shopping-cart-simple"></i> Ingresar compra faltante</button>
       <div id="cf-${esc(g.numero)}"></div></div>`:''}
     ${(g.rectificaciones||[]).length?`<div class="small" style="margin-top:12px;border:1px solid var(--ambar);border-radius:8px;padding:8px 12px">
@@ -5168,8 +5232,11 @@ function rPrecios(){
   });
   const conPrecio=filas.filter(f=>f.precios.length).length;
   if(preSoloCon)filas=filas.filter(f=>f.precios.length||f.cot);
-  if(preFiltro){const q=preFiltro.toLowerCase();
-    filas=filas.filter(f=>f.nombre.toLowerCase().includes(q)||String(f.codigo||'').toLowerCase().includes(q));}
+  if(preFiltro.trim()){
+    const destOC=new Map(ordenesUnificadas().map(o=>[String(o.folio),o.destino]));
+    filas=filas.filter(f=>coincideFiltro(preFiltro,[f.nombre,f.codigo,
+      ((f.codigo&&obs[f.codigo])||f.precios).map(o=>['oc',o.oc,bodegaTxt(destOC.get(o.oc))]),f.cot?['cot',f.cot.folio]:'']));
+  }
   filas.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));
   const celda=o=>`<span class="mono" title="OC ${esc(o.oc)} · ${fFecha(o.fecha)}">${clp(o.precio)}</span>`;
   const variacion=ps=>{
@@ -5181,25 +5248,26 @@ function rPrecios(){
   };
   return `
   <h2>Lista de precios <span class="muted">· ${conPrecio} de ${prods.length} artículos con precio de OC</span></h2>
-  <div class="filtro"><input placeholder="Buscar producto o código…" value="${esc(preFiltro)}" oninput="preFiltro=this.value;render();const i=document.querySelector('.filtro input');i.focus();i.setSelectionRange(i.value.length,i.value.length)"></div>
+  ${campoFiltro('precios',preFiltro,'Producto, código, OC, COT…')}
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center">
     <button class="btn mini ${preSoloCon?'':'sec'}" onclick="preSoloCon=!preSoloCon;render()"><i class="ph ph-${preSoloCon?'check':'funnel'}"></i> Solo con precio</button>
     <button class="btn mini sec" onclick="alternarNombres(this)"><i class="ph ph-arrows-out-cardinal"></i> Desplegar nombres</button>
     <span class="small muted">${filas.length} artículo(s) en pantalla</span>
   </div>
-  ${filas.length?`<div class="card scroll-x"><table class="tprod" style="min-width:960px">
+  ${filas.length?`<div class="card scroll-x"><table class="tprod tarjetas compacta" style="min-width:960px">
     <colgroup><col style="width:4em"><col style="width:12em"><col style="width:11ch"><col style="width:8ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"><col style="width:11ch"></colgroup>
     <tr><th></th><th>Producto</th><th class="num">Último precio</th><th class="num">Var.</th><th class="num">Anterior</th><th class="num">2 atrás</th><th class="num">3 atrás</th><th class="num">Cotizado</th></tr>
     ${filas.map(f=>{const ps=f.precios;
       return `<tr>
         <td>${f.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" aria-label="Editar el nombre del producto en el maestro" onclick="renombrarProducto(${jsq(f.codigo)})"><i class="ph ph-pencil-simple"></i></button>`:''}</td>
-        <td class="trunc" title="${esc(f.nombre)}${f.codigo?' — '+esc(f.codigo):''}">${esc(f.nombre)}${f.codigo?` <span class="muted small mono">${esc(f.codigo)}</span>`:''}</td>
+        <td class="trunc nombre" title="${esc(f.nombre)}${f.codigo?' — '+esc(f.codigo):''}">${esc(f.nombre)}${f.codigo?` <span class="muted small mono">${esc(f.codigo)}</span>`:''}</td>
         <td class="num fw-7">${ps[0]?celda(ps[0]):'<span class="muted">—</span>'}</td>
         <td class="num small">${variacion(ps)}</td>
         <td class="num muted">${ps[1]?celda(ps[1]):''}</td>
         <td class="num muted">${ps[2]?celda(ps[2]):''}</td>
         <td class="num muted">${ps[3]?celda(ps[3]):''}</td>
         <td class="num">${f.cot?`<span class="mono muted" title="COT ${esc(f.cot.folio)} · ${fFecha(f.cot.fecha)}${ps[0]?' · adjudicada en '+clp(ps[0].precio):''}">${clp(f.cot.precio)}</span>`:''}</td>
+        <td class="num cant-corta">${ps[0]?clp(ps[0].precio):f.cot?`<span class="muted">${clp(f.cot.precio)}</span>`:'<span class="muted">—</span>'}</td>
       </tr>`}).join('')}
   </table></div>
   <p class="small muted"><b>Cotizado</b> es referencia: no cuenta para la variación.</p>`
@@ -6211,13 +6279,13 @@ function rInv(){
     <div class="acciones"><button class="btn" onclick="ingresoInv()">Registrar ingreso</button></div>
   </div></details>
   <h2>Stock actual (${prods.length} productos)</h2>
-  <div class="card">${prods.length?`<table class="tprod tarjetas" style="min-width:500px"><colgroup><col style="width:11ch"><col><col style="width:9ch"><col style="width:136px"></colgroup><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
-    ${prods.map(p=>`<tr><td class="mono small">${esc(p.codigo||'—')}</td><td class="trunc" title="${esc(p.nombre)}">${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
-    <td class="num"><div class="acc-fila"><button class="btn mini sec" title="Ajustar: fijar la cantidad exacta" aria-label="Ajustar" onclick="ajusteInv(${jsq(p.nombre)})"><i class="ph ph-pencil-simple"></i></button><button class="btn mini sec" title="Agregar: sumar unidades al stock" aria-label="Agregar" onclick="agregarInv(${jsq(p.nombre)})"><i class="ph ph-plus"></i></button>${p.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" aria-label="Editar el nombre del producto en el maestro" onclick="renombrarProducto(${jsq(p.codigo)})"><i class="ph ph-tag"></i></button>`:''}</div></td></tr>`).join('')}</table>`
+  <div class="card">${prods.length?`<table class="tprod tarjetas compacta" style="min-width:500px"><colgroup><col style="width:11ch"><col><col style="width:9ch"><col style="width:136px"></colgroup><tr><th>Código</th><th>Producto</th><th class="num">Cantidad</th><th class="num">Ajustar</th></tr>
+    ${prods.map(p=>`<tr><td class="mono small">${esc(p.codigo||'—')}</td><td class="trunc nombre" title="${esc(p.nombre)}">${esc(p.nombre)}</td><td class="num" style="font-weight:600;${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td>
+    <td class="num"><div class="acc-fila"><button class="btn mini sec" title="Ajustar: fijar la cantidad exacta" aria-label="Ajustar" onclick="ajusteInv(${jsq(p.nombre)})"><i class="ph ph-pencil-simple"></i></button><button class="btn mini sec" title="Agregar: sumar unidades al stock" aria-label="Agregar" onclick="agregarInv(${jsq(p.nombre)})"><i class="ph ph-plus"></i></button>${p.codigo?`<button class="btn mini sec" title="Editar el nombre del producto en el maestro" aria-label="Editar el nombre del producto en el maestro" onclick="renombrarProducto(${jsq(p.codigo)})"><i class="ph ph-tag"></i></button>`:''}</div></td><td class="num cant-corta" style="${p.cantidad<0?'color:var(--rojo)':''}">${num(p.cantidad)}</td></tr>`).join('')}</table>`
     :'<div class="vacio">Bodega sin productos registrados. Usa "Registrar ingreso" para la carga inicial.</div>'}</div>
   <h2>Últimos movimientos</h2>
-  <div class="card">${movs.length?`<table class="tprod" style="min-width:720px"><colgroup><col style="width:11ch"><col style="width:11ch"><col style="width:9ch"><col><col style="width:8ch"><col style="width:20ch"></colgroup><tr><th>Fecha</th><th>Código</th><th>Tipo</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
-    ${movs.map(m=>`<tr><td class="mono small">${fFecha(m.fecha)}</td><td class="mono small">${esc(m.codigo||'—')}</td><td><span class="chip ${m.tipo==='salida'?'rojo':m.tipo==='ingreso'?'verde':''}">${m.tipo}</span></td><td class="trunc" title="${esc(m.producto)}">${esc(m.producto)}</td><td class="num">${num(m.cantidad)}</td><td class="trunc small muted" title="${esc(m.referencia||'')}">${esc(m.referencia||'')}</td></tr>`).join('')}</table>`
+  <div class="card scroll-x">${movs.length?`<table class="tprod tarjetas compacta" style="min-width:720px"><colgroup><col style="width:11ch"><col style="width:11ch"><col style="width:9ch"><col><col style="width:8ch"><col style="width:20ch"></colgroup><tr><th>Fecha</th><th>Código</th><th>Tipo</th><th>Producto</th><th class="num">Cant.</th><th>Referencia</th></tr>
+    ${movs.map(m=>`<tr><td class="mono small">${fFecha(m.fecha)}</td><td class="mono small">${esc(m.codigo||'—')}</td><td><span class="chip ${m.tipo==='salida'?'rojo':m.tipo==='ingreso'?'verde':''}">${m.tipo}</span></td><td class="trunc nombre" title="${esc(m.producto)}">${esc(m.producto)}</td><td class="num">${num(m.cantidad)}</td><td class="trunc small muted" title="${esc(m.referencia||'')}">${esc(m.referencia||'')}</td><td class="num cant-corta" style="color:var(--${m.tipo==='salida'?'rojo':m.tipo==='ingreso'?'verde':'ink'})">${m.tipo==='salida'?'−':m.tipo==='ingreso'?'+':''}${num(m.cantidad)}</td></tr>`).join('')}</table>`
     :vacio('arrows-clockwise','Sin movimientos aún')}</div>`;
 }
 async function ingresoInv(){
