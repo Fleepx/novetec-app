@@ -6,6 +6,8 @@
     "site": "novetec",
     "public": ".",
     "ignore": [
+      ".git/**",
+      "**/.git/**",
       "firebase/**",
       "firebase.json",
       "test/**",
